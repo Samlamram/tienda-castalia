@@ -7,22 +7,29 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'brand/castalia-mark-192.png'],
       manifest: {
-        name: 'App Tienda',
-        short_name: 'Tienda',
+        name: 'Tienda Castalia',
+        short_name: 'Castalia',
         description: 'Consumos, cuentas compartidas e inventario offline-first.',
-        theme_color: '#14532d',
+        theme_color: '#052319',
         background_color: '#f7f8f3',
         display: 'standalone',
+        lang: 'es',
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
         icons: [
           {
-            src: '/icon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
+            src: '/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
             purpose: 'any maskable'
           }
         ]

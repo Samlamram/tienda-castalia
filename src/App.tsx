@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import { Store } from 'lucide-react';
 import { AdminPanel } from './components/AdminPanel';
+import { BrandLogo } from './components/BrandLogo';
 import { Kiosk } from './components/Kiosk';
 import { ensureSeedData } from './data/seed';
 import type { AppSession } from './domain/types';
@@ -137,7 +137,7 @@ export function App() {
   if (!ready) {
     return (
       <main className="loading-screen">
-        <Store size={36} />
+        <BrandLogo alt="Tienda Castalia" className="loading-logo" />
         <p className="muted">Preparando...</p>
       </main>
     );
@@ -236,7 +236,7 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
       <form className={`login-form-integrated ${error ? 'has-error' : ''}`} onSubmit={handleLogin}>
         <div className="login-brand">
           <div className="login-logo-clean">
-            <Store size={64} />
+            <BrandLogo alt="Tienda Castalia" />
           </div>
           <h1 className="login-title">Tienda Castalia</h1>
         </div>

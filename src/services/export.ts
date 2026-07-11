@@ -46,7 +46,7 @@ export async function buildExportRows(dateFrom: string, dateTo: string): Promise
   );
   const stocks = calculateProductStocks(products, movements);
   const userName = (id: string) => users.find((user) => user.id === id)?.name ?? id;
-  const accountName = (id: string) => accounts.find((account) => account.id === id)?.name ?? id;
+  const accountName = (id?: string) => (id ? accounts.find((account) => account.id === id)?.name ?? id : 'Sin cuenta');
   const productName = (id: string) => products.find((product) => product.id === id)?.name ?? id;
 
   return {
@@ -103,6 +103,7 @@ export async function buildExportRows(dateFrom: string, dateTo: string): Promise
       cuenta: accountName(entry.accountId),
       destino: entry.targetType,
       usuario: entry.userId ? userName(entry.userId) : '',
+      pagador: entry.paidByUserId ? userName(entry.paidByUserId) : '',
       monto: entry.amount,
       sin_aplicar: entry.unappliedAmount,
       nota: entry.note ?? ''

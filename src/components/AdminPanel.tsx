@@ -26,6 +26,8 @@ import {
   ToggleRight
 } from 'lucide-react';
 import type { Account, AppSession, PersonUser, Product } from '../domain/types';
+import { BrandLogo } from './BrandLogo';
+import { calculateUserBalances } from '../domain/ledger';
 import type { useTiendaData } from '../hooks/useTiendaData';
 import { resetDemoData } from '../data/seed';
 import { buildExportRows, exportToGoogleSheets } from '../services/export';
@@ -123,7 +125,7 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: A
       <header className="kiosk-header">
         <div className="kiosk-brand-block">
           <div className="kiosk-logo" aria-hidden="true">
-            <Store size={24} />
+            <BrandLogo />
           </div>
           <div className="kiosk-brand-copy">
             <strong>Tienda Castalia</strong>
@@ -475,13 +477,25 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
       });
   }, [accountFilter, accountQuery, data]);
 
+  const userBalances = useMemo(
+    () =>
+      calculateUserBalances({
+        users: data.users,
+        consumptions: data.consumptions,
+        items: data.items,
+        payments: data.payments,
+        applications: data.applications,
+        adjustments: data.adjustments
+      }),
+    [data]
+  );
+
   const filteredUsers = useMemo(() => {
     const query = normalizeSearch(accountQuery);
     return data.users
       .map((user) => {
         const account = data.accounts.find((entry) => entry.id === user.accountId);
-        const accountBalance = data.accountBalances.find((entry) => entry.accountId === user.accountId);
-        const balance = accountBalance?.users.find((entry) => entry.userId === user.id)?.balance ?? 0;
+        const balance = userBalances.find((entry) => entry.userId === user.id)?.balance ?? 0;
         return { user, account, balance };
       })
       .filter(({ user, account, balance }) => {
@@ -501,14 +515,14 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
         if (b.balance !== a.balance) return b.balance - a.balance;
         return a.user.name.localeCompare(b.user.name);
       });
-  }, [accountQuery, data, userFilter]);
+  }, [accountQuery, data, userBalances, userFilter]);
 
   return (
     <section className={`admin-session ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}>
       <header className="kiosk-header">
         <div className="kiosk-brand-block">
           <div className="kiosk-logo" aria-hidden="true">
-            <Store size={24} />
+            <BrandLogo />
           </div>
           <div className="kiosk-brand-copy">
             <strong>Tienda Castalia</strong>
@@ -865,7 +879,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                                   <button
                                     type="button"
                                     className="admin-user-chip add"
-                                    onClick={() => setActiveModal({ type: 'create-user', target: { accountId: account.id } })}
+                                    onClick={() => setActiveModal({ type: 'assign-user', target: account })}
                                     aria-label={`Agregar usuario a ${account.name}`}
                                     title="Agregar usuario"
                                   >
@@ -876,7 +890,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                                 <button
                                   type="button"
                                   className="admin-linked-users-empty add"
-                                  onClick={() => setActiveModal({ type: 'create-user', target: { accountId: account.id } })}
+                                  onClick={() => setActiveModal({ type: 'assign-user', target: account })}
                                 >
                                   <Plus size={15} /> Usuario
                                 </button>
@@ -928,7 +942,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                       </span>
                       <span>
                         <strong>Anadir usuario</strong>
-                        <small>Vincular a una cuenta existente</small>
+                        <small>Crear independiente o asociar a cuenta</small>
                       </span>
                     </button>
 
@@ -970,8 +984,20 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                               className="ghost small"
                               onClick={() => setActiveModal({ type: 'edit-user', target: user })}
                             >
-                              <Edit size={15} /> Mover
+                              <Edit size={15} /> {user.accountId ? 'Mover' : 'Asignar'}
                             </button>
+                            {user.accountId ? (
+                              <button
+                                type="button"
+                                className="ghost small"
+                                onClick={async () => {
+                                  await adminApi.removeUserFromAccount(user.id, adminSession);
+                                  onMessage('Usuario removido de la cuenta.');
+                                }}
+                              >
+                                Quitar cuenta
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               className={`ghost small ${user.status === 'active' ? 'danger' : ''}`}
@@ -1138,12 +1164,17 @@ function AdminModalContainer({
 }: AdminModalContainerProps) {
   const activeAccounts = data.accounts.filter((a) => a.status === 'active');
   const activeUsers = data.users.filter((u) => u.status === 'active');
+  const unassignedUsers = activeUsers.filter((u) => !u.accountId);
+  const modalTargetIsUser = Boolean(modal.target && typeof modal.target === 'object' && 'pinHash' in modal.target);
   const targetAccountId =
     typeof modal.target?.accountId === 'string'
       ? modal.target.accountId
+      : modal.type === 'payment' && modalTargetIsUser
+        ? ''
       : typeof modal.target?.id === 'string' && ['payment', 'adjustment', 'account-detail', 'merge'].includes(modal.type)
         ? modal.target.id
         : data.accounts[0]?.id ?? '';
+  const targetUserId = modalTargetIsUser && typeof modal.target?.id === 'string' ? modal.target.id : '';
   const targetProductId =
     typeof modal.target?.id === 'string' && ['purchase', 'stock-adjustment'].includes(modal.type)
       ? modal.target.id
@@ -1152,9 +1183,14 @@ function AdminModalContainer({
   // Registrar pago
   const [paymentAccount, setPaymentAccount] = useState(targetAccountId);
   const [paymentTargetType, setPaymentTargetType] = useState(
-    modal.type === 'payment' && typeof modal.target?.accountId === 'string' ? 'user' : 'account'
+    modal.type === 'payment' && modalTargetIsUser ? 'user' : 'account'
   );
-  const paymentUsers = data.users.filter((u) => u.accountId === paymentAccount && u.status === 'active');
+  const [paymentUserId, setPaymentUserId] = useState(targetUserId);
+  const paymentUsers =
+    paymentTargetType === 'account'
+      ? data.users.filter((u) => u.accountId === paymentAccount && u.status === 'active')
+      : activeUsers;
+  const paymentPayers = paymentTargetType === 'account' ? paymentUsers : activeUsers;
 
   // Ajuste manual
   const [adjAccount, setAdjAccount] = useState(targetAccountId);
@@ -1191,24 +1227,46 @@ function AdminModalContainer({
     try {
       switch (modal.type) {
         case 'create-account':
-          await adminApi.createAccount({ name: String(form.get('name') ?? '') }, adminSession);
+          const createdAccount = await adminApi.createAccount({ name: String(form.get('name') ?? '') }, adminSession);
+          const createdAccountId = createdAccount?.id;
+          if (createdAccountId) {
+            for (const userId of form.getAll('userIds')) {
+              await adminApi.assignUserToAccount(String(userId), createdAccountId, adminSession);
+            }
+          }
           onMessage('Cuenta creada.');
           break;
 
         case 'create-user':
+          const newUserAccountId = String(form.get('accountId') ?? '').trim();
           await adminApi.createUser({
-            accountId: String(form.get('accountId')),
+            accountId: newUserAccountId || undefined,
             name: String(form.get('name') ?? ''),
             pin: String(form.get('pin') ?? '1234')
           }, adminSession);
           onMessage('Usuario creado.');
           break;
 
+        case 'assign-user':
+          await adminApi.assignUserToAccount(
+            String(form.get('userId') ?? ''),
+            String(form.get('accountId') ?? modal.target?.id ?? ''),
+            adminSession
+          );
+          onMessage('Usuario agregado a la cuenta.');
+          break;
+
         case 'payment':
+          const paymentUserIdValue = paymentTargetType === 'user' ? String(form.get('userId') ?? '') : undefined;
+          const paymentUser = paymentUserIdValue ? activeUsers.find((user) => user.id === paymentUserIdValue) : undefined;
           await adminApi.createPayment({
-            accountId: String(form.get('accountId')),
+            accountId:
+              paymentTargetType === 'account'
+                ? String(form.get('accountId') ?? '')
+                : paymentUser?.accountId,
             targetType: paymentTargetType === 'user' ? 'user' : 'account',
-            userId: paymentTargetType === 'user' ? String(form.get('userId')) : undefined,
+            userId: paymentUserIdValue,
+            paidByUserId: String(form.get('paidByUserId') ?? ''),
             amount: toNumber(form.get('amount')),
             note: String(form.get('note') ?? '')
           }, adminSession);
@@ -1290,10 +1348,11 @@ function AdminModalContainer({
 
         case 'edit-user':
           const newPin = String(form.get('pin') ?? '').trim();
+          const editedAccountId = String(form.get('accountId') ?? modal.target.accountId ?? '').trim();
           await adminApi.updateUser(
             {
               ...modal.target,
-              accountId: String(form.get('accountId') ?? modal.target.accountId),
+              accountId: editedAccountId || undefined,
               name: String(form.get('name') ?? ''),
               newPin: newPin || undefined
             },
@@ -1362,13 +1421,26 @@ function AdminModalContainer({
           if (bulkMode === 'inventory') {
             let count = 0;
             for (const product of bulkProducts) {
-              const quantityDelta = Number(form.get(`quantityDelta-${product.id}`));
+              const stockCountInput = form.get(`stockCount-${product.id}`);
+              const stockCountText = typeof stockCountInput === 'string' ? stockCountInput.trim() : '';
+              if (!stockCountText) continue;
+
+              const countedStock = Number(stockCountText);
+              if (!Number.isFinite(countedStock) || countedStock < 0) {
+                throw new Error(`Conteo inválido para ${product.name}.`);
+              }
+
+              const currentStock = productStock(data, product.id);
+              const quantityDelta = countedStock - currentStock;
               if (!Number.isFinite(quantityDelta) || quantityDelta === 0) continue;
               await adminApi.adjustInventory(
                 {
                   productId: product.id,
                   quantityDelta,
-                  note: String(form.get(`note-${product.id}`) ?? 'Ajuste masivo de inventario')
+                  note: String(
+                    form.get(`note-${product.id}`) ??
+                      `Cuadre de inventario: conteo ${countedStock}, sistema ${currentStock}`
+                  )
                 },
                 adminSession
               );
@@ -1429,8 +1501,9 @@ function AdminModalContainer({
     ? data.accountBalances.find((entry) => entry.accountId === detailAccount.id)
     : undefined;
   const detailUsers = detailAccount ? data.users.filter((user) => user.accountId === detailAccount.id) : [];
+  const detailUserIds = new Set(detailUsers.map((user) => user.id));
   const detailConsumptions = detailAccount
-    ? data.consumptions.filter((entry) => entry.accountId === detailAccount.id).slice(0, 8)
+    ? data.consumptions.filter((entry) => detailUserIds.has(entry.userId)).slice(0, 8)
     : [];
 
   return (
@@ -1441,6 +1514,7 @@ function AdminModalContainer({
             {modal.type === 'create-account' && 'Crear Nueva Cuenta'}
             {modal.type === 'create-user' && 'Crear Nuevo Usuario'}
             {modal.type === 'payment' && 'Registrar Pago'}
+            {modal.type === 'assign-user' && 'Agregar Usuario a Cuenta'}
             {modal.type === 'adjustment' && 'Realizar Ajuste Manual'}
             {modal.type === 'independize' && 'Independizar Usuario'}
             {modal.type === 'merge' && 'Unir Cuentas'}
@@ -1483,6 +1557,17 @@ function AdminModalContainer({
                       {user.name} <small className="muted">{user.status === 'active' ? 'activo' : 'inactivo'}</small>
                     </span>
                     <span className="user-row-balance">{formatMoney(userBalance)}</span>
+                    <button
+                      type="button"
+                      className="ghost small"
+                      onClick={async () => {
+                        await adminApi.removeUserFromAccount(user.id, adminSession);
+                        onMessage('Usuario removido de la cuenta.');
+                        onClose();
+                      }}
+                    >
+                      Quitar
+                    </button>
                   </div>
                 );
               })}
@@ -1518,6 +1603,9 @@ function AdminModalContainer({
               </button>
               <button type="button" className="secondary" onClick={() => onSwitchModal?.({ type: 'merge', target: detailAccount })}>
                 Unir cuentas
+              </button>
+              <button type="button" className="secondary" onClick={() => onSwitchModal?.({ type: 'assign-user', target: detailAccount })}>
+                Agregar usuario
               </button>
             </div>
           </div>
@@ -1585,65 +1673,88 @@ function AdminModalContainer({
             )}
 
             {modal.type === 'create-account' && (
-              <input name="name" placeholder="Nombre de familia o grupo" required autoFocus />
+              <>
+                <label>Nombre de la cuenta</label>
+                <input name="name" placeholder="Nombre de familia o grupo" required autoFocus />
+                <label>Usuarios sin cuenta</label>
+                <div className="admin-check-list">
+                  {unassignedUsers.map((user) => (
+                    <label key={user.id}>
+                      <input type="checkbox" name="userIds" value={user.id} />
+                      <span>{user.name}</span>
+                    </label>
+                  ))}
+                  {unassignedUsers.length === 0 ? (
+                    <p className="admin-empty-state compact">No hay usuarios sin cuenta para agregar.</p>
+                  ) : null}
+                </div>
+              </>
             )}
 
             {modal.type === 'create-user' && (
-              <div className="create-user-flow">
-                <div className="admin-form-note">
-                  <span className="admin-form-note-icon" aria-hidden="true">
-                    <Users size={20} />
-                  </span>
-                  <div>
-                    <strong>Datos de acceso del usuario</strong>
-                    <p>El usuario podra entrar con este nombre y PIN. Sus compras quedaran cargadas a la cuenta seleccionada.</p>
-                  </div>
-                </div>
-
-                <label className="admin-field-stack">
-                  <span>1. Cuenta donde quedara vinculado</span>
-                  <select name="accountId" defaultValue={targetAccountId} required>
-                    {activeAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                  <small>Selecciona la cuenta/familia que asumira los consumos de este usuario.</small>
-                </label>
-
-                <label className="admin-field-stack">
-                  <span>2. Nombre para iniciar sesion</span>
-                  <input name="name" placeholder="Ej: Papa, Mama, Hijo" autoComplete="off" required autoFocus />
-                  <small>Debe ser facil de reconocer en la pantalla de inicio.</small>
-                </label>
-
-                <div className="admin-field-stack">
-                  <span>3. PIN de entrada</span>
+              <>
+                <label>Nombre del usuario</label>
+                <input name="name" placeholder="Nombre completo" required />
+                <label>PIN de acceso</label>
                 <input name="pin" placeholder="PIN de 4 dígitos" inputMode="numeric" defaultValue="1234" required />
-                  <small>Usa 4 numeros. El PIN inicial sugerido es 1234.</small>
-                </div>
+              </>
+            )}
 
-                <div className="create-user-summary">
-                  <span>Antes de guardar</span>
-                  <strong>Quedara activo inmediatamente</strong>
-                  <small>El usuario podra entrar al kiosko con el nombre y PIN que acabas de definir.</small>
-                </div>
-              </div>
+            {modal.type === 'create-user' && (
+              <>
+                <label>Asociar a cuenta (opcional)</label>
+                <select name="accountId" defaultValue="">
+                  <option value="">Sin cuenta</option>
+                  {activeAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+
+            {modal.type === 'assign-user' && (
+              <>
+                <input type="hidden" name="accountId" value={modal.target?.id ?? ''} />
+                <label>Usuario sin cuenta</label>
+                <select name="userId" required>
+                  {unassignedUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+                {unassignedUsers.length === 0 ? (
+                  <p className="admin-empty-state compact">No hay usuarios sin cuenta para agregar.</p>
+                ) : null}
+              </>
             )}
 
             {modal.type === 'payment' && (
               <>
-                <label>Cuenta origen</label>
-                <select
-                  name="accountId"
-                  value={paymentAccount}
-                  onChange={(e) => setPaymentAccount(e.target.value)}
-                  required
-                >
-                  {activeAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
+                {paymentTargetType === 'account' && (
+                  <>
+                    <label>Cuenta</label>
+                    <select
+                      name="accountId"
+                      value={paymentAccount}
+                      onChange={(e) => setPaymentAccount(e.target.value)}
+                      required
+                    >
+                      {activeAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+                <label>Usuario que paga</label>
+                <select name="paidByUserId" required>
+                  {paymentPayers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}{u.accountId ? '' : ' (sin cuenta)'}
                     </option>
                   ))}
                 </select>
@@ -1655,10 +1766,15 @@ function AdminModalContainer({
                 {paymentTargetType === 'user' && (
                   <>
                     <label>Usuario</label>
-                    <select name="userId" required>
+                    <select
+                      name="userId"
+                      value={paymentUserId || paymentUsers[0]?.id || ''}
+                      onChange={(e) => setPaymentUserId(e.target.value)}
+                      required
+                    >
                       {paymentUsers.map((u) => (
                         <option key={u.id} value={u.id}>
-                          {u.name}
+                          {u.name}{u.accountId ? '' : ' (sin cuenta)'}
                         </option>
                       ))}
                     </select>
@@ -1816,7 +1932,8 @@ function AdminModalContainer({
             {modal.type === 'edit-user' && (
               <>
                 <label>Cuenta asociada</label>
-                <select name="accountId" defaultValue={modal.target.accountId} required>
+                <select name="accountId" defaultValue={modal.target.accountId ?? ''}>
+                  <option value="">Sin cuenta</option>
                   {activeAccounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -1911,8 +2028,8 @@ function AdminModalContainer({
                       {bulkMode === 'inventory' && (
                         <div className="admin-bulk-checkout-controls inventory">
                           <label>
-                            Ajuste
-                            <input name={`quantityDelta-${product.id}`} inputMode="numeric" placeholder="0" />
+                            Conteo físico
+                            <input name={`stockCount-${product.id}`} inputMode="numeric" placeholder={`${stock}`} />
                           </label>
                         </div>
                       )}
@@ -1961,7 +2078,7 @@ function AdminModalContainer({
                   Cancelar
                 </button>
               ) : null}
-              <button type="submit" className="primary" disabled={modal.type === 'create-user' && activeAccounts.length === 0}>
+              <button type="submit" className="primary">
                 {modal.type === 'toggle-product-status' || modal.type === 'toggle-user-status' || modal.type === 'bulk-products'
                   ? 'Confirmar'
                   : 'Guardar'}

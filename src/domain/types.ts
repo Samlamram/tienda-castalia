@@ -19,7 +19,7 @@ export interface Account {
 
 export interface PersonUser {
   id: string;
-  accountId: string;
+  accountId?: string;
   name: string;
   pinHash: string;
   username?: string;
@@ -48,7 +48,7 @@ export interface Product {
 
 export interface Consumption {
   id: string;
-  accountId: string;
+  accountId?: string;
   userId: string;
   status: ConsumptionStatus;
   total: number;
@@ -62,7 +62,7 @@ export interface Consumption {
 export interface ConsumptionItem {
   id: string;
   consumptionId: string;
-  accountId: string;
+  accountId?: string;
   userId: string;
   productId: string;
   productName: string;
@@ -78,9 +78,10 @@ export interface ConsumptionItem {
 
 export interface Payment {
   id: string;
-  accountId: string;
+  accountId?: string;
   targetType: PaymentTarget;
   userId?: string;
+  paidByUserId?: string;
   amount: number;
   unappliedAmount: number;
   note?: string;
@@ -90,7 +91,7 @@ export interface Payment {
 export interface PaymentApplication {
   id: string;
   paymentId: string;
-  accountId: string;
+  accountId?: string;
   userId: string;
   consumptionItemId: string;
   amount: number;
@@ -130,7 +131,7 @@ export interface InventoryMovement {
 
 export interface BalanceAdjustment {
   id: string;
-  accountId: string;
+  accountId?: string;
   scope: AdjustmentScope;
   userId?: string;
   amount: number;
@@ -141,8 +142,8 @@ export interface BalanceAdjustment {
 export interface AccountTransfer {
   id: string;
   userId: string;
-  fromAccountId: string;
-  toAccountId: string;
+  fromAccountId?: string;
+  toAccountId?: string;
   movedBalance: number;
   note: string;
   createdAt: string;
@@ -231,7 +232,7 @@ export interface PendingConsumption {
 
 export interface UserBalance {
   userId: string;
-  accountId: string;
+  accountId?: string;
   consumed: number;
   paid: number;
   adjustments: number;

@@ -65,6 +65,16 @@ export class TiendaDatabase extends Dexie {
       catalogProducts: 'id, status, category, name, version, updatedAt',
       pendingConsumptions: 'id, clientOperationId, sessionUserId, accountId, status, createdAt, updatedAt'
     });
+    this.version(3).stores({
+      users: 'id, accountId, status, name, updatedAt',
+      consumptions: 'id, accountId, userId, status, createdAt, costStatus',
+      consumptionItems:
+        'id, consumptionId, accountId, userId, productId, createdAt, costStatus, pendingCostQuantity',
+      payments: 'id, accountId, userId, paidByUserId, targetType, createdAt',
+      paymentApplications: 'id, paymentId, accountId, userId, consumptionItemId, createdAt',
+      adjustments: 'id, accountId, userId, scope, createdAt',
+      accountTransfers: 'id, userId, fromAccountId, toAccountId, createdAt'
+    });
   }
 }
 

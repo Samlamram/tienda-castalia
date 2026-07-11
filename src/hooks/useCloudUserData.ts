@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../data/db';
-import type { Account, AccountBalance, AppSession, PersonUser, Product } from '../domain/types';
+import type { Account, AccountBalance, AppSession, BalanceAdjustment, PersonUser, Product } from '../domain/types';
 import { catalogProductToProduct } from '../services/catalog';
 
 export function useCloudUserData(inputSession?: AppSession | null) {
@@ -39,7 +39,7 @@ export function useCloudUserData(inputSession?: AppSession | null) {
     ? [
         {
           id: session.userId,
-          accountId: session.accountId ?? '',
+          accountId: session.accountId,
           name: session.userName,
           pinHash: '',
           role: session.role,
@@ -52,6 +52,19 @@ export function useCloudUserData(inputSession?: AppSession | null) {
 
   const products: Product[] = catalogProducts.map(catalogProductToProduct);
   const balance = session?.balance ?? 0;
+  const adjustments: BalanceAdjustment[] = session
+    ? [
+        {
+          id: `session_balance_${session.userId}`,
+          accountId: session.accountId,
+          scope: 'user',
+          userId: session.userId,
+          amount: balance,
+          note: 'Saldo actual',
+          createdAt: timestamp
+        }
+      ]
+    : [];
   const accountBalances: AccountBalance[] = session?.accountId
     ? [
         {
@@ -85,7 +98,7 @@ export function useCloudUserData(inputSession?: AppSession | null) {
     applications: [],
     purchases: [],
     movements: [],
-    adjustments: [],
+    adjustments,
     pendingSync,
     settings,
     accountBalances,

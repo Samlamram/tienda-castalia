@@ -1,7 +1,9 @@
 import type { FormEvent } from 'react';
-import { CreditCard, KeyRound, LogOut, Minus, Package, Plus, Search, ShoppingCart, Store, Trash2, Users, X } from 'lucide-react';
+import { CreditCard, KeyRound, LogOut, Minus, Package, Plus, Search, ShoppingCart, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { BrandLogo } from './BrandLogo';
 import type { CartItem, PersonUser } from '../domain/types';
+import { calculateUserBalances } from '../domain/ledger';
 import type { useTiendaData } from '../hooks/useTiendaData';
 import { createConsumption } from '../services/operations';
 import { formatMoney } from '../utils/money';
@@ -254,9 +256,12 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
     };
   }, []);
 
-  const account = data.accounts.find((entry) => entry.id === user.accountId);
-  const accountBalance = data.accountBalances.find((entry) => entry.accountId === user.accountId);
-  const accountUsers = data.users.filter((entry) => entry.accountId === user.accountId && entry.status === 'active');
+  const account = user.accountId ? data.accounts.find((entry) => entry.id === user.accountId) : undefined;
+  const accountBalance = user.accountId ? data.accountBalances.find((entry) => entry.accountId === user.accountId) : undefined;
+  const accountUsers = user.accountId
+    ? data.users.filter((entry) => entry.accountId === user.accountId && entry.status === 'active')
+    : [user];
+  const accountUserIds = new Set(accountUsers.map((entry) => entry.id));
   const categories = ['Todas', ...Array.from(new Set(data.products.map((product) => product.category))).sort()];
   const products = data.products
     .filter((product) => product.status === 'active')
@@ -269,18 +274,31 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
     })
     .filter(Boolean) as Array<CartItem & { product: (typeof data.products)[number]; total: number }>;
   const cartTotal = cartDetails.reduce((sum, item) => sum + item.total, 0);
-  const accountHistory = data.consumptions.filter((entry) => entry.accountId === user.accountId);
-  const accountPayments = data.payments.filter((payment) => payment.accountId === user.accountId);
+  const accountHistory = data.consumptions.filter((entry) => accountUserIds.has(entry.userId));
+  const accountPayments = data.payments.filter(
+    (payment) =>
+      (user.accountId ? payment.accountId === user.accountId : false) ||
+      accountUserIds.has(payment.userId ?? '') ||
+      accountUserIds.has(payment.paidByUserId ?? '')
+  );
   const filteredHistory = accountHistory
     .filter((entry) => accountFilter === 'all' || entry.userId === accountFilter)
     .slice(0, 18);
   const filteredPayments = accountPayments
-    .filter((payment) => accountFilter === 'all' || payment.userId === accountFilter)
+    .filter((payment) => accountFilter === 'all' || payment.userId === accountFilter || payment.paidByUserId === accountFilter)
     .slice(0, 18);
   const groupedHistory = groupByDay(filteredHistory);
   const groupedPayments = groupByDay(filteredPayments);
 
-  const currentBalance = accountBalance?.balance ?? 0;
+  const selfBalance = calculateUserBalances({
+    users: [user],
+    consumptions: data.consumptions,
+    items: data.items,
+    payments: data.payments,
+    applications: data.applications,
+    adjustments: data.adjustments
+  })[0]?.balance ?? 0;
+  const currentBalance = accountBalance?.balance ?? selfBalance;
   const projectRemainingBalance = currentBalance - cartTotal;
 
   function addProduct(productId: string) {
@@ -369,7 +387,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
       <header className="kiosk-header">
         <div className="kiosk-brand-block">
           <div className="kiosk-logo" aria-hidden="true">
-            <Store size={24} />
+            <BrandLogo />
           </div>
           <div className="kiosk-brand-copy">
             <strong>Tienda Castalia</strong>
@@ -384,9 +402,9 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
               setAccountFilter('all');
               setAccountDetailOpen(true);
             }}
-            aria-label={`Ver cuenta ${account?.name ?? ''}`}
+            aria-label={`Ver cuenta ${account?.name ?? user.name}`}
           >
-            <span>{account?.name ?? 'Cuenta'}</span>
+            <span>{account?.name ?? 'Individual'}</span>
             <strong>{formatMoney(currentBalance)}</strong>
           </button>
         </div>

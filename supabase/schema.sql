@@ -55,7 +55,7 @@ create table if not exists public.products (
 create table if not exists public.consumptions (
   id text primary key default ('con_' || gen_random_uuid()::text),
   client_operation_id text unique,
-  account_id text not null references public.accounts(id),
+  account_id text references public.accounts(id),
   user_id text not null references public.app_users(id),
   status text not null default 'confirmed' check (status in ('confirmed', 'voided')),
   total numeric not null default 0,
@@ -69,7 +69,7 @@ create table if not exists public.consumptions (
 create table if not exists public.consumption_items (
   id text primary key default ('item_' || gen_random_uuid()::text),
   consumption_id text not null references public.consumptions(id),
-  account_id text not null references public.accounts(id),
+  account_id text references public.accounts(id),
   user_id text not null references public.app_users(id),
   product_id text not null references public.products(id),
   product_name text not null,
@@ -85,9 +85,10 @@ create table if not exists public.consumption_items (
 
 create table if not exists public.payments (
   id text primary key default ('pay_' || gen_random_uuid()::text),
-  account_id text not null references public.accounts(id),
+  account_id text references public.accounts(id),
   target_type text not null check (target_type in ('account', 'user')),
   user_id text references public.app_users(id),
+  paid_by_user_id text references public.app_users(id),
   amount numeric not null,
   unapplied_amount numeric not null default 0,
   note text,
@@ -97,7 +98,7 @@ create table if not exists public.payments (
 create table if not exists public.payment_applications (
   id text primary key default ('app_' || gen_random_uuid()::text),
   payment_id text not null references public.payments(id),
-  account_id text not null references public.accounts(id),
+  account_id text references public.accounts(id),
   user_id text not null references public.app_users(id),
   consumption_item_id text not null references public.consumption_items(id),
   amount numeric not null,
@@ -127,7 +128,7 @@ create table if not exists public.inventory_movements (
 
 create table if not exists public.adjustments (
   id text primary key default ('adj_' || gen_random_uuid()::text),
-  account_id text not null references public.accounts(id),
+  account_id text references public.accounts(id),
   scope text not null check (scope in ('account', 'user')),
   user_id text references public.app_users(id),
   amount numeric not null,
@@ -138,12 +139,21 @@ create table if not exists public.adjustments (
 create table if not exists public.account_transfers (
   id text primary key default ('trf_' || gen_random_uuid()::text),
   user_id text not null references public.app_users(id),
-  from_account_id text not null references public.accounts(id),
-  to_account_id text not null references public.accounts(id),
+  from_account_id text references public.accounts(id),
+  to_account_id text references public.accounts(id),
   moved_balance numeric not null default 0,
   note text not null,
   created_at timestamptz not null default now()
 );
+
+alter table public.consumptions alter column account_id drop not null;
+alter table public.consumption_items alter column account_id drop not null;
+alter table public.payments alter column account_id drop not null;
+alter table public.payments add column if not exists paid_by_user_id text references public.app_users(id);
+alter table public.payment_applications alter column account_id drop not null;
+alter table public.adjustments alter column account_id drop not null;
+alter table public.account_transfers alter column from_account_id drop not null;
+alter table public.account_transfers alter column to_account_id drop not null;
 
 create table if not exists public.fifo_cost_allocations (
   id text primary key default ('fifo_' || gen_random_uuid()::text),
@@ -257,7 +267,8 @@ as $$
   unapplied as (
     select coalesce(sum(unapplied_amount), 0) as value
     from public.payments
-    where target_type = 'user' and user_id = p_user_id
+    where paid_by_user_id = p_user_id
+       or (paid_by_user_id is null and target_type = 'user' and user_id = p_user_id)
   ),
   adjustments_total as (
     select coalesce(sum(amount), 0) as value
@@ -422,10 +433,6 @@ begin
   if v_user.role <> 'user' then
     raise exception 'Solo usuarios pueden registrar compras desde catalogo.';
   end if;
-  if v_user.account_id is null then
-    raise exception 'Usuario sin cuenta asociada.';
-  end if;
-
   select * into v_existing
   from public.consumptions
   where client_operation_id = p_client_operation_id;
@@ -528,7 +535,7 @@ begin
       'costTotal', cost_total, 'pendingCostQuantity', pending_cost_quantity, 'costStatus', cost_status, 'createdAt', created_at
     ) order by created_at desc) from public.consumption_items), '[]'::jsonb),
     'payments', coalesce((select jsonb_agg(jsonb_build_object(
-      'id', id, 'accountId', account_id, 'targetType', target_type, 'userId', user_id, 'amount', amount,
+      'id', id, 'accountId', account_id, 'targetType', target_type, 'userId', user_id, 'paidByUserId', paid_by_user_id, 'amount', amount,
       'unappliedAmount', unapplied_amount, 'note', note, 'createdAt', created_at
     ) order by created_at desc) from public.payments), '[]'::jsonb),
     'paymentApplications', coalesce((select jsonb_agg(jsonb_build_object(
@@ -662,6 +669,7 @@ declare
   v_user_id text;
   v_product public.products%rowtype;
   v_payment_id text;
+  v_paid_by_user public.app_users%rowtype;
   v_remaining numeric;
   v_applied numeric;
   v_open record;
@@ -702,7 +710,7 @@ begin
       v_username text := lower(coalesce(nullif(trim(p_payload->>'username'), ''), regexp_replace(trim(p_payload->>'name'), '\s+', '_', 'g')));
     begin
       insert into public.app_users(account_id, username, name, role, pin_salt, pin_hash)
-      values (p_payload->>'accountId', v_username, trim(p_payload->>'name'), coalesce(nullif(p_payload->>'role', ''), 'user'), v_salt, crypt(p_payload->>'pin', v_salt))
+      values (nullif(p_payload->>'accountId', ''), v_username, trim(p_payload->>'name'), coalesce(nullif(p_payload->>'role', ''), 'user'), v_salt, crypt(p_payload->>'pin', v_salt))
       returning id into v_id;
       v_response := jsonb_build_object('id', v_id);
     end;
@@ -714,6 +722,7 @@ begin
       begin
         update public.app_users
            set name = trim(p_payload->>'name'),
+               account_id = case when p_payload ? 'accountId' then nullif(p_payload->>'accountId', '') else account_id end,
                status = coalesce(nullif(p_payload->>'status', ''), status),
                pin_salt = v_new_salt,
                pin_hash = crypt(p_payload->>'newPin', v_new_salt),
@@ -725,6 +734,7 @@ begin
     else
       update public.app_users
          set name = trim(p_payload->>'name'),
+             account_id = case when p_payload ? 'accountId' then nullif(p_payload->>'accountId', '') else account_id end,
              status = coalesce(nullif(p_payload->>'status', ''), status),
              updated_at = now(),
              version = version + 1
@@ -732,6 +742,25 @@ begin
          and version = coalesce((p_payload->>'version')::integer, version);
     end if;
     if not found then raise exception 'Usuario desactualizado. Refresca antes de guardar.'; end if;
+
+  elsif p_command = 'assign_user_to_account' then
+    update public.app_users
+       set account_id = p_payload->>'accountId',
+           updated_at = now(),
+           version = version + 1
+     where id = p_payload->>'userId';
+    if not found then raise exception 'Usuario no encontrado.'; end if;
+
+  elsif p_command = 'remove_user_from_account' then
+    select account_id into v_account_id from public.app_users where id = p_payload->>'userId';
+    update public.app_users
+       set account_id = null,
+           updated_at = now(),
+           version = version + 1
+     where id = p_payload->>'userId';
+    if not found then raise exception 'Usuario no encontrado.'; end if;
+    insert into public.account_transfers(user_id, from_account_id, to_account_id, moved_balance, note)
+    values (p_payload->>'userId', v_account_id, null, 0, 'Usuario sin cuenta');
 
   elsif p_command = 'create_product' then
     insert into public.products(name, category, price, stock_min, last_cost, image_url)
@@ -779,16 +808,27 @@ begin
     v_response := jsonb_build_object('id', v_id);
 
   elsif p_command = 'create_payment' then
-    v_account_id := p_payload->>'accountId';
-    perform pg_advisory_xact_lock(hashtext(v_account_id));
+    v_account_id := nullif(p_payload->>'accountId', '');
+    perform pg_advisory_xact_lock(hashtext(coalesce(v_account_id, p_payload->>'userId', p_payload->>'paidByUserId')));
     v_payment_id := 'pay_' || gen_random_uuid()::text;
     v_remaining := (p_payload->>'amount')::numeric;
-    insert into public.payments(id, account_id, target_type, user_id, amount, unapplied_amount, note)
+
+    select * into v_paid_by_user from public.app_users where id = nullif(p_payload->>'paidByUserId', '');
+    if not found then
+      select * into v_paid_by_user from public.app_users where id = nullif(p_payload->>'userId', '');
+    end if;
+    if not found then raise exception 'Selecciona el usuario que realiza el pago.'; end if;
+    if coalesce(p_payload->>'targetType', 'account') <> 'user' and v_paid_by_user.account_id is distinct from v_account_id then
+      raise exception 'El usuario pagador debe pertenecer a la cuenta.';
+    end if;
+
+    insert into public.payments(id, account_id, target_type, user_id, paid_by_user_id, amount, unapplied_amount, note)
     values (
       v_payment_id,
-      v_account_id,
+      nullif(v_account_id, ''),
       case when p_payload->>'targetType' = 'user' then 'user' else 'account' end,
       nullif(p_payload->>'userId', ''),
+      v_paid_by_user.id,
       v_remaining,
       v_remaining,
       nullif(trim(coalesce(p_payload->>'note', '')), '')
@@ -799,8 +839,13 @@ begin
       from public.consumption_items ci
       join public.consumptions c on c.id = ci.consumption_id and c.status = 'confirmed'
       left join public.payment_applications pa on pa.consumption_item_id = ci.id
-      where ci.account_id = v_account_id
-        and (p_payload->>'targetType' <> 'user' or ci.user_id = p_payload->>'userId')
+      where (
+          (p_payload->>'targetType' = 'user' and ci.user_id = p_payload->>'userId')
+          or
+          (p_payload->>'targetType' <> 'user' and ci.user_id in (
+            select id from public.app_users where account_id = v_account_id and status = 'active'
+          ))
+        )
       group by ci.id, ci.user_id, ci.account_id, ci.total, ci.created_at
       having ci.total - coalesce(sum(pa.amount), 0) > 0
       order by ci.created_at, ci.id
@@ -818,7 +863,7 @@ begin
   elsif p_command = 'create_adjustment' then
     insert into public.adjustments(account_id, scope, user_id, amount, note)
     values (
-      p_payload->>'accountId',
+      nullif(p_payload->>'accountId', ''),
       case when p_payload->>'scope' = 'user' then 'user' else 'account' end,
       nullif(p_payload->>'userId', ''),
       (p_payload->>'amount')::numeric,
@@ -852,12 +897,12 @@ begin
     v_user_id := p_payload->>'userId';
     select account_id into v_account_id from public.app_users where id = v_user_id;
     v_balance := public.app_user_balance(v_user_id);
-    insert into public.accounts(name) values (trim(p_payload->>'newAccountName')) returning id into v_new_account_id;
-    insert into public.adjustments(account_id, scope, user_id, amount, note)
-    values (v_account_id, 'user', v_user_id, -v_balance, 'Traslado de saldo a nueva cuenta');
+    if nullif(trim(p_payload->>'newAccountName'), '') is null then
+      v_new_account_id := null;
+    else
+      insert into public.accounts(name) values (trim(p_payload->>'newAccountName')) returning id into v_new_account_id;
+    end if;
     update public.app_users set account_id = v_new_account_id, updated_at = now(), version = version + 1 where id = v_user_id;
-    insert into public.adjustments(account_id, scope, user_id, amount, note)
-    values (v_new_account_id, 'user', v_user_id, v_balance, 'Saldo trasladado desde cuenta anterior');
     insert into public.account_transfers(user_id, from_account_id, to_account_id, moved_balance, note)
     values (v_user_id, v_account_id, v_new_account_id, v_balance, 'Independizacion de usuario')
     returning id into v_id;
@@ -867,11 +912,7 @@ begin
     for v_open in select * from public.app_users where account_id = p_payload->>'sourceAccountId' and status = 'active'
     loop
       v_balance := public.app_user_balance(v_open.id);
-      insert into public.adjustments(account_id, scope, user_id, amount, note)
-      values (p_payload->>'sourceAccountId', 'user', v_open.id, -v_balance, 'Traslado por union de cuentas');
       update public.app_users set account_id = p_payload->>'targetAccountId', updated_at = now(), version = version + 1 where id = v_open.id;
-      insert into public.adjustments(account_id, scope, user_id, amount, note)
-      values (p_payload->>'targetAccountId', 'user', v_open.id, v_balance, 'Saldo trasladado desde cuenta unida');
       insert into public.account_transfers(user_id, from_account_id, to_account_id, moved_balance, note)
       values (v_open.id, p_payload->>'sourceAccountId', p_payload->>'targetAccountId', v_balance, 'Union de cuentas');
     end loop;

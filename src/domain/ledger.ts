@@ -21,8 +21,8 @@ function confirmedConsumptionIds(consumptions: Consumption[]): Set<string> {
 }
 
 export function calculateUserBalances(input: {
-  accountId: string;
-  users: { id: string; accountId: string }[];
+  accountId?: string;
+  users: { id: string; accountId?: string }[];
   consumptions: Consumption[];
   items: ConsumptionItem[];
   payments: Payment[];
@@ -30,29 +30,26 @@ export function calculateUserBalances(input: {
   adjustments: BalanceAdjustment[];
 }): UserBalance[] {
   const confirmedIds = confirmedConsumptionIds(input.consumptions);
-  const usersInAccount = input.users.filter((user) => user.accountId === input.accountId);
+  const scopedUsers = input.accountId
+    ? input.users.filter((user) => user.accountId === input.accountId)
+    : input.users;
 
-  return usersInAccount.map((user) => {
+  return scopedUsers.map((user) => {
     const consumed = input.items
-      .filter(
-        (item) =>
-          item.accountId === input.accountId && item.userId === user.id && confirmedIds.has(item.consumptionId)
-      )
+      .filter((item) => item.userId === user.id && confirmedIds.has(item.consumptionId))
       .reduce((sum, item) => sum + item.total, 0);
     const appliedPaid = input.applications
-      .filter((application) => application.accountId === input.accountId && application.userId === user.id)
+      .filter((application) => application.userId === user.id)
       .reduce((sum, application) => sum + application.amount, 0);
     const unappliedUserPaid = input.payments
       .filter(
         (payment) =>
-          payment.accountId === input.accountId && payment.targetType === 'user' && payment.userId === user.id
+          payment.paidByUserId === user.id ||
+          (!payment.paidByUserId && payment.targetType === 'user' && payment.userId === user.id)
       )
       .reduce((sum, payment) => sum + payment.unappliedAmount, 0);
     const adjustments = input.adjustments
-      .filter(
-        (adjustment) =>
-          adjustment.accountId === input.accountId && adjustment.scope === 'user' && adjustment.userId === user.id
-      )
+      .filter((adjustment) => adjustment.scope === 'user' && adjustment.userId === user.id)
       .reduce((sum, adjustment) => sum + adjustment.amount, 0);
 
     const paid = appliedPaid + unappliedUserPaid;
@@ -69,26 +66,13 @@ export function calculateUserBalances(input: {
 
 export function calculateAccountBalance(input: {
   account: Account;
-  users: { id: string; accountId: string }[];
+  users: { id: string; accountId?: string }[];
   consumptions: Consumption[];
   items: ConsumptionItem[];
   payments: Payment[];
   applications: PaymentApplication[];
   adjustments: BalanceAdjustment[];
 }): AccountBalance {
-  const confirmed = input.consumptions.filter(
-    (consumption) => consumption.accountId === input.account.id && consumption.status === 'confirmed'
-  );
-  const consumed = confirmed.reduce((sum, consumption) => sum + consumption.total, 0);
-  const paid = input.payments
-    .filter((payment) => payment.accountId === input.account.id)
-    .reduce((sum, payment) => sum + payment.amount, 0);
-  const adjustments = input.adjustments
-    .filter((adjustment) => adjustment.accountId === input.account.id)
-    .reduce((sum, adjustment) => sum + adjustment.amount, 0);
-  const unappliedCredit = input.payments
-    .filter((payment) => payment.accountId === input.account.id)
-    .reduce((sum, payment) => sum + payment.unappliedAmount, 0);
   const users = calculateUserBalances({
     accountId: input.account.id,
     users: input.users,
@@ -98,6 +82,12 @@ export function calculateAccountBalance(input: {
     applications: input.applications,
     adjustments: input.adjustments
   });
+  const consumed = users.reduce((sum, user) => sum + user.consumed, 0);
+  const paid = users.reduce((sum, user) => sum + user.paid, 0);
+  const adjustments = users.reduce((sum, user) => sum + user.adjustments, 0);
+  const unappliedCredit = input.payments
+    .filter((payment) => users.some((user) => user.userId === payment.paidByUserId))
+    .reduce((sum, payment) => sum + payment.unappliedAmount, 0);
 
   return {
     accountId: input.account.id,
@@ -142,14 +132,20 @@ export function itemOpenAmount(
 }
 
 export function calculateOpenItems(input: {
-  accountId: string;
+  accountId?: string;
   userId?: string;
+  userIds?: string[];
   consumptions: Consumption[];
   items: ConsumptionItem[];
   applications: PaymentApplication[];
 }): Array<ConsumptionItem & { openAmount: number }> {
+  const userIdSet = input.userIds ? new Set(input.userIds) : undefined;
   return input.items
-    .filter((item) => item.accountId === input.accountId && (!input.userId || item.userId === input.userId))
+    .filter((item) => {
+      if (input.userId) return item.userId === input.userId;
+      if (userIdSet) return userIdSet.has(item.userId);
+      return input.accountId ? item.accountId === input.accountId : true;
+    })
     .map((item) => ({
       ...item,
       openAmount: itemOpenAmount(item, input.consumptions, input.applications)

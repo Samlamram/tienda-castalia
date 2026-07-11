@@ -59,11 +59,11 @@ export async function updateAccount(account: Account): Promise<void> {
   await putAndQueue(db.accounts, 'accounts', updated);
 }
 
-export async function createUser(input: { accountId: string; name: string; pin: string }): Promise<PersonUser> {
+export async function createUser(input: { accountId?: string; name: string; pin: string }): Promise<PersonUser> {
   const timestamp = nowIso();
   const user: PersonUser = {
     id: createId('usr'),
-    accountId: input.accountId,
+    accountId: input.accountId || undefined,
     name: input.name.trim(),
     pinHash: await hashPin(input.pin),
     status: 'active',
@@ -82,6 +82,33 @@ export async function updateUser(input: PersonUser & { newPin?: string }): Promi
     updatedAt: nowIso()
   };
   await putAndQueue(db.users, 'users', updated);
+}
+
+export async function assignUserToAccount(userId: string, accountId: string): Promise<void> {
+  const [user, account] = await Promise.all([db.users.get(userId), db.accounts.get(accountId)]);
+  if (!user) throw new Error('Usuario no encontrado.');
+  if (!account || account.status !== 'active') throw new Error('Cuenta no disponible.');
+  await putAndQueue(db.users, 'users', { ...user, accountId, updatedAt: nowIso() });
+}
+
+export async function removeUserFromAccount(userId: string): Promise<AccountTransfer> {
+  const user = await db.users.get(userId);
+  if (!user) throw new Error('Usuario no encontrado.');
+  const timestamp = nowIso();
+  const transfer: AccountTransfer = {
+    id: createId('trf'),
+    userId,
+    fromAccountId: user.accountId,
+    toAccountId: undefined,
+    movedBalance: 0,
+    note: 'Usuario sin cuenta',
+    createdAt: timestamp
+  };
+  await db.transaction('rw', db.users, db.accountTransfers, db.syncOperations, async () => {
+    await putAndQueue(db.users, 'users', { ...user, accountId: undefined, updatedAt: timestamp });
+    await putAndQueue(db.accountTransfers, 'account_transfers', transfer);
+  });
+  return transfer;
 }
 
 export async function createProduct(input: {
@@ -379,31 +406,48 @@ export async function createPurchase(input: {
 }
 
 export async function createPayment(input: {
-  accountId: string;
+  accountId?: string;
   targetType: 'account' | 'user';
   userId?: string;
+  paidByUserId?: string;
   amount: number;
   note?: string;
 }): Promise<Payment> {
   const amount = clampAmount(input.amount);
   if (amount <= 0) throw new Error('El pago debe ser mayor a cero.');
+  if (input.targetType === 'account' && !input.accountId) throw new Error('Selecciona una cuenta para el pago.');
+  if (input.targetType === 'user' && !input.userId) throw new Error('Selecciona un usuario para el pago.');
+  const paidByUserId = input.paidByUserId || input.userId;
+  if (!paidByUserId) throw new Error('Selecciona el usuario que realiza el pago.');
 
   return db.transaction(
     'rw',
-    db.consumptions,
-    db.consumptionItems,
-    db.payments,
-    db.paymentApplications,
-    db.syncOperations,
+    [db.users, db.consumptions, db.consumptionItems, db.payments, db.paymentApplications, db.syncOperations],
     async () => {
       const timestamp = nowIso();
       const paymentId = createId('pay');
-      const consumptions = await db.consumptions.where('accountId').equals(input.accountId).toArray();
-      const items = await db.consumptionItems.where('accountId').equals(input.accountId).toArray();
-      const applications = await db.paymentApplications.where('accountId').equals(input.accountId).toArray();
+      const paidByUser = await db.users.get(paidByUserId);
+      if (!paidByUser || paidByUser.status !== 'active') throw new Error('Usuario pagador no disponible.');
+
+      if (input.targetType === 'account' && paidByUser.accountId !== input.accountId) {
+        throw new Error('El usuario pagador debe pertenecer a la cuenta.');
+      }
+
+      const targetUser = input.userId ? await db.users.get(input.userId) : undefined;
+      if (input.targetType === 'user' && (!targetUser || targetUser.status !== 'active')) {
+        throw new Error('Usuario destino no disponible.');
+      }
+
+      const accountUsers = input.accountId
+        ? await db.users.where('accountId').equals(input.accountId).filter((user) => user.status === 'active').toArray()
+        : [];
+      const consumptions = await db.consumptions.toArray();
+      const items = await db.consumptionItems.toArray();
+      const applications = await db.paymentApplications.toArray();
       const openItems = calculateOpenItems({
         accountId: input.accountId,
         userId: input.targetType === 'user' ? input.userId : undefined,
+        userIds: input.targetType === 'account' ? accountUsers.map((user) => user.id) : undefined,
         consumptions,
         items,
         applications
@@ -417,7 +461,7 @@ export async function createPayment(input: {
         const application: PaymentApplication = {
           id: createId('app'),
           paymentId,
-          accountId: input.accountId,
+          accountId: item.accountId,
           userId: item.userId,
           consumptionItemId: item.id,
           amount: applied,
@@ -431,6 +475,7 @@ export async function createPayment(input: {
         accountId: input.accountId,
         targetType: input.targetType,
         userId: input.targetType === 'user' ? input.userId : undefined,
+        paidByUserId,
         amount,
         unappliedAmount: remaining,
         note: input.note?.trim() || undefined,
@@ -544,6 +589,8 @@ export async function adjustInventory(input: {
 }
 
 export async function independizeUser(userId: string, newAccountName: string): Promise<AccountTransfer> {
+  if (!newAccountName.trim()) return removeUserFromAccount(userId);
+
   return db.transaction(
     'rw',
     [
@@ -560,6 +607,7 @@ export async function independizeUser(userId: string, newAccountName: string): P
     async () => {
       const user = await db.users.get(userId);
       if (!user) throw new Error('Usuario no encontrado.');
+      if (!user.accountId) throw new Error('El usuario no pertenece a una cuenta.');
       const sourceAccount = await db.accounts.get(user.accountId);
       if (!sourceAccount) throw new Error('Cuenta origen no encontrada.');
 
@@ -598,25 +646,7 @@ export async function independizeUser(userId: string, newAccountName: string): P
       };
 
       await putAndQueue(db.accounts, 'accounts', newAccount);
-      await putAndQueue(db.adjustments, 'adjustments', {
-        id: createId('adj'),
-        accountId: user.accountId,
-        scope: 'user' as const,
-        userId,
-        amount: -balance,
-        note: `Traslado de saldo a ${newAccount.name}`,
-        createdAt: timestamp
-      });
       await putAndQueue(db.users, 'users', { ...user, accountId: newAccount.id, updatedAt: timestamp });
-      await putAndQueue(db.adjustments, 'adjustments', {
-        id: createId('adj'),
-        accountId: newAccount.id,
-        scope: 'user' as const,
-        userId,
-        amount: balance,
-        note: `Saldo trasladado desde ${sourceAccount.name}`,
-        createdAt: timestamp
-      });
       await putAndQueue(db.accountTransfers, 'account_transfers', transfer);
       return transfer;
     }
@@ -662,25 +692,7 @@ export async function mergeAccounts(sourceAccountId: string, targetAccountId: st
 
       for (const user of allUsers.filter((entry) => entry.accountId === source.id && entry.status === 'active')) {
         const movedBalance = sourceBalance.users.find((entry) => entry.userId === user.id)?.balance ?? 0;
-        await putAndQueue(db.adjustments, 'adjustments', {
-          id: createId('adj'),
-          accountId: source.id,
-          scope: 'user' as const,
-          userId: user.id,
-          amount: -movedBalance,
-          note: `Traslado por union con ${target.name}`,
-          createdAt: timestamp
-        });
         await putAndQueue(db.users, 'users', { ...user, accountId: target.id, updatedAt: timestamp });
-        await putAndQueue(db.adjustments, 'adjustments', {
-          id: createId('adj'),
-          accountId: target.id,
-          scope: 'user' as const,
-          userId: user.id,
-          amount: movedBalance,
-          note: `Saldo trasladado desde ${source.name}`,
-          createdAt: timestamp
-        });
         await putAndQueue(db.accountTransfers, 'account_transfers', {
           id: createId('trf'),
           userId: user.id,

@@ -730,12 +730,12 @@ async function buildDemoData(): Promise<DemoData> {
     account('invitados', 'Cuenta invitados')
   ];
 
-  function user(key: string, accountKey: string, name: string): PersonUser {
-    const accountEntry = accountsByKey.get(accountKey);
-    if (!accountEntry) throw new Error(`Cuenta demo no encontrada: ${accountKey}`);
+  function user(key: string, accountKey: string | undefined, name: string): PersonUser {
+    const accountEntry = accountKey ? accountsByKey.get(accountKey) : undefined;
+    if (accountKey && !accountEntry) throw new Error(`Cuenta demo no encontrada: ${accountKey}`);
     const item: PersonUser = {
       id: createId('usr'),
-      accountId: accountEntry.id,
+      accountId: accountEntry?.id,
       name,
       pinHash: userPinHash,
       status: 'active',
@@ -754,7 +754,8 @@ async function buildDemoData(): Promise<DemoData> {
     user('luis', 'casa', 'Luis'),
     user('recepcion', 'oficina', 'Recepcion'),
     user('daniel', 'oficina', 'Daniel'),
-    user('invitada', 'invitados', 'Invitada')
+    user('invitada', 'invitados', 'Invitada'),
+    user('solo', undefined, 'Usuario Solo')
   ];
 
   const products: Product[] = productSeeds.map((seed) => {
@@ -996,11 +997,16 @@ async function buildDemoData(): Promise<DemoData> {
     { productKey: 'agua', quantity: 1 },
     { productKey: 'papas', quantity: 1 }
   ], daysAgo(0, 9, 40));
+  addConsumption('solo', [
+    { productKey: 'cafe', quantity: 1 },
+    { productKey: 'barra', quantity: 1 }
+  ], daysAgo(0, 11, 25));
 
   function addPayment(input: {
     accountKey: string;
     targetType: 'account' | 'user';
     userKey?: string;
+    paidByUserKey?: string;
     amount: number;
     note: string;
     createdAt: string;
@@ -1009,6 +1015,10 @@ async function buildDemoData(): Promise<DemoData> {
     if (!accountEntry) throw new Error(`Cuenta demo no encontrada: ${input.accountKey}`);
     const userEntry = input.userKey ? usersByKey.get(input.userKey) : undefined;
     if (input.targetType === 'user' && !userEntry) throw new Error(`Usuario demo no encontrado: ${input.userKey}`);
+    const paidByUserEntry = input.paidByUserKey
+      ? usersByKey.get(input.paidByUserKey)
+      : userEntry ?? users.find((entry) => entry.accountId === accountEntry.id);
+    if (!paidByUserEntry) throw new Error(`Pagador demo no encontrado: ${input.paidByUserKey}`);
     const paymentId = createId('pay');
     let remaining = input.amount;
     const candidates = consumptionItems
@@ -1039,6 +1049,7 @@ async function buildDemoData(): Promise<DemoData> {
       accountId: accountEntry.id,
       targetType: input.targetType,
       userId: input.targetType === 'user' ? userEntry?.id : undefined,
+      paidByUserId: paidByUserEntry.id,
       amount: input.amount,
       unappliedAmount: remaining,
       note: input.note,

@@ -74,7 +74,7 @@ function mapUser(value: unknown): PersonUser {
   const item = row(value);
   return {
     id: s(item, 'id'),
-    accountId: s(item, 'accountId', 'account_id'),
+    accountId: opt(item, 'accountId', 'account_id'),
     name: s(item, 'name'),
     username: opt(item, 'username'),
     role: item.role === 'admin' ? 'admin' : 'user',
@@ -109,7 +109,7 @@ function mapConsumption(value: unknown): Consumption {
   const item = row(value);
   return {
     id: s(item, 'id'),
-    accountId: s(item, 'accountId', 'account_id'),
+    accountId: opt(item, 'accountId', 'account_id'),
     userId: s(item, 'userId', 'user_id'),
     status: item.status === 'voided' ? 'voided' : 'confirmed',
     total: n(item, 'total'),
@@ -126,7 +126,7 @@ function mapConsumptionItem(value: unknown): ConsumptionItem {
   return {
     id: s(item, 'id'),
     consumptionId: s(item, 'consumptionId', 'consumption_id'),
-    accountId: s(item, 'accountId', 'account_id'),
+    accountId: opt(item, 'accountId', 'account_id'),
     userId: s(item, 'userId', 'user_id'),
     productId: s(item, 'productId', 'product_id'),
     productName: s(item, 'productName', 'product_name'),
@@ -145,9 +145,10 @@ function mapPayment(value: unknown): Payment {
   const item = row(value);
   return {
     id: s(item, 'id'),
-    accountId: s(item, 'accountId', 'account_id'),
+    accountId: opt(item, 'accountId', 'account_id'),
     targetType: item.targetType === 'user' || item.target_type === 'user' ? 'user' : 'account',
     userId: opt(item, 'userId', 'user_id'),
+    paidByUserId: opt(item, 'paidByUserId', 'paid_by_user_id'),
     amount: n(item, 'amount'),
     unappliedAmount: n(item, 'unappliedAmount', 'unapplied_amount'),
     note: opt(item, 'note'),
@@ -160,7 +161,7 @@ function mapPaymentApplication(value: unknown): PaymentApplication {
   return {
     id: s(item, 'id'),
     paymentId: s(item, 'paymentId', 'payment_id'),
-    accountId: s(item, 'accountId', 'account_id'),
+    accountId: opt(item, 'accountId', 'account_id'),
     userId: s(item, 'userId', 'user_id'),
     consumptionItemId: s(item, 'consumptionItemId', 'consumption_item_id'),
     amount: n(item, 'amount'),
@@ -207,7 +208,7 @@ function mapAdjustment(value: unknown): BalanceAdjustment {
   const item = row(value);
   return {
     id: s(item, 'id'),
-    accountId: s(item, 'accountId', 'account_id'),
+    accountId: opt(item, 'accountId', 'account_id'),
     scope: item.scope === 'user' ? 'user' : 'account',
     userId: opt(item, 'userId', 'user_id'),
     amount: n(item, 'amount'),
@@ -221,8 +222,8 @@ function mapTransfer(value: unknown): AccountTransfer {
   return {
     id: s(item, 'id'),
     userId: s(item, 'userId', 'user_id'),
-    fromAccountId: s(item, 'fromAccountId', 'from_account_id'),
-    toAccountId: s(item, 'toAccountId', 'to_account_id'),
+    fromAccountId: opt(item, 'fromAccountId', 'from_account_id'),
+    toAccountId: opt(item, 'toAccountId', 'to_account_id'),
     movedBalance: n(item, 'movedBalance', 'moved_balance'),
     note: s(item, 'note'),
     createdAt: s(item, 'createdAt', 'created_at', nowIso())
@@ -324,7 +325,7 @@ export async function updateAccount(account: Account, session?: AppSession): Pro
 }
 
 export async function createUser(
-  input: { accountId: string; name: string; username?: string; pin: string; role?: 'admin' | 'user' },
+  input: { accountId?: string; name: string; username?: string; pin: string; role?: 'admin' | 'user' },
   session?: AppSession
 ): Promise<PersonUser | null> {
   if (shouldUseCloud(session)) return adminCommand<PersonUser>(session, 'create_user', input);
@@ -373,7 +374,7 @@ export async function createPurchase(
 }
 
 export async function createPayment(
-  input: { accountId: string; targetType: 'account' | 'user'; userId?: string; amount: number; note?: string },
+  input: { accountId?: string; targetType: 'account' | 'user'; userId?: string; paidByUserId?: string; amount: number; note?: string },
   session?: AppSession
 ): Promise<Payment | null> {
   if (shouldUseCloud(session)) return adminCommand<Payment>(session, 'create_payment', input);
@@ -422,6 +423,22 @@ export async function mergeAccounts(sourceAccountId: string, targetAccountId: st
     return;
   }
   await localOps.mergeAccounts(sourceAccountId, targetAccountId);
+}
+
+export async function assignUserToAccount(userId: string, accountId: string, session?: AppSession): Promise<void> {
+  if (shouldUseCloud(session)) {
+    await adminCommand(session, 'assign_user_to_account', { userId, accountId });
+    return;
+  }
+  await localOps.assignUserToAccount(userId, accountId);
+}
+
+export async function removeUserFromAccount(userId: string, session?: AppSession): Promise<void> {
+  if (shouldUseCloud(session)) {
+    await adminCommand(session, 'remove_user_from_account', { userId });
+    return;
+  }
+  await localOps.removeUserFromAccount(userId);
 }
 
 export async function recalculateFifo(input: { productId?: string } = {}, session?: AppSession): Promise<void> {

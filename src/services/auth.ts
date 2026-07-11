@@ -93,7 +93,7 @@ async function localLoginPin(username: string, pin: string, deviceMode: DeviceMo
   const users = await db.users.toArray();
   const user = users.find((entry) => entry.status === 'active' && normalizeLogin(entry.name) === normalizedUsername);
   if (!user || !(await verifyPin(pin, user.pinHash))) throw new Error('El usuario o el PIN no coinciden.');
-  const account = await db.accounts.get(user.accountId);
+  const account = user.accountId ? await db.accounts.get(user.accountId) : undefined;
   const session: AppSession = {
     key: 'current',
     token: 'local-user',
