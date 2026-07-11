@@ -15,4 +15,5 @@ pnpm-debug.log*
 Thumbs.db
 
 .vite/
+.vercel/
 coverage/
