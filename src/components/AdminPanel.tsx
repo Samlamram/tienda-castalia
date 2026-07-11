@@ -750,7 +750,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                     role="tab"
                     aria-selected={accountView === 'users'}
                   >
-                    <Users size={16} /> Users
+                    <Users size={16} /> Usuarios
                   </button>
                 </div>
                 <label className="admin-search-field">
@@ -758,7 +758,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                   <input
                     value={accountQuery}
                     onChange={(event) => setAccountQuery(event.target.value)}
-                    placeholder={accountView === 'accounts' ? 'Buscar cuenta o user' : 'Buscar user o cuenta'}
+                    placeholder={accountView === 'accounts' ? 'Buscar cuenta o usuario' : 'Buscar usuario o cuenta'}
                   />
                 </label>
               </div>
@@ -783,7 +783,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                     ))}
                   </div>
                 ) : (
-                  <div className="admin-filter-pills" aria-label="Filtros de users">
+                  <div className="admin-filter-pills" aria-label="Filtros de usuarios">
                     {[
                       ['active', 'Activos'],
                       ['debt', 'Con deuda'],
@@ -842,7 +842,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                                   </span>
                                 </div>
                                 <div className="admin-item-metrics">
-                                  <span>{users.length} user{users.length === 1 ? '' : 's'}</span>
+                                  <span>{users.length} usuario{users.length === 1 ? '' : 's'}</span>
                                   <span>Ultimo mov. {latestAccountActivity(data, account.id)}</span>
                                 </div>
                               </div>
@@ -853,7 +853,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                               <strong>{formatMoney(accountBalance)}</strong>
                             </div>
 
-                            <div className="admin-linked-users" aria-label={`Users de ${account.name}`}>
+                            <div className="admin-linked-users" aria-label={`Usuarios de ${account.name}`}>
                               {users.length > 0 ? (
                                 <>
                                   {users.slice(0, 5).map((user) => (
@@ -866,8 +866,8 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                                     type="button"
                                     className="admin-user-chip add"
                                     onClick={() => setActiveModal({ type: 'create-user', target: { accountId: account.id } })}
-                                    aria-label={`Agregar user a ${account.name}`}
-                                    title="Agregar user"
+                                    aria-label={`Agregar usuario a ${account.name}`}
+                                    title="Agregar usuario"
                                   >
                                     <Plus size={15} />
                                   </button>
@@ -878,7 +878,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                                   className="admin-linked-users-empty add"
                                   onClick={() => setActiveModal({ type: 'create-user', target: { accountId: account.id } })}
                                 >
-                                  <Plus size={15} /> User
+                                  <Plus size={15} /> Usuario
                                 </button>
                               )}
                             </div>
@@ -927,7 +927,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                         <Plus size={28} />
                       </span>
                       <span>
-                        <strong>Anadir user</strong>
+                        <strong>Anadir usuario</strong>
                         <small>Vincular a una cuenta existente</small>
                       </span>
                     </button>
@@ -994,7 +994,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                     ))}
 
                     {filteredUsers.length === 0 ? (
-                      <p className="admin-empty-state">No hay users que coincidan con este filtro.</p>
+                      <p className="admin-empty-state">No hay usuarios que coincidan con este filtro.</p>
                     ) : null}
                   </>
                 )}
@@ -1471,7 +1471,7 @@ function AdminModalContainer({
             <div className="admin-detail-summary">
               <span>Saldo total</span>
               <strong>{formatMoney(detailBalance?.balance ?? 0)}</strong>
-              <small>{detailUsers.length} user{detailUsers.length === 1 ? '' : 's'} vinculado{detailUsers.length === 1 ? '' : 's'}</small>
+              <small>{detailUsers.length} usuario{detailUsers.length === 1 ? '' : 's'} vinculado{detailUsers.length === 1 ? '' : 's'}</small>
             </div>
 
             <div className="admin-users-sublist detail">
@@ -1589,18 +1589,47 @@ function AdminModalContainer({
             )}
 
             {modal.type === 'create-user' && (
-              <>
-                <label>Cuenta asociada</label>
-                <select name="accountId" defaultValue={targetAccountId} required>
-                  {activeAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-                <input name="name" placeholder="Nombre completo" required />
+              <div className="create-user-flow">
+                <div className="admin-form-note">
+                  <span className="admin-form-note-icon" aria-hidden="true">
+                    <Users size={20} />
+                  </span>
+                  <div>
+                    <strong>Datos de acceso del usuario</strong>
+                    <p>El usuario podra entrar con este nombre y PIN. Sus compras quedaran cargadas a la cuenta seleccionada.</p>
+                  </div>
+                </div>
+
+                <label className="admin-field-stack">
+                  <span>1. Cuenta donde quedara vinculado</span>
+                  <select name="accountId" defaultValue={targetAccountId} required>
+                    {activeAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small>Selecciona la cuenta/familia que asumira los consumos de este usuario.</small>
+                </label>
+
+                <label className="admin-field-stack">
+                  <span>2. Nombre para iniciar sesion</span>
+                  <input name="name" placeholder="Ej: Papa, Mama, Hijo" autoComplete="off" required autoFocus />
+                  <small>Debe ser facil de reconocer en la pantalla de inicio.</small>
+                </label>
+
+                <div className="admin-field-stack">
+                  <span>3. PIN de entrada</span>
                 <input name="pin" placeholder="PIN de 4 dígitos" inputMode="numeric" defaultValue="1234" required />
-              </>
+                  <small>Usa 4 numeros. El PIN inicial sugerido es 1234.</small>
+                </div>
+
+                <div className="create-user-summary">
+                  <span>Antes de guardar</span>
+                  <strong>Quedara activo inmediatamente</strong>
+                  <small>El usuario podra entrar al kiosko con el nombre y PIN que acabas de definir.</small>
+                </div>
+              </div>
             )}
 
             {modal.type === 'payment' && (
@@ -1921,8 +1950,8 @@ function AdminModalContainer({
             {modal.type === 'toggle-user-status' && (
               <p className="admin-confirm-copy">
                 {modal.target.status === 'active'
-                  ? `El user "${modal.target.name}" quedara inactivo para nuevas acciones.`
-                  : `El user "${modal.target.name}" volvera a estar activo.`}
+                  ? `El usuario "${modal.target.name}" quedara inactivo para nuevas acciones.`
+                  : `El usuario "${modal.target.name}" volvera a estar activo.`}
               </p>
             )}
 
@@ -1932,7 +1961,7 @@ function AdminModalContainer({
                   Cancelar
                 </button>
               ) : null}
-              <button type="submit" className="primary">
+              <button type="submit" className="primary" disabled={modal.type === 'create-user' && activeAccounts.length === 0}>
                 {modal.type === 'toggle-product-status' || modal.type === 'toggle-user-status' || modal.type === 'bulk-products'
                   ? 'Confirmar'
                   : 'Guardar'}

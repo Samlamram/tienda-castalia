@@ -4791,6 +4791,98 @@ select:focus {
   justify-content: flex-end;
 }
 
+.create-user-flow {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-form-note {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.admin-form-note-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.admin-form-note strong,
+.admin-form-note p {
+  margin: 0;
+}
+
+.admin-form-note strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.admin-form-note p {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.admin-field-stack {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.admin-field-stack > span {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.admin-field-stack small {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.create-user-summary {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.24);
+  border-radius: var(--radius-md);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.create-user-summary span {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.create-user-summary strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.create-user-summary small {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
 .product-photo-preview {
   width: 100%;
   aspect-ratio: 1.45;
