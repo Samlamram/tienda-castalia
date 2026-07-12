@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Boxes,
   BrushCleaning,
+  CreditCard,
   DollarSign,
   Download,
   Edit,
@@ -42,8 +43,13 @@ type AccountFilter = 'debt' | 'clear' | 'inactive' | 'all';
 type AccountPanelTab = 'accounts' | 'users';
 type UserFilter = 'active' | 'debt' | 'inactive' | 'all';
 type BulkProductAction = 'purchase' | 'inventory' | 'prices';
+type AdminAccountDetailTab = 'history' | 'payments';
 type ModalState = null | { type: string; target?: any };
 const PRODUCT_CATEGORIES = ['Bebidas', 'Comida', 'Dulces', 'Otros'] as const;
+
+interface DatedEntry {
+  createdAt: string;
+}
 
 interface AdminPanelProps {
   data: TiendaData;
@@ -106,6 +112,65 @@ function initials(name: string): string {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('');
+}
+
+function dateKey(value: string) {
+  const date = new Date(value);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
+function formatDayLabel(value: string) {
+  const date = new Date(value);
+  const entryKey = dateKey(value);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (entryKey === dateKey(today.toISOString())) return 'Hoy';
+  if (entryKey === dateKey(yesterday.toISOString())) return 'Ayer';
+
+  return new Intl.DateTimeFormat('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  }).format(date);
+}
+
+function formatMovementTime(value: string) {
+  return new Intl.DateTimeFormat('es-CO', {
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(new Date(value));
+}
+
+function groupByDay<T extends DatedEntry>(entries: T[]) {
+  const groups: Array<{ key: string; label: string; entries: T[] }> = [];
+
+  entries.forEach((entry) => {
+    const key = dateKey(entry.createdAt);
+    const found = groups.find((group) => group.key === key);
+
+    if (found) {
+      found.entries.push(entry);
+      return;
+    }
+
+    groups.push({
+      key,
+      label: formatDayLabel(entry.createdAt),
+      entries: [entry]
+    });
+  });
+
+  return groups;
+}
+
+function countLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: AdminPanelProps) {
@@ -851,9 +916,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                               <div className="admin-item-main">
                                 <div className="admin-item-title-row">
                                   <strong>{account.name}</strong>
-                                  <span className={`status-pill ${account.status === 'active' ? 'ok' : 'muted'}`}>
-                                    {account.status === 'active' ? 'Activa' : 'Inactiva'}
-                                  </span>
+                                  {account.status === 'inactive' ? <span className="status-pill muted">Inactiva</span> : null}
                                 </div>
                                 <div className="admin-item-metrics">
                                   <span>{users.length} usuario{users.length === 1 ? '' : 's'}</span>
@@ -958,9 +1021,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                           <div className="admin-item-main">
                             <div className="admin-item-title-row">
                               <strong>{user.name}</strong>
-                              <span className={`status-pill ${user.status === 'active' ? 'ok' : 'muted'}`}>
-                                {user.status === 'active' ? 'Activo' : 'Inactivo'}
-                              </span>
+                              {user.status === 'inactive' ? <span className="status-pill muted">Inactivo</span> : null}
                             </div>
                             <div className="admin-item-metrics">
                               <span>Cuenta <strong>{account?.name ?? 'Sin cuenta'}</strong></span>
@@ -990,10 +1051,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                               <button
                                 type="button"
                                 className="ghost small"
-                                onClick={async () => {
-                                  await adminApi.removeUserFromAccount(user.id, adminSession);
-                                  onMessage('Usuario removido de la cuenta.');
-                                }}
+                                onClick={() => setActiveModal({ type: 'remove-user-account', target: user })}
                               >
                                 Quitar cuenta
                               </button>
@@ -1005,15 +1063,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                             >
                               {user.status === 'active' ? 'Desactivar' : 'Activar'}
                             </button>
-                            {user.status === 'active' ? (
-                              <button
-                                type="button"
-                                className="ghost small"
-                                onClick={() => setActiveModal({ type: 'independize', target: user })}
-                              >
-                                <Split size={14} /> Independizar
-                              </button>
-                            ) : null}
                           </div>
                         </div>
                       </article>
@@ -1031,40 +1080,41 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
       </div>
 
       {activeSection === 'catalogo' && selectedProductIds.length > 0 ? (
-        <footer className="admin-bulk-bar">
-          <div
-            className="admin-bulk-count"
-            aria-live="polite"
-            aria-label={`${selectedProductIds.length} producto${selectedProductIds.length === 1 ? '' : 's'} seleccionado${selectedProductIds.length === 1 ? '' : 's'}`}
-          >
-            <strong>{selectedProductIds.length}</strong>
-            <CircleCheck size={18} aria-hidden="true" />
-          </div>
-          <div className="admin-bulk-actions">
+        <div
+          className="admin-bulk-fab"
+          aria-label={`${selectedProductIds.length} producto${selectedProductIds.length === 1 ? '' : 's'} seleccionado${selectedProductIds.length === 1 ? '' : 's'}`}
+        >
+          <div className="admin-bulk-fab-menu">
             <button type="button" onClick={() => openBulkAction('purchase')} aria-label="Registrar compra">
-              <PackagePlus size={17} />
+              <PackagePlus size={18} />
               <span>Compra</span>
             </button>
             <button type="button" onClick={() => openBulkAction('inventory')} aria-label="Cuadre de inventario">
-              <Boxes size={17} />
-              <span className="admin-bulk-label-full">Inventario</span>
-              <span className="admin-bulk-label-short" aria-hidden="true">Inv.</span>
+              <Boxes size={18} />
+              <span>Inventario</span>
             </button>
             <button type="button" onClick={() => openBulkAction('prices')} aria-label="Actualizar precios">
-              <DollarSign size={17} />
-              <span className="admin-bulk-label-full">Precio</span>
+              <DollarSign size={18} />
+              <span>Precio</span>
+            </button>
+            <button
+              type="button"
+              className="admin-bulk-fab-clear"
+              onClick={() => setSelectedProductIds([])}
+              aria-label="Limpiar seleccion"
+            >
+              <BrushCleaning size={18} />
+              <span>Limpiar</span>
             </button>
           </div>
-          <button
-            type="button"
-            className="ghost admin-bulk-clear"
-            onClick={() => setSelectedProductIds([])}
-            aria-label="Limpiar seleccion"
-            title="Limpiar seleccion"
+          <div
+            className="admin-bulk-fab-main"
+            aria-live="polite"
+            aria-label={`${selectedProductIds.length} productos seleccionados`}
           >
-            <BrushCleaning size={17} />
-          </button>
-        </footer>
+            <strong>{selectedProductIds.length}</strong>
+          </div>
+        </div>
       ) : null}
 
       {activeModal && (
@@ -1166,6 +1216,7 @@ function AdminModalContainer({
   const activeUsers = data.users.filter((u) => u.status === 'active');
   const unassignedUsers = activeUsers.filter((u) => !u.accountId);
   const modalTargetIsUser = Boolean(modal.target && typeof modal.target === 'object' && 'pinHash' in modal.target);
+  const modalTargetIsAccount = Boolean(modal.target && typeof modal.target === 'object' && !modalTargetIsUser && 'name' in modal.target && 'status' in modal.target);
   const targetAccountId =
     typeof modal.target?.accountId === 'string'
       ? modal.target.accountId
@@ -1191,6 +1242,7 @@ function AdminModalContainer({
       ? data.users.filter((u) => u.accountId === paymentAccount && u.status === 'active')
       : activeUsers;
   const paymentPayers = paymentTargetType === 'account' ? paymentUsers : activeUsers;
+  const fixedPaymentTarget = modal.type === 'payment' && (modalTargetIsAccount || modalTargetIsUser);
 
   // Ajuste manual
   const [adjAccount, setAdjAccount] = useState(targetAccountId);
@@ -1254,6 +1306,11 @@ function AdminModalContainer({
             adminSession
           );
           onMessage('Usuario agregado a la cuenta.');
+          break;
+
+        case 'remove-user-account':
+          await adminApi.removeUserFromAccount(String(modal.target.id), adminSession);
+          onMessage('Usuario removido de la cuenta.');
           break;
 
         case 'payment':
@@ -1353,7 +1410,7 @@ function AdminModalContainer({
             {
               ...modal.target,
               accountId: editedAccountId || undefined,
-              name: String(form.get('name') ?? ''),
+              name: String(form.get('name') ?? modal.target.name),
               newPin: newPin || undefined
             },
             adminSession
@@ -1523,7 +1580,7 @@ function AdminModalContainer({
             {modal.type === 'stock-adjustment' && 'Ajuste de Stock'}
             {modal.type === 'export' && 'Exportar a Google Sheets'}
             {modal.type === 'edit-account' && 'Editar Cuenta'}
-            {modal.type === 'edit-user' && 'Editar Usuario'}
+            {modal.type === 'edit-user' && 'Asignar Cuenta'}
             {modal.type === 'edit-product' && 'Editar Producto'}
             {modal.type === 'history' && 'Historial de Consumos'}
             {modal.type === 'account-detail' && 'Detalle de Cuenta'}
@@ -1531,6 +1588,7 @@ function AdminModalContainer({
               (modal.target.status === 'active' ? 'Desactivar Producto' : 'Activar Producto')}
             {modal.type === 'toggle-user-status' &&
               (modal.target.status === 'active' ? 'Desactivar Usuario' : 'Activar Usuario')}
+            {modal.type === 'remove-user-account' && 'Quitar Usuario de Cuenta'}
             {modal.type === 'bulk-products' && bulkMode === 'purchase' && 'Compra de Productos'}
             {modal.type === 'bulk-products' && bulkMode === 'inventory' && 'Cuadre de Inventario'}
             {modal.type === 'bulk-products' && bulkMode === 'prices' && 'Actualizar Precios'}
@@ -1560,11 +1618,7 @@ function AdminModalContainer({
                     <button
                       type="button"
                       className="ghost small"
-                      onClick={async () => {
-                        await adminApi.removeUserFromAccount(user.id, adminSession);
-                        onMessage('Usuario removido de la cuenta.');
-                        onClose();
-                      }}
+                      onClick={() => onSwitchModal?.({ type: 'remove-user-account', target: user })}
                     >
                       Quitar
                     </button>
@@ -1573,25 +1627,61 @@ function AdminModalContainer({
               })}
             </div>
 
-            <div className="table-list">
+            <div className="account-timeline admin-account-history">
               {detailConsumptions.map((consumption) => {
                 const user = data.users.find((entry) => entry.id === consumption.userId);
                 const consumptionItems = data.items.filter((item) => item.consumptionId === consumption.id);
+                const userName = user?.name ?? 'Usuario';
                 return (
-                  <div className="history-row" key={consumption.id}>
-                    <div>
-                      <strong>{formatMoney(consumption.total)}</strong>
-                      <p>
-                        {user?.name} / {new Date(consumption.createdAt).toLocaleString('es-CO')}
-                      </p>
-                      <small>
-                        {consumptionItems.map((item) => `${item.productName} x${item.quantity}`).join(', ')}
-                      </small>
+                  <article className={consumption.status === 'voided' ? 'history-card voided' : 'history-card'} key={consumption.id}>
+                    <div className="history-card-header">
+                      <div className="history-person">
+                        <span className="account-avatar">{initials(userName)}</span>
+                        <div>
+                          <strong>{userName}</strong>
+                          <span>{new Date(consumption.createdAt).toLocaleString('es-CO')}</span>
+                        </div>
+                      </div>
                     </div>
-                    <span className={consumption.status === 'voided' ? 'danger-text' : 'status-pill ok'}>
-                      {consumption.status}
-                    </span>
-                  </div>
+
+                    <div className="history-cart">
+                      {consumptionItems.map((item) => {
+                        const product = data.products.find((entry) => entry.id === item.productId);
+                        const imageUrl = product?.imageUrl && !bulkFailedImages[item.productId] ? product.imageUrl : undefined;
+                        return (
+                          <div className="history-cart-row" key={item.id}>
+                            <span className="history-item-thumbnail">
+                              {imageUrl ? (
+                                <img
+                                  src={imageUrl}
+                                  alt=""
+                                  onError={() => setBulkFailedImages((current) => ({ ...current, [item.productId]: true }))}
+                                />
+                              ) : (
+                                <span className="history-item-placeholder">
+                                  <Package size={16} />
+                                </span>
+                              )}
+                            </span>
+                            <span className="history-item-info">
+                              <strong>{item.productName}</strong>
+                              <small>x{item.quantity}</small>
+                            </span>
+                            <span className="history-item-subtotal">
+                              <small>Subtotal</small>
+                              <strong>{formatMoney(item.total)}</strong>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="history-card-footer">
+                      <span>Total</span>
+                      <strong>{formatMoney(consumption.total)}</strong>
+                    </div>
+                    {consumption.status === 'voided' ? <small className="danger-text">Anulado</small> : null}
+                  </article>
                 );
               })}
               {detailConsumptions.length === 0 ? <p className="admin-empty-state compact">Sin consumos registrados.</p> : null}
@@ -1676,18 +1766,28 @@ function AdminModalContainer({
               <>
                 <label>Nombre de la cuenta</label>
                 <input name="name" placeholder="Nombre de familia o grupo" required autoFocus />
-                <label>Usuarios sin cuenta</label>
-                <div className="admin-check-list">
-                  {unassignedUsers.map((user) => (
-                    <label key={user.id}>
-                      <input type="checkbox" name="userIds" value={user.id} />
-                      <span>{user.name}</span>
-                    </label>
-                  ))}
-                  {unassignedUsers.length === 0 ? (
-                    <p className="admin-empty-state compact">No hay usuarios sin cuenta para agregar.</p>
-                  ) : null}
-                </div>
+                <label>Agregar usuarios (opcional)</label>
+                {unassignedUsers.length > 0 ? (
+                  <div className="admin-choice-list">
+                    {unassignedUsers.map((user) => (
+                      <label className="admin-choice-card" key={user.id}>
+                        <input type="checkbox" name="userIds" value={user.id} />
+                        <span className="admin-choice-avatar" aria-hidden="true">
+                          {initials(user.name)}
+                        </span>
+                        <span className="admin-choice-copy">
+                          <strong>{user.name}</strong>
+                          <small>Sin cuenta</small>
+                        </span>
+                        <span className="admin-choice-mark" aria-hidden="true">
+                          <CircleCheck size={17} />
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="admin-empty-state compact">No hay usuarios sin cuenta para agregar.</p>
+                )}
               </>
             )}
 
@@ -1703,14 +1803,36 @@ function AdminModalContainer({
             {modal.type === 'create-user' && (
               <>
                 <label>Asociar a cuenta (opcional)</label>
-                <select name="accountId" defaultValue="">
-                  <option value="">Sin cuenta</option>
+                <div className="admin-choice-list">
+                  <label className="admin-choice-card">
+                    <input type="radio" name="accountId" value="" defaultChecked />
+                    <span className="admin-choice-avatar muted" aria-hidden="true">
+                      <Users size={18} />
+                    </span>
+                    <span className="admin-choice-copy">
+                      <strong>Sin cuenta</strong>
+                      <small>Usuario independiente</small>
+                    </span>
+                    <span className="admin-choice-mark" aria-hidden="true">
+                      <CircleCheck size={17} />
+                    </span>
+                  </label>
                   {activeAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
+                    <label className="admin-choice-card" key={account.id}>
+                      <input type="radio" name="accountId" value={account.id} />
+                      <span className="admin-choice-avatar" aria-hidden="true">
+                        {initials(account.name)}
+                      </span>
+                      <span className="admin-choice-copy">
+                        <strong>{account.name}</strong>
+                        <small>Cuenta activa</small>
+                      </span>
+                      <span className="admin-choice-mark" aria-hidden="true">
+                        <CircleCheck size={17} />
+                      </span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </>
             )}
 
@@ -1718,22 +1840,36 @@ function AdminModalContainer({
               <>
                 <input type="hidden" name="accountId" value={modal.target?.id ?? ''} />
                 <label>Usuario sin cuenta</label>
-                <select name="userId" required>
-                  {unassignedUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-                {unassignedUsers.length === 0 ? (
+                {unassignedUsers.length > 0 ? (
+                  <div className="admin-choice-list">
+                    {unassignedUsers.map((user, index) => (
+                      <label className="admin-choice-card" key={user.id}>
+                        <input type="radio" name="userId" value={user.id} defaultChecked={index === 0} required />
+                        <span className="admin-choice-avatar" aria-hidden="true">
+                          {initials(user.name)}
+                        </span>
+                        <span className="admin-choice-copy">
+                          <strong>{user.name}</strong>
+                          <small>Sin cuenta</small>
+                        </span>
+                        <span className="admin-choice-mark" aria-hidden="true">
+                          <CircleCheck size={17} />
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
                   <p className="admin-empty-state compact">No hay usuarios sin cuenta para agregar.</p>
-                ) : null}
+                )}
               </>
             )}
 
             {modal.type === 'payment' && (
               <>
-                {paymentTargetType === 'account' && (
+                {paymentTargetType === 'account' && fixedPaymentTarget ? (
+                  <input type="hidden" name="accountId" value={paymentAccount} />
+                ) : null}
+                {paymentTargetType === 'account' && !fixedPaymentTarget && (
                   <>
                     <label>Cuenta</label>
                     <select
@@ -1750,6 +1886,9 @@ function AdminModalContainer({
                     </select>
                   </>
                 )}
+                {paymentTargetType === 'user' && fixedPaymentTarget ? (
+                  <input type="hidden" name="userId" value={paymentUserId || targetUserId} />
+                ) : null}
                 <label>Usuario que paga</label>
                 <select name="paidByUserId" required>
                   {paymentPayers.map((u) => (
@@ -1758,12 +1897,16 @@ function AdminModalContainer({
                     </option>
                   ))}
                 </select>
-                <label>Destinatario</label>
-                <select value={paymentTargetType} onChange={(e) => setPaymentTargetType(e.target.value)}>
-                  <option value="account">Abonar a cuenta completa</option>
-                  <option value="user">Abonar a usuario específico</option>
-                </select>
-                {paymentTargetType === 'user' && (
+                {!fixedPaymentTarget ? (
+                  <>
+                    <label>Destinatario</label>
+                    <select value={paymentTargetType} onChange={(e) => setPaymentTargetType(e.target.value)}>
+                      <option value="account">Abonar a cuenta completa</option>
+                      <option value="user">Abonar a usuario especifico</option>
+                    </select>
+                  </>
+                ) : null}
+                {paymentTargetType === 'user' && !fixedPaymentTarget && (
                   <>
                     <label>Usuario</label>
                     <select
@@ -1940,10 +2083,6 @@ function AdminModalContainer({
                     </option>
                   ))}
                 </select>
-                <label>Nombre del usuario</label>
-                <input name="name" defaultValue={modal.target.name} required />
-                <label>PIN de seguridad (dejar vacío para no modificar)</label>
-                <input name="pin" placeholder="Nuevo PIN opcional" inputMode="numeric" />
               </>
             )}
 
@@ -2072,6 +2211,12 @@ function AdminModalContainer({
               </p>
             )}
 
+            {modal.type === 'remove-user-account' && (
+              <p className="admin-confirm-copy">
+                {`"${modal.target.name}" quedara sin cuenta. Su saldo se mantiene con el usuario.`}
+              </p>
+            )}
+
             <div className="modal-actions">
               {modal.type !== 'create-product' && modal.type !== 'edit-product' ? (
                 <button type="button" className="ghost" onClick={onClose}>
@@ -2079,7 +2224,10 @@ function AdminModalContainer({
                 </button>
               ) : null}
               <button type="submit" className="primary">
-                {modal.type === 'toggle-product-status' || modal.type === 'toggle-user-status' || modal.type === 'bulk-products'
+                {modal.type === 'toggle-product-status' ||
+                modal.type === 'toggle-user-status' ||
+                modal.type === 'remove-user-account' ||
+                modal.type === 'bulk-products'
                   ? 'Confirmar'
                   : 'Guardar'}
               </button>

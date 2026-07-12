@@ -16,7 +16,7 @@ import type {
 import { createId, nowIso } from '../utils/id';
 import { hashPin } from '../utils/security';
 
-const DEMO_SEED_VERSION = 'demo-v3';
+const DEMO_SEED_VERSION = 'demo-v4';
 const DEMO_CLEANUP_VERSION = 'dedupe-v1';
 
 let ensureSeedDataPromise: Promise<void> | null = null;
@@ -1403,7 +1403,12 @@ async function ensureSeedDataInternal(): Promise<void> {
     return;
   }
 
-  if (legacySeeded?.value === 'true' || seedVersion?.value?.startsWith('demo-')) {
+  if (seedVersion?.value?.startsWith('demo-')) {
+    await resetDemoData();
+    return;
+  }
+
+  if (legacySeeded?.value === 'true') {
     await addMissingCatalogProducts();
     await ensureDemoConsistency();
   }

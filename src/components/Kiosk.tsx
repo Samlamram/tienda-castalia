@@ -133,15 +133,12 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [searchBarVisible, setSearchBarVisible] = useState(true);
-  const [swipedCheckoutItemId, setSwipedCheckoutItemId] = useState<string | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSubmitting, setPinSubmitting] = useState(false);
   const catalogAreaRef = useRef<HTMLElement | null>(null);
   const lastCatalogScrollTop = useRef(0);
   const searchBarVisibleRef = useRef(true);
-  const checkoutTouchStartX = useRef(0);
-  const checkoutTouchStartY = useRef(0);
 
   useEffect(() => {
     if (!isSharedDevice) return;
@@ -317,20 +314,6 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
         .map((item) => (item.productId === productId ? { ...item, quantity: Math.max(0, quantity) } : item))
         .filter((item) => item.quantity > 0)
     );
-    if (quantity <= 0) setSwipedCheckoutItemId(null);
-  }
-
-  function startCheckoutSwipe(x: number, y: number) {
-    checkoutTouchStartX.current = x;
-    checkoutTouchStartY.current = y;
-  }
-
-  function endCheckoutSwipe(productId: string, x: number, y: number) {
-    const deltaX = x - checkoutTouchStartX.current;
-    const deltaY = y - checkoutTouchStartY.current;
-    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
-    if (deltaX < -36) setSwipedCheckoutItemId(productId);
-    if (deltaX > 28) setSwipedCheckoutItemId(null);
   }
 
   async function confirmConsumption() {
@@ -879,16 +862,8 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                 const hasImage = item.product.imageUrl && !failedImages[item.productId];
                 return (
                   <div
-                    className={`checkout-item-row ${swipedCheckoutItemId === item.productId ? 'is-swiped' : ''}`}
+                    className="checkout-item-row"
                     key={item.productId}
-                    onTouchStart={(event) => {
-                      const touch = event.touches[0];
-                      if (touch) startCheckoutSwipe(touch.clientX, touch.clientY);
-                    }}
-                    onTouchEnd={(event) => {
-                      const touch = event.changedTouches[0];
-                      if (touch) endCheckoutSwipe(item.productId, touch.clientX, touch.clientY);
-                    }}
                   >
                     <div className="checkout-item-thumbnail">
                       {hasImage ? (
@@ -943,10 +918,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                     <button
                       type="button"
                       className="checkout-item-remove"
-                      onClick={() => {
-                        updateQuantity(item.productId, 0);
-                        setSwipedCheckoutItemId(null);
-                      }}
+                      onClick={() => updateQuantity(item.productId, 0)}
                       title="Quitar"
                       aria-label={`Eliminar ${item.product.name} del carrito`}
                     >

@@ -7,7 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'brand/castalia-mark-192.png'],
+      includeAssets: [
+        'icon-192.png',
+        'icon-512.png',
+        'apple-touch-icon.png',
+        'brand/castalia-mark-192.png',
+        'brand/castalia-login-mark.png'
+      ],
       manifest: {
         name: 'Tienda Castalia',
         short_name: 'Castalia',
