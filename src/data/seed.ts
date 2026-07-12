@@ -21,6 +21,10 @@ const DEMO_CLEANUP_VERSION = 'dedupe-v1';
 
 let ensureSeedDataPromise: Promise<void> | null = null;
 
+function demoModeEnabled(): boolean {
+  return import.meta.env.VITE_USE_DEMO_DATA === 'true';
+}
+
 type ProductSeed = {
   key: string;
   name: string;
@@ -1380,6 +1384,11 @@ export async function resetDemoData(): Promise<void> {
 
 async function ensureSeedDataInternal(): Promise<void> {
   const seedVersion = await db.settings.get('demo_seed_version');
+  if (demoModeEnabled() && seedVersion?.value !== DEMO_SEED_VERSION) {
+    await resetDemoData();
+    return;
+  }
+
   if (seedVersion?.value === DEMO_SEED_VERSION) {
     await ensureDemoConsistency();
     return;

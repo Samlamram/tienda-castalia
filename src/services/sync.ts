@@ -21,6 +21,7 @@ const entityTables: Record<string, keyof typeof db> = {
 
 export function getSupabaseClient(): SupabaseClient | null {
   if (import.meta.env.MODE === 'test') return null;
+  if (isDemoDataEnabled()) return null;
   if (client) return client;
   const url = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -31,7 +32,12 @@ export function getSupabaseClient(): SupabaseClient | null {
 
 export function isSyncConfigured(): boolean {
   if (import.meta.env.MODE === 'test') return false;
+  if (isDemoDataEnabled()) return false;
   return Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+}
+
+export function isDemoDataEnabled(): boolean {
+  return import.meta.env.VITE_USE_DEMO_DATA === 'true';
 }
 
 export async function pushPendingOperations(): Promise<number> {

@@ -24,7 +24,7 @@ describe('App demo flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/PIN/), { target: { value: '1234' } });
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 
-    await screen.findByText('Tienda Castalia');
+    await screen.findByText('Tienda');
     await screen.findByText('Agua Cristal 600 ml');
 
     await waitFor(() => {

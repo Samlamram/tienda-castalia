@@ -5,6 +5,7 @@ import { BrandLogo } from './BrandLogo';
 import type { CartItem, PersonUser } from '../domain/types';
 import { calculateUserBalances } from '../domain/ledger';
 import type { useTiendaData } from '../hooks/useTiendaData';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { createConsumption } from '../services/operations';
 import { formatMoney } from '../utils/money';
 
@@ -155,32 +156,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
     };
   }, [isSharedDevice, onLogout]);
 
-  useEffect(() => {
-    const modalOpen = checkout || accountDetailOpen || pinModalOpen;
-    if (!modalOpen) return;
-
-    const scrollY = window.scrollY;
-    const { style } = document.body;
-    const previous = {
-      overflow: style.overflow,
-      position: style.position,
-      top: style.top,
-      width: style.width,
-    };
-
-    style.overflow = 'hidden';
-    style.position = 'fixed';
-    style.top = `-${scrollY}px`;
-    style.width = '100%';
-
-    return () => {
-      style.overflow = previous.overflow;
-      style.position = previous.position;
-      style.top = previous.top;
-      style.width = previous.width;
-      window.scrollTo(0, scrollY);
-    };
-  }, [checkout, accountDetailOpen, pinModalOpen]);
+  useBodyScrollLock(checkout || accountDetailOpen || pinModalOpen);
 
   useEffect(() => {
     setProductQuery('');
@@ -373,33 +349,36 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
             <BrandLogo />
           </div>
           <div className="kiosk-brand-copy">
-            <strong>Tienda Castalia</strong>
+            <strong>Tienda</strong>
             <span>Usuario: {user.name}</span>
           </div>
         </div>
 
-        <div className="kiosk-user-card">
-          <button
-            className="account-link-button account-summary-button"
-            onClick={() => {
-              setAccountFilter('all');
-              setAccountDetailOpen(true);
-            }}
-            aria-label={`Ver cuenta ${account?.name ?? user.name}`}
-          >
-            <span>{account?.name ?? 'Individual'}</span>
-            <strong>{formatMoney(currentBalance)}</strong>
-          </button>
+        <div className="kiosk-account-actions">
+          {onChangePin ? (
+            <button className="ghost icon pin-action-button" onClick={() => setPinModalOpen(true)} aria-label="Cambiar PIN">
+              <KeyRound size={20} />
+            </button>
+          ) : null}
+
+          <div className="kiosk-user-card">
+            <button
+              className="account-link-button account-summary-button"
+              onClick={() => {
+                setAccountFilter('all');
+                setAccountDetailOpen(true);
+              }}
+              aria-label={`Ver cuenta ${account?.name ?? user.name}`}
+            >
+              <span>{account?.name ?? 'Individual'}</span>
+              <strong>{formatMoney(currentBalance)}</strong>
+            </button>
+          </div>
         </div>
 
         <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir">
           <LogOut size={20} />
         </button>
-        {onChangePin ? (
-          <button className="ghost icon logout-button" onClick={() => setPinModalOpen(true)} aria-label="Cambiar PIN">
-            <KeyRound size={20} />
-          </button>
-        ) : null}
       </header>
 
       <div className="kiosk-workspace">
