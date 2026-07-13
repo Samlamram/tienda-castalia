@@ -1,5 +1,19 @@
 import type { FormEvent } from 'react';
-import { CreditCard, KeyRound, LogOut, Minus, Package, Plus, Search, ShoppingCart, Trash2, Users, X } from 'lucide-react';
+import {
+  CheckCircle2,
+  CreditCard,
+  KeyRound,
+  Loader2,
+  LogOut,
+  Minus,
+  Package,
+  Plus,
+  Search,
+  ShoppingCart,
+  Trash2,
+  Users,
+  X
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { BrandLogo } from './BrandLogo';
 import type { CartItem, PersonUser } from '../domain/types';
@@ -129,6 +143,9 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
   const [productQuery, setProductQuery] = useState('');
   const [category, setCategory] = useState('Todas');
   const [checkout, setCheckout] = useState(false);
+  const [checkoutState, setCheckoutState] = useState<'idle' | 'submitting' | 'success'>('idle');
+  const [checkoutFeedback, setCheckoutFeedback] = useState('');
+  const [confirmedCheckoutTotal, setConfirmedCheckoutTotal] = useState(0);
   const [accountDetailOpen, setAccountDetailOpen] = useState(false);
   const [accountDetailTab, setAccountDetailTab] = useState<AccountDetailTab>('history');
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
@@ -140,6 +157,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
   const catalogAreaRef = useRef<HTMLElement | null>(null);
   const lastCatalogScrollTop = useRef(0);
   const searchBarVisibleRef = useRef(true);
+  const checkoutLogoutTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isSharedDevice) return;
@@ -155,6 +173,12 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
       events.forEach((event) => window.removeEventListener(event, reset));
     };
   }, [isSharedDevice, onLogout]);
+
+  useEffect(() => {
+    return () => {
+      if (checkoutLogoutTimerRef.current) window.clearTimeout(checkoutLogoutTimerRef.current);
+    };
+  }, []);
 
   useBodyScrollLock(checkout || accountDetailOpen || pinModalOpen);
 
@@ -292,21 +316,54 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
     );
   }
 
+  function openCheckout() {
+    if (cart.length === 0) return;
+    setCheckoutFeedback('');
+    setCheckoutState('idle');
+    setCheckout(true);
+  }
+
+  function closeCheckout() {
+    if (checkoutState === 'submitting') return;
+    setCheckout(false);
+    setCheckoutFeedback('');
+    setCheckoutState('idle');
+  }
+
   async function confirmConsumption() {
+    if (cart.length === 0 || checkoutState === 'submitting') return;
+    const shouldKeepSession = !isSharedDevice;
+    const confirmedTotal = cartTotal;
+
     try {
+      setCheckout(true);
+      setCheckoutState('submitting');
+      setCheckoutFeedback('Registrando tu compra...');
+      setConfirmedCheckoutTotal(confirmedTotal);
+
       const result = onConfirmConsumption
         ? await onConfirmConsumption(user.id, cart)
         : { status: 'confirmed' as const, message: undefined };
       if (!onConfirmConsumption) {
         await createConsumption(user.id, cart);
       }
-      const message = result.message ?? `Consumo confirmado por ${formatMoney(cartTotal)}.`;
-      onMessage(isSharedDevice ? `${message} Sesion cerrada.` : message);
+      const message = result.message ?? `Consumo confirmado por ${formatMoney(confirmedTotal)}.`;
+      const nextFeedback = shouldKeepSession ? message : `${message} Cerrando sesion...`;
+      setCheckoutFeedback(nextFeedback);
+      setCheckoutState('success');
+      onMessage(shouldKeepSession ? message : `${message} Sesion cerrada.`);
       setCart([]);
-      setCheckout(false);
-      if (isSharedDevice) onLogout();
+
+      if (!shouldKeepSession) {
+        checkoutLogoutTimerRef.current = window.setTimeout(() => {
+          onLogout();
+        }, 1200);
+      }
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : 'No se pudo confirmar.');
+      const message = error instanceof Error ? error.message : 'No se pudo confirmar.';
+      setCheckoutFeedback(message);
+      setCheckoutState('idle');
+      onMessage(message);
     }
   }
 
@@ -416,21 +473,21 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
               const quantityInCart = cart.find((item) => item.productId === product.id)?.quantity ?? 0;
               const hasImage = product.imageUrl && !failedImages[product.id];
               return (
-                <div key={product.id} className={quantityInCart > 0 ? 'product-tile in-cart' : 'product-tile'}>
-                  <div
-                    className="product-media"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => addProduct(product.id)}
-                    onKeyDown={(event) => {
-                      if (event.target !== event.currentTarget) return;
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        addProduct(product.id);
-                      }
-                    }}
-                    aria-label={`Agregar ${product.name}`}
-                  >
+                <div
+                  key={product.id}
+                  className={quantityInCart > 0 ? 'product-tile in-cart' : 'product-tile'}
+                  tabIndex={0}
+                  onClick={() => addProduct(product.id)}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      addProduct(product.id);
+                    }
+                  }}
+                  aria-label={`Agregar ${product.name}`}
+                >
+                  <div className="product-media">
                     <span className="product-image-slot" aria-hidden="true">
                       {hasImage ? (
                         <img
@@ -455,7 +512,10 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                     <button
                       type="button"
                       className="tile-clear-btn"
-                      onClick={() => updateQuantity(product.id, 0)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        updateQuantity(product.id, 0);
+                      }}
                       aria-label={`Quitar ${product.name}`}
                       title="Quitar"
                     >
@@ -475,7 +535,10 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                       <button
                         type="button"
                         className="tile-add-btn"
-                        onClick={() => addProduct(product.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          addProduct(product.id);
+                        }}
                       >
                         <Plus size={16} />
                         Agregar
@@ -485,7 +548,10 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                         <button
                           type="button"
                           className="tile-action-btn dec"
-                          onClick={() => updateQuantity(product.id, quantityInCart - 1)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            updateQuantity(product.id, quantityInCart - 1);
+                          }}
                           aria-label="Restar uno"
                         >
                           <Minus size={18} />
@@ -494,7 +560,10 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                         <button
                           type="button"
                           className="tile-action-btn inc"
-                          onClick={() => addProduct(product.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            addProduct(product.id);
+                          }}
                           aria-label="Sumar uno"
                         >
                           <Plus size={18} />
@@ -612,7 +681,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
             <button
               className="cart-sidebar-btn"
               disabled={cart.length === 0}
-              onClick={confirmConsumption}
+              onClick={openCheckout}
             >
               Confirmar Compra
             </button>
@@ -834,93 +903,120 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
 
       {checkout ? (
         <div className="modal-backdrop">
-          <div className="modal wide checkout-modal">
-            <h2>Confirmar consumo</h2>
-            <div className="cart-list">
-              {cartDetails.map((item) => {
-                const hasImage = item.product.imageUrl && !failedImages[item.productId];
-                return (
-                  <div
-                    className="checkout-item-row"
-                    key={item.productId}
-                  >
-                    <div className="checkout-item-thumbnail">
-                      {hasImage ? (
-                        <img
-                          src={item.product.imageUrl}
-                          alt=""
-                          onError={() => {
-                            setFailedImages((prev) => ({ ...prev, [item.productId]: true }));
-                          }}
-                        />
-                      ) : (
-                        <div className="checkout-item-placeholder">
-                          <Package size={20} />
+          <div className={checkoutState === 'idle' ? 'modal wide checkout-modal' : 'modal checkout-feedback-modal'}>
+            <div className="checkout-modal-header">
+              <h2>{checkoutState === 'success' ? 'Compra confirmada' : 'Confirmar consumo'}</h2>
+              {checkoutState === 'idle' ? (
+                <button
+                  type="button"
+                  className="checkout-close-button"
+                  onClick={closeCheckout}
+                  aria-label="Cerrar"
+                >
+                  <X size={20} />
+                </button>
+              ) : null}
+            </div>
+            {checkoutState === 'idle' ? (
+              <>
+                <div className="cart-list">
+                  {cartDetails.map((item) => {
+                    const hasImage = item.product.imageUrl && !failedImages[item.productId];
+                    return (
+                      <div
+                        className="checkout-item-row"
+                        key={item.productId}
+                      >
+                        <div className="checkout-item-thumbnail">
+                          {hasImage ? (
+                            <img
+                              src={item.product.imageUrl}
+                              alt=""
+                              onError={() => {
+                                setFailedImages((prev) => ({ ...prev, [item.productId]: true }));
+                              }}
+                            />
+                          ) : (
+                            <div className="checkout-item-placeholder">
+                              <Package size={20} />
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    
-                    <div className="checkout-item-info">
-                      <span className="checkout-item-name" title={item.product.name}>
-                        {item.product.name}
-                      </span>
-                      <span className="checkout-item-price-each">
-                        {formatMoney(item.product.price)} c/u
-                      </span>
-                    </div>
 
-                    <div className="checkout-item-controls">
-                      <button
-                        type="button"
-                        className="checkout-qty-btn checkout-qty-btn-minus"
-                        onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                        aria-label={`Restar ${item.product.name}`}
-                      >
-                        <Minus size={18} />
-                      </button>
-                      <span className="checkout-qty-value">{item.quantity}</span>
-                      <button
-                        type="button"
-                        className="checkout-qty-btn checkout-qty-btn-plus"
-                        onClick={() => addProduct(item.productId)}
-                        aria-label={`Sumar ${item.product.name}`}
-                      >
-                        <Plus size={18} />
-                      </button>
-                    </div>
+                        <div className="checkout-item-info">
+                          <span className="checkout-item-name" title={item.product.name}>
+                            {item.product.name}
+                          </span>
+                          <span className="checkout-item-price-each">
+                            {formatMoney(item.product.price)} c/u
+                          </span>
+                        </div>
 
-                    <div className="checkout-item-subtotal">
-                      <span className="checkout-subtotal-label">Subtotal</span>
-                      <span className="checkout-subtotal-value">{formatMoney(item.total)}</span>
-                    </div>
+                        <div className="checkout-item-controls">
+                          <button
+                            type="button"
+                            className="checkout-qty-btn checkout-qty-btn-minus"
+                            onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                            aria-label={`Restar ${item.product.name}`}
+                          >
+                            <Minus size={18} />
+                          </button>
+                          <span className="checkout-qty-value">{item.quantity}</span>
+                          <button
+                            type="button"
+                            className="checkout-qty-btn checkout-qty-btn-plus"
+                            onClick={() => addProduct(item.productId)}
+                            aria-label={`Sumar ${item.product.name}`}
+                          >
+                            <Plus size={18} />
+                          </button>
+                        </div>
 
-                    <button
-                      type="button"
-                      className="checkout-item-remove"
-                      onClick={() => updateQuantity(item.productId, 0)}
-                      title="Quitar"
-                      aria-label={`Eliminar ${item.product.name} del carrito`}
-                    >
-                      <Trash2 size={18} />
+                        <div className="checkout-item-subtotal">
+                          <span className="checkout-subtotal-label">Subtotal</span>
+                          <span className="checkout-subtotal-value">{formatMoney(item.total)}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="checkout-item-remove"
+                          onClick={() => updateQuantity(item.productId, 0)}
+                          title="Quitar"
+                          aria-label={`Eliminar ${item.product.name} del carrito`}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <footer className="checkout-footer">
+                  <div className="checkout-total">
+                    <span>Total</span>
+                    <strong>{formatMoney(cartTotal)}</strong>
+                  </div>
+                  <div className="checkout-actions">
+                    <button className="checkout-primary-action" onClick={confirmConsumption} disabled={cart.length === 0}>
+                      {isSharedDevice ? 'Confirmar y salir' : 'Confirmar compra'}
                     </button>
                   </div>
-                );
-              })}
-            </div>
-            <footer className="checkout-footer">
-              <div className="checkout-total">
-                <span>Total</span>
-                <strong>{formatMoney(cartTotal)}</strong>
+                </footer>
+              </>
+            ) : (
+              <div className="checkout-feedback-panel" role="status" aria-live="polite">
+                <span className={checkoutState === 'success' ? 'checkout-feedback-icon success' : 'checkout-feedback-icon'}>
+                  {checkoutState === 'success' ? <CheckCircle2 size={34} /> : <Loader2 size={34} />}
+                </span>
+                <strong>{checkoutState === 'success' ? formatMoney(confirmedCheckoutTotal) : 'Un momento'}</strong>
+                <p>{checkoutFeedback}</p>
+                {checkoutState === 'success' && !isSharedDevice ? (
+                  <button type="button" className="checkout-primary-action" onClick={closeCheckout}>
+                    Seguir comprando
+                  </button>
+                ) : null}
               </div>
-              <div className="checkout-actions">
-                <button className="ghost checkout-secondary-action" onClick={() => setCheckout(false)}>
-                  Seguir editando
-                </button>
-                <button className="checkout-primary-action" onClick={confirmConsumption}>
-                  Confirmar y salir
-                </button>
-              </div>
-            </footer>
+            )}
           </div>
         </div>
       ) : null}
@@ -928,19 +1024,18 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
       {pinModalOpen ? (
         <div className="modal-backdrop">
           <div className="modal pin-modal">
-            <button className="account-close-button" onClick={() => setPinModalOpen(false)} aria-label="Cerrar">
-              <X size={20} />
-            </button>
-            <h2>Cambiar PIN</h2>
+            <div className="pin-modal-header">
+              <h2>Cambiar PIN</h2>
+              <button className="account-close-button" onClick={() => setPinModalOpen(false)} aria-label="Cerrar">
+                <X size={20} />
+              </button>
+            </div>
             <form className="pin-change-form" onSubmit={handleChangePin}>
               <input name="currentPin" type="password" inputMode="numeric" placeholder="PIN actual" required />
               <input name="newPin" type="password" inputMode="numeric" placeholder="Nuevo PIN" required />
               <input name="confirmPin" type="password" inputMode="numeric" placeholder="Confirmar nuevo PIN" required />
               {pinError ? <div className="login-error-message">{pinError}</div> : null}
               <div className="modal-actions">
-                <button type="button" className="ghost" onClick={() => setPinModalOpen(false)}>
-                  Cancelar
-                </button>
                 <button type="submit" className="primary" disabled={pinSubmitting}>
                   {pinSubmitting ? 'Guardando...' : 'Guardar'}
                 </button>

@@ -1,7 +1,6 @@
 import type { ChangeEvent, FormEvent } from 'react';
 import { useMemo, useState } from 'react';
 import {
-  AlertTriangle,
   Boxes,
   BrushCleaning,
   CreditCard,
@@ -17,6 +16,7 @@ import {
   Search,
   Split,
   Store,
+  User,
   Users,
   Package,
   X,
@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import type { Account, AppSession, PersonUser, Product } from '../domain/types';
 import { BrandLogo } from './BrandLogo';
-import { calculateUserBalances } from '../domain/ledger';
+import { calculateOpenItems, calculateUserBalances } from '../domain/ledger';
 import type { useTiendaData } from '../hooks/useTiendaData';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { resetDemoData } from '../data/seed';
@@ -43,6 +43,7 @@ type ProductFilter = 'active' | 'inactive' | 'low' | 'all';
 type AccountFilter = 'debt' | 'clear' | 'inactive' | 'all';
 type AccountPanelTab = 'accounts' | 'users';
 type UserFilter = 'active' | 'debt' | 'inactive' | 'all';
+type ChargePanelTab = 'receivables' | 'history';
 type BulkProductAction = 'purchase' | 'inventory' | 'prices';
 type AdminAccountDetailTab = 'history' | 'payments';
 type ModalState = null | { type: string; target?: any };
@@ -80,6 +81,13 @@ function productTone(product: Product, stock: number): 'empty' | 'low' | 'ok' | 
   if (stock <= 0) return 'empty';
   if (stock <= product.stockMin) return 'low';
   return 'ok';
+}
+
+function productStatusLabel(tone: ReturnType<typeof productTone>): string {
+  if (tone === 'empty') return 'Agotado';
+  if (tone === 'low') return 'Bajo';
+  if (tone === 'inactive') return 'Inactivo';
+  return 'OK';
 }
 
 function latestAccountActivity(data: TiendaData, accountId: string): string {
@@ -274,9 +282,6 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: A
               <button type="button" className="secondary small" onClick={() => setActiveModal({ type: 'independize' })}>
                 <Split size={16} /> Independizar
               </button>
-              <button type="button" className="secondary small" onClick={() => setActiveModal({ type: 'merge' })}>
-                Unir Cuentas
-              </button>
               <button type="button" className="secondary small" onClick={() => setActiveModal({ type: 'history' })}>
                 Ver Historial
               </button>
@@ -448,10 +453,11 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: A
 export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: AdminPanelProps) {
   const [activeSection, setActiveSection] = useState<AdminSection>('catalogo');
   const [activeModal, setActiveModal] = useState<ModalState>(null);
-  const [productFilter, setProductFilter] = useState<ProductFilter>('active');
-  const [accountFilter, setAccountFilter] = useState<AccountFilter>('debt');
+  const [productFilter, setProductFilter] = useState<ProductFilter>('all');
+  const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [accountView, setAccountView] = useState<AccountPanelTab>('accounts');
-  const [userFilter, setUserFilter] = useState<UserFilter>('active');
+  const [userFilter, setUserFilter] = useState<UserFilter>('all');
+  const [chargeView, setChargeView] = useState<ChargePanelTab>('receivables');
   const [productQuery, setProductQuery] = useState('');
   const [accountQuery, setAccountQuery] = useState('');
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -459,19 +465,18 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
 
   const activeAccountsCount = data.accounts.filter((a) => a.status === 'active').length;
   const activeProductsCount = data.products.filter((p) => p.status === 'active').length;
-  const lowStockProducts = data.products.filter((product) => {
-    const stock = productStock(data, product.id);
-    return product.status === 'active' && stock <= product.stockMin;
-  });
-  const debtAccounts = data.accountBalances.filter((balance) => {
-    const account = data.accounts.find((entry) => entry.id === balance.accountId);
-    return account?.status === 'active' && balance.balance > 0;
-  });
-  const totalDebt = debtAccounts.reduce((sum, balance) => sum + balance.balance, 0);
-  const inventoryValue = data.products.reduce((sum, product) => {
-    const stock = productStock(data, product.id);
-    return stock > 0 ? sum + stock * product.lastCost : sum;
-  }, 0);
+  const totalProductsCount = data.products.length;
+  const inventorySummary = data.products.reduce(
+    (summary, product) => {
+      const stock = productStock(data, product.id);
+      const availableStock = Math.max(0, stock);
+      return {
+        units: summary.units + availableStock,
+        value: summary.value + availableStock * product.price
+      };
+    },
+    { units: 0, value: 0 }
+  );
   function toggleProductSelection(productId: string) {
     setSelectedProductIds((current) =>
       current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
@@ -507,9 +512,10 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
         return matchesQuery && matchesFilter;
       })
       .sort((a, b) => {
+        if (a.product.status !== b.product.status) return a.product.status === 'active' ? -1 : 1;
+        if (a.stock !== b.stock) return a.stock - b.stock;
         const priority = productPriority(a.product, a.stock) - productPriority(b.product, b.stock);
         if (priority !== 0) return priority;
-        if (a.stock !== b.stock) return a.stock - b.stock;
         return a.product.name.localeCompare(b.product.name);
       });
   }, [data, productFilter, productQuery]);
@@ -561,10 +567,9 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
     return data.users
       .map((user) => {
         const account = data.accounts.find((entry) => entry.id === user.accountId);
-        const balance = userBalances.find((entry) => entry.userId === user.id)?.balance ?? 0;
-        return { user, account, balance };
+        return { user, account };
       })
-      .filter(({ user, account, balance }) => {
+      .filter(({ user, account }) => {
         const matchesQuery =
           !query ||
           normalizeSearch(user.name).includes(query) ||
@@ -572,16 +577,14 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
         const matchesFilter =
           userFilter === 'all' ||
           (userFilter === 'active' && user.status === 'active') ||
-          (userFilter === 'inactive' && user.status === 'inactive') ||
-          (userFilter === 'debt' && user.status === 'active' && balance > 0);
+          (userFilter === 'inactive' && user.status === 'inactive');
         return matchesQuery && matchesFilter;
       })
       .sort((a, b) => {
         if (a.user.status !== b.user.status) return a.user.status === 'active' ? -1 : 1;
-        if (b.balance !== a.balance) return b.balance - a.balance;
         return a.user.name.localeCompare(b.user.name);
       });
-  }, [accountQuery, data, userBalances, userFilter]);
+  }, [accountQuery, data, userFilter]);
 
   const chargeTargets = useMemo(() => {
     const accountTargets = data.accounts.map((account) => {
@@ -624,7 +627,24 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
     });
   }, [data, userBalances]);
 
-  const chargeDebt = chargeTargets.reduce((sum, entry) => (entry.balance > 0 ? sum + entry.balance : sum), 0);
+  const receivableTargets = chargeTargets.filter((entry) => entry.balance > 0);
+  const totalDebt = receivableTargets.reduce((sum, entry) => sum + entry.balance, 0);
+  const chargeHistory = useMemo(
+    () =>
+      data.payments
+        .map((payment) => {
+          const account = payment.accountId ? data.accounts.find((entry) => entry.id === payment.accountId) : undefined;
+          const targetUser = payment.userId ? data.users.find((entry) => entry.id === payment.userId) : undefined;
+          const payerUser = payment.paidByUserId ? data.users.find((entry) => entry.id === payment.paidByUserId) : undefined;
+          return {
+            payment,
+            payerUser,
+            targetName: payment.targetType === 'user' ? targetUser?.name ?? 'Usuario' : account?.name ?? 'Cuenta completa'
+          };
+        })
+        .sort((a, b) => b.payment.createdAt.localeCompare(a.payment.createdAt)),
+    [data]
+  );
 
   return (
     <section className={`admin-session ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}>
@@ -662,25 +682,31 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
 
       <div className="admin-dashboard">
         <div className="admin-summary-strip" aria-label="Resumen del administrador">
-          <div className="admin-summary-card debt">
-            <ReceiptText size={20} />
-            <span>Deuda total</span>
-            <strong>{formatMoney(totalDebt)}</strong>
+          <div className="admin-summary-group money" aria-label="Resumen de dinero">
+            <span className="admin-summary-group-label">Dinero</span>
+            <div className="admin-summary-card debt">
+              <ReceiptText size={20} />
+              <strong>{formatMoney(totalDebt)}</strong>
+              <span>Por cobrar</span>
+            </div>
+            <div className="admin-summary-card inventory">
+              <DollarSign size={20} />
+              <strong>{formatMoney(inventorySummary.value)}</strong>
+              <span>Total inventario</span>
+            </div>
           </div>
-          <div className="admin-summary-card inventory">
-            <Boxes size={20} />
-            <span>Valor inventario</span>
-            <strong>{formatMoney(inventoryValue)}</strong>
-          </div>
-          <div className="admin-summary-card warning">
-            <AlertTriangle size={20} />
-            <span>Bajo stock</span>
-            <strong>{lowStockProducts.length}</strong>
-          </div>
-          <div className="admin-summary-card accounts">
-            <Users size={20} />
-            <span>Cuentas con deuda</span>
-            <strong>{debtAccounts.length}</strong>
+          <div className="admin-summary-group stock" aria-label="Resumen de productos">
+            <span className="admin-summary-group-label">Productos</span>
+            <div className="admin-summary-card products">
+              <Package size={20} />
+              <strong>{activeProductsCount} / {totalProductsCount}</strong>
+              <span>Productos</span>
+            </div>
+            <div className="admin-summary-card units">
+              <Boxes size={20} />
+              <strong>{inventorySummary.units}</strong>
+              <span>Unidades</span>
+            </div>
           </div>
         </div>
 
@@ -765,49 +791,46 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                 </div>
               </div>
 
-              <div className="product-grid catalog-grid admin-catalog-grid">
-                <button
-                  type="button"
-                  className="product-tile admin-add-product-tile"
-                  onClick={() => setActiveModal({ type: 'create-product' })}
-                >
-                  <div className="product-media">
-                    <span className="product-image-slot admin-add-product-media" aria-hidden="true">
-                      <Plus size={34} />
-                    </span>
-                  </div>
-                  <div className="product-tile-action-bar">
-                    <span className="tile-add-btn">
-                      <Plus size={16} />
-                      Crear
-                    </span>
-                  </div>
+              <div className="admin-catalog-actions">
+                <button type="button" className="admin-create-card-button" onClick={() => setActiveModal({ type: 'create-product' })}>
+                  <span className="admin-create-card-icon" aria-hidden="true">
+                    <Plus size={24} />
+                  </span>
+                  <span className="admin-create-card-copy">
+                    <strong>Crear producto</strong>
+                    <small>Agregar item al catalogo</small>
+                  </span>
                 </button>
+                <span>Ordenado de menor a mayor stock</span>
+              </div>
+
+              <div className="admin-inventory-table" role="table" aria-label="Catalogo e inventario">
+                <div className="admin-inventory-head" role="row">
+                  <span>Producto</span>
+                  <span>Inventario</span>
+                  <span>Valores</span>
+                  <span>Acciones</span>
+                </div>
 
                 {filteredProducts.map(({ product, stock }) => {
                   const tone = productTone(product, stock);
                   const hasImage = product.imageUrl && !failedImages[product.id];
                   const isSelected = selectedProductIds.includes(product.id);
+                  const subtotal = Math.max(0, stock) * product.price;
                   return (
                     <article
                       key={product.id}
-                      className={`product-tile admin-product-tile stock-${tone} ${isSelected ? 'selected' : ''}`}
+                      className={`admin-inventory-row stock-${tone} ${isSelected ? 'selected' : ''}`}
+                      role="row"
                     >
-                      <div
-                        className="product-media admin-product-media"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => toggleProductSelection(product.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            toggleProductSelection(product.id);
-                          }
-                        }}
-                        aria-pressed={isSelected}
-                        aria-label={`${isSelected ? 'Quitar seleccion' : 'Seleccionar'} ${product.name}`}
-                      >
-                        <span className="product-image-slot" aria-hidden="true">
+                      <div className="admin-inventory-product" role="cell">
+                        <button
+                          type="button"
+                          className={`admin-inventory-thumb ${isSelected ? 'selected' : ''}`}
+                          onClick={() => toggleProductSelection(product.id)}
+                          aria-pressed={isSelected}
+                          aria-label={`${isSelected ? 'Quitar seleccion' : 'Seleccionar'} ${product.name}`}
+                        >
                           {hasImage ? (
                             <img
                               src={product.imageUrl}
@@ -817,45 +840,61 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                               onError={() => setFailedImages((prev) => ({ ...prev, [product.id]: true }))}
                             />
                           ) : (
-                            <div className="product-placeholder-gradient">
-                              <Package size={32} />
-                              <span>{product.category}</span>
-                            </div>
+                            <Package size={24} />
                           )}
+                          {isSelected ? (
+                            <span className="admin-inventory-selected" aria-hidden="true">
+                              <CircleCheck size={15} />
+                            </span>
+                          ) : null}
+                        </button>
+                        <span className="admin-inventory-copy">
+                          <strong title={product.name}>{product.name}</strong>
+                          <small>{product.category}</small>
                         </span>
-                        <span className={`admin-stock-badge ${tone}`}>
-                          Stock {stock}
-                        </span>
-                        {isSelected ? (
-                          <span className="admin-selected-badge" aria-hidden="true">
-                            <CircleCheck size={18} />
-                          </span>
-                        ) : null}
                       </div>
 
-                      <div className="product-details admin-product-details">
-                        <strong className="product-name" title={product.name}>
-                          {product.name}
-                        </strong>
-                        <span className="product-price">{formatMoney(product.price)}</span>
+                      <div className="admin-inventory-stock" role="cell">
+                        <span className="admin-inventory-stock-main">
+                          <small>Stock</small>
+                          <strong>{stock}</strong>
+                        </span>
+                        <span className={`admin-inventory-stock-meta inventory-${tone}`}>
+                          {productStatusLabel(tone)}
+                        </span>
                       </div>
 
-                      <div className="admin-tile-action-grid">
+                      <div className="admin-inventory-values" role="cell">
+                        <span>
+                          <small>Venta</small>
+                          <strong>{formatMoney(product.price)}</strong>
+                        </span>
+                        <span>
+                          <small>Inventario</small>
+                          <strong>{formatMoney(subtotal)}</strong>
+                        </span>
+                      </div>
+
+                      <div className="admin-inventory-actions" role="cell">
                         <button
                           type="button"
-                          className="tile-add-btn admin-tile-primary"
+                          className="ghost icon admin-inventory-action"
                           onClick={() => setActiveModal({ type: 'edit-product', target: product })}
+                          aria-label={`Modificar ${product.name}`}
+                          title="Modificar"
                         >
-                          <Edit size={15} /> Modificar
+                          <Edit size={17} />
                         </button>
                         <button
                           type="button"
-                          className={`tile-action-btn admin-tile-status ${product.status === 'active' ? 'is-on' : 'is-off'}`}
+                          className={`ghost icon admin-inventory-action admin-row-toggle ${
+                            product.status === 'active' ? 'is-on' : 'is-off'
+                          }`}
                           onClick={() => setActiveModal({ type: 'toggle-product-status', target: product })}
                           aria-label={product.status === 'active' ? `Desactivar ${product.name}` : `Activar ${product.name}`}
                           title={product.status === 'active' ? 'Activo' : 'Inactivo'}
                         >
-                          {product.status === 'active' ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
+                          {product.status === 'active' ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
                         </button>
                       </div>
                     </article>
@@ -925,7 +964,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                   <div className="admin-filter-pills" aria-label="Filtros de usuarios">
                     {[
                       ['active', 'Activos'],
-                      ['debt', 'Con deuda'],
                       ['inactive', 'Inactivos'],
                       ['all', 'Todos']
                     ].map(([value, label]) => (
@@ -953,7 +991,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                       <span className="admin-create-card-icon" aria-hidden="true">
                         <Plus size={28} />
                       </span>
-                      <span>
+                      <span className="admin-create-card-copy">
                         <strong>Anadir cuenta</strong>
                         <small>Crear grupo, familia o cuenta independiente</small>
                       </span>
@@ -984,11 +1022,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                               </div>
                             </div>
 
-                            <div className={`admin-balance-focus admin-account-balance-users ${accountBalance > 0 ? 'debt' : 'clear'}`}>
-                              <div className="admin-balance-copy">
-                                <span>Saldo</span>
-                                <strong>{formatMoney(accountBalance)}</strong>
-                              </div>
+                            <div className="admin-account-users-summary">
                               <div className="admin-linked-users" aria-label={`Usuarios de ${account.name}`}>
                                 {users.length > 0 ? (
                                   <>
@@ -1062,13 +1096,19 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                       className="admin-account-item admin-user-item admin-account-create-card admin-user-create-card"
                       onClick={() => setActiveModal({ type: 'create-user' })}
                     >
-                      <strong>Anadir usuario</strong>
+                      <span className="admin-create-card-icon" aria-hidden="true">
+                        <Plus size={24} />
+                      </span>
+                      <span className="admin-create-card-copy">
+                        <strong>Anadir usuario</strong>
+                        <small>Crear acceso para una persona</small>
+                      </span>
                     </button>
 
-                    {filteredUsers.map(({ user, account, balance }) => (
+                    {filteredUsers.map(({ user, account }) => (
                       <article
                         key={user.id}
-                        className={`admin-account-item admin-user-item ${user.status === 'inactive' ? 'account-inactive' : balance > 0 ? 'account-debt' : 'account-clear'}`}
+                        className={`admin-account-item admin-user-item ${user.status === 'inactive' ? 'account-inactive' : ''}`}
                       >
                         <div className="admin-user-panel-grid">
                           <span className="admin-user-avatar" aria-hidden="true">
@@ -1080,15 +1120,11 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                               {user.status === 'inactive' ? <span className="status-pill muted">Inactivo</span> : null}
                             </div>
                             <div className="admin-item-metrics">
-                              <span>{account?.name ?? 'Sin cuenta'}</span>
+                              <span>{account?.name ?? 'Independiente'}</span>
                               <span>{latestUserActivity(data, user.id)}</span>
                             </div>
                           </div>
                           <div className="admin-user-side">
-                            <div className={`admin-balance-focus ${balance > 0 ? 'debt' : 'clear'}`}>
-                              <span>Saldo</span>
-                              <strong>{formatMoney(balance)}</strong>
-                            </div>
                             <div className="admin-row-actions admin-panel-actions">
                               <button
                                 type="button"
@@ -1123,52 +1159,92 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
 
           {activeSection === 'cobros' && (
             <div className="admin-section-content">
-              <div className="admin-charge-header">
-                <div>
-                  <h3>Cobros</h3>
-                  <p>Cuentas completas y usuarios independientes en una sola lista.</p>
-                </div>
-                <span>{formatMoney(chargeDebt)} pendiente</span>
-              </div>
-
-              <div className="admin-smart-list admin-charge-list">
-                {chargeTargets.map((entry) => (
-                  <article
-                    key={`${entry.type}-${entry.id}`}
-                    className={`admin-account-item admin-charge-item ${entry.status === 'inactive' ? 'account-inactive' : entry.balance > 0 ? 'account-debt' : 'account-clear'}`}
+              <div className="admin-charge-tabs-row">
+                <div className="admin-account-tabs" role="tablist" aria-label="Vista de cobros">
+                  <button
+                    type="button"
+                    className={chargeView === 'receivables' ? 'active' : ''}
+                    onClick={() => setChargeView('receivables')}
+                    role="tab"
+                    aria-selected={chargeView === 'receivables'}
                   >
-                    <span className="admin-account-icon" aria-hidden="true">
-                      {entry.type === 'account' ? <Store size={20} /> : initials(entry.name)}
-                    </span>
-
-                    <div className="admin-item-main">
-                      <div className="admin-item-title-row">
-                        <strong>{entry.name}</strong>
-                        <span className="status-pill muted">{entry.type === 'account' ? 'Cuenta' : 'Usuario'}</span>
-                        {entry.status === 'inactive' ? <span className="status-pill muted">Inactivo</span> : null}
-                      </div>
-                      <div className="admin-item-metrics">
-                        <span>{entry.label}</span>
-                      </div>
-                    </div>
-
-                    <div className={`admin-balance-focus ${entry.balance > 0 ? 'debt' : 'clear'}`}>
-                      <span>Saldo</span>
-                      <strong>{formatMoney(entry.balance)}</strong>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="primary small admin-charge-pay"
-                      onClick={() => setActiveModal({ type: 'payment', target: entry.target })}
-                      disabled={entry.disabled}
-                      title={entry.disabled ? 'No disponible para cobro' : 'Registrar cobro'}
-                    >
-                      <CreditCard size={16} /> Cobrar
-                    </button>
-                  </article>
-                ))}
+                    <DollarSign size={16} /> Por cobrar
+                  </button>
+                  <button
+                    type="button"
+                    className={chargeView === 'history' ? 'active' : ''}
+                    onClick={() => setChargeView('history')}
+                    role="tab"
+                    aria-selected={chargeView === 'history'}
+                  >
+                    <ReceiptText size={16} /> Historial
+                  </button>
+                </div>
               </div>
+
+              {chargeView === 'receivables' ? (
+                <div className="admin-smart-list admin-charge-list">
+                  {receivableTargets.map((entry) => (
+                    <article
+                      key={`${entry.type}-${entry.id}`}
+                      className={`admin-account-item admin-charge-item ${entry.status === 'inactive' ? 'account-inactive' : entry.balance > 0 ? 'account-debt' : 'account-clear'}`}
+                    >
+                      <span className="admin-account-icon" aria-hidden="true">
+                        {entry.type === 'account' ? <Users size={20} /> : <User size={20} />}
+                      </span>
+
+                      <div className="admin-item-main">
+                        <div className="admin-item-title-row">
+                          <strong>{entry.name}</strong>
+                          <span className="status-pill muted">{entry.type === 'account' ? 'Cuenta' : 'Usuario'}</span>
+                          {entry.status === 'inactive' ? <span className="status-pill muted">Inactivo</span> : null}
+                        </div>
+                        <div className="admin-item-metrics">
+                          <span>{entry.label}</span>
+                        </div>
+                      </div>
+
+                      <div className={`admin-balance-focus ${entry.balance > 0 ? 'debt' : 'clear'}`}>
+                        <span>Saldo</span>
+                        <strong>{formatMoney(entry.balance)}</strong>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="primary small admin-charge-pay"
+                        onClick={() => setActiveModal({ type: 'payment', target: entry.target })}
+                        disabled={entry.disabled}
+                        title={entry.disabled ? 'No disponible para cobro' : 'Registrar cobro'}
+                        aria-label={entry.disabled ? `No disponible para cobro de ${entry.name}` : `Registrar cobro de ${entry.name}`}
+                      >
+                        <CreditCard size={18} />
+                      </button>
+                    </article>
+                  ))}
+                  {receivableTargets.length === 0 ? (
+                    <p className="admin-empty-state">No hay saldos por cobrar.</p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="admin-charge-history-list">
+                  {chargeHistory.map(({ payment, payerUser, targetName }) => (
+                    <article className="payment-card admin-charge-history-card" key={payment.id}>
+                      <span className="payment-icon">
+                        <CreditCard size={18} />
+                      </span>
+                      <div className="payment-card-copy">
+                        <strong>{targetName}</strong>
+                        <span>{formatMovementTime(payment.createdAt)}</span>
+                        {payerUser ? <small>Pago {payerUser.name}</small> : null}
+                      </div>
+                      <strong className="payment-amount">+ {formatMoney(payment.amount)}</strong>
+                    </article>
+                  ))}
+                  {chargeHistory.length === 0 ? (
+                    <p className="admin-empty-state">No hay cobros registrados.</p>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1340,6 +1416,41 @@ function AdminModalContainer({
       : activeUsers;
   const paymentPayers = paymentTargetType === 'account' ? paymentUsers : activeUsers;
   const fixedPaymentTarget = modal.type === 'payment' && (modalTargetIsAccount || modalTargetIsUser);
+  const fixedPaymentBalance = (() => {
+    if (modal.type !== 'payment') return 0;
+    if (modalTargetIsAccount && typeof modal.target?.id === 'string') {
+      return data.accountBalances.find((entry) => entry.accountId === modal.target.id)?.balance ?? 0;
+    }
+    if (modalTargetIsUser && typeof modal.target?.id === 'string') {
+      return calculateUserBalances({
+        users: [modal.target as PersonUser],
+        consumptions: data.consumptions,
+        items: data.items,
+        payments: data.payments,
+        applications: data.applications,
+        adjustments: data.adjustments
+      })[0]?.balance ?? 0;
+    }
+    return 0;
+  })();
+  const fixedPaymentAmount = fixedPaymentBalance > 0 ? String(fixedPaymentBalance) : '';
+  const paymentOpenItems =
+    modal.type === 'payment' && fixedPaymentTarget && typeof modal.target?.id === 'string'
+      ? calculateOpenItems({
+          accountId: modalTargetIsAccount ? modal.target.id : undefined,
+          userId: modalTargetIsUser ? modal.target.id : undefined,
+          consumptions: data.consumptions,
+          items: data.items,
+          applications: data.applications
+        })
+      : [];
+  const paymentOpenItemsTotal = paymentOpenItems.reduce((sum, item) => sum + item.openAmount, 0);
+  const paymentCarryoverBalance = Math.max(0, Math.round(fixedPaymentBalance - paymentOpenItemsTotal));
+  const shouldShowPaymentCheckout =
+    modal.type === 'payment' &&
+    fixedPaymentTarget &&
+    fixedPaymentBalance > 0 &&
+    (paymentOpenItems.length > 0 || paymentCarryoverBalance > 0);
 
   // Ajuste manual
   const [adjAccount, setAdjAccount] = useState(targetAccountId);
@@ -1699,7 +1810,7 @@ function AdminModalContainer({
         className={
           modal.type === 'account-detail'
             ? 'modal account-modal admin-account-detail-modal'
-            : `modal admin-action-modal ${modal.type === 'bulk-products' ? 'wide admin-bulk-modal' : ''}`
+            : `modal admin-action-modal ${modal.type === 'bulk-products' ? 'wide admin-bulk-modal' : ''} ${modal.type === 'payment' ? 'admin-payment-modal' : ''}`
         }
       >
         {modal.type !== 'account-detail' ? (
@@ -1940,17 +2051,6 @@ function AdminModalContainer({
               </div>
             ) : null}
 
-            <div className="modal-actions admin-account-detail-actions">
-              <button type="button" className="ghost" onClick={onClose}>
-                Cerrar
-              </button>
-              <button type="button" className="secondary" onClick={() => onSwitchModal?.({ type: 'merge', target: detailAccount })}>
-                Unir cuentas
-              </button>
-              <button type="button" className="secondary" onClick={() => onSwitchModal?.({ type: 'assign-user', target: detailAccount })}>
-                Agregar usuario
-              </button>
-            </div>
           </>
         ) : modal.type === 'history' ? (
           <div className="admin-history-modal-body">
@@ -2145,16 +2245,31 @@ function AdminModalContainer({
                 {paymentTargetType === 'user' && fixedPaymentTarget ? (
                   <input type="hidden" name="paidByUserId" value={paymentUserId || targetUserId} />
                 ) : (
-                  <>
-                    <label>Usuario que paga</label>
-                    <select name="paidByUserId" required>
-                      {paymentPayers.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}{u.accountId ? '' : ' (sin cuenta)'}
-                        </option>
-                      ))}
-                    </select>
-                  </>
+                  <div className="payment-payer-row">
+                    <span className="payment-payer-label">Usuario que paga</span>
+                    {paymentPayers.length > 0 ? (
+                      <div className="payment-payer-carousel" key={`${paymentTargetType}-${paymentAccount}-${paymentUserId}`}>
+                        {paymentPayers.map((u, index) => (
+                          <label className="payment-payer-pill" key={u.id}>
+                            <input
+                              type="radio"
+                              name="paidByUserId"
+                              value={u.id}
+                              defaultChecked={index === 0}
+                              required
+                            />
+                            <span className="payment-payer-avatar" aria-hidden="true">{initials(u.name)}</span>
+                            <span>{u.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <input type="hidden" name="paidByUserId" value="" />
+                        <p className="admin-empty-state compact">Sin usuarios activos para pagar.</p>
+                      </>
+                    )}
+                  </div>
                 )}
                 {!fixedPaymentTarget ? (
                   <>
@@ -2182,8 +2297,72 @@ function AdminModalContainer({
                     </select>
                   </>
                 )}
-                <input name="amount" placeholder="Monto del cobro" inputMode="numeric" required />
-                <input name="note" placeholder="Nota o concepto opcional" />
+                {shouldShowPaymentCheckout ? (
+                  <section className="payment-checkout-summary" aria-label="Detalle del cobro">
+                    <div className="payment-checkout-heading">
+                      <span>Detalle del cobro</span>
+                      <strong>{formatMoney(fixedPaymentBalance)}</strong>
+                    </div>
+                    <div className="payment-checkout-list">
+                      {paymentOpenItems.map((item) => {
+                        const product = data.products.find((entry) => entry.id === item.productId);
+                        const imageUrl = product?.imageUrl && !bulkFailedImages[item.productId] ? product.imageUrl : undefined;
+                        return (
+                          <div className="payment-checkout-row" key={item.id}>
+                            <span className="payment-checkout-thumbnail">
+                              {imageUrl ? (
+                                <img
+                                  src={imageUrl}
+                                  alt=""
+                                  onError={() => setBulkFailedImages((current) => ({ ...current, [item.productId]: true }))}
+                                />
+                              ) : (
+                                <span className="payment-checkout-placeholder">
+                                  <Package size={16} />
+                                </span>
+                              )}
+                            </span>
+                            <span className="payment-checkout-item-copy">
+                              <strong>{item.productName}</strong>
+                              <small>{formatMoney(item.unitPrice)} c/u</small>
+                            </span>
+                            <span className="payment-checkout-qty">x{item.quantity}</span>
+                            <strong>{formatMoney(item.openAmount)}</strong>
+                          </div>
+                        );
+                      })}
+                      {paymentCarryoverBalance > 0 ? (
+                        <div className="payment-checkout-row carryover">
+                          <span className="payment-checkout-thumbnail">
+                            <span className="payment-checkout-placeholder">
+                              <ReceiptText size={16} />
+                            </span>
+                          </span>
+                          <span className="payment-checkout-item-copy">
+                            <strong>Saldo arrastrado</strong>
+                            <small>Ajustes o saldos anteriores</small>
+                          </span>
+                          <span className="payment-checkout-qty">x1</span>
+                          <strong>{formatMoney(paymentCarryoverBalance)}</strong>
+                        </div>
+                      ) : null}
+                    </div>
+                  </section>
+                ) : null}
+                <div className="payment-amount-panel">
+                  <span>Se paga</span>
+                  <label className="payment-amount-field">
+                    <DollarSign size={22} />
+                    <input
+                      name="amount"
+                      placeholder="0"
+                      inputMode="numeric"
+                      defaultValue={fixedPaymentAmount}
+                      aria-label="Monto del cobro"
+                      required
+                    />
+                  </label>
+                </div>
               </>
             )}
 
@@ -2478,11 +2657,6 @@ function AdminModalContainer({
             )}
 
             <div className="modal-actions">
-              {modal.type !== 'create-product' && modal.type !== 'edit-product' ? (
-                <button type="button" className="ghost" onClick={onClose}>
-                  Cancelar
-                </button>
-              ) : null}
               <button type="submit" className="primary">
                 {modal.type === 'toggle-product-status' ||
                 modal.type === 'toggle-account-status' ||

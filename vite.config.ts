@@ -8,11 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
-        'icon-192.png',
-        'icon-512.png',
-        'apple-touch-icon.png',
-        'brand/castalia-mark-192.png',
-        'brand/castalia-login-mark.png'
+        'brand/logo.png'
       ],
       manifest: {
         name: 'Tienda Castalia',
@@ -27,16 +23,10 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: '/icon-192.png',
-            sizes: '192x192',
+            src: '/brand/logo.png',
+            sizes: '380x359',
             type: 'image/png',
             purpose: 'any'
-          },
-          {
-            src: '/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
           }
         ]
       },

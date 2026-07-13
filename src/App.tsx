@@ -236,7 +236,7 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
       <form className={`login-form-integrated ${error ? 'has-error' : ''}`} onSubmit={handleLogin}>
         <div className="login-brand">
           <div className="login-logo-clean">
-            <BrandLogo alt="Tienda Castalia" variant="login" className="login-logo-mark" />
+            <BrandLogo alt="Tienda Castalia" className="login-logo-mark" />
           </div>
           <h1 className="login-title">Tienda Castalia</h1>
         </div>
