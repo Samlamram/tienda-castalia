@@ -24,7 +24,6 @@ import {
   RefreshCw,
   History,
   KeyRound,
-  Undo2,
   ToggleLeft,
   ToggleRight
 } from 'lucide-react';
@@ -42,7 +41,6 @@ type ProductFilter = 'active' | 'inactive' | 'low' | 'all';
 type AccountFilter = 'debt' | 'clear' | 'inactive' | 'all';
 type AccountPanelTab = 'accounts' | 'users';
 type UserFilter = 'active' | 'debt' | 'inactive' | 'all';
-type ChargePanelTab = 'receivables' | 'history';
 type BulkProductAction = 'purchase' | 'inventory' | 'prices';
 type AdminAccountDetailTab = 'history' | 'payments';
 type ModalState = null | { type: string; target?: any };
@@ -166,14 +164,6 @@ function formatMovementTime(value: string) {
   return new Intl.DateTimeFormat('es-CO', {
     hour: 'numeric',
     minute: '2-digit'
-  }).format(new Date(value));
-}
-
-function formatCompactDate(value: string) {
-  return new Intl.DateTimeFormat('es-CO', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit'
   }).format(new Date(value));
 }
 
@@ -478,7 +468,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [accountView, setAccountView] = useState<AccountPanelTab>('accounts');
   const [userFilter, setUserFilter] = useState<UserFilter>('all');
-  const [chargeView, setChargeView] = useState<ChargePanelTab>('receivables');
   const [productQuery, setProductQuery] = useState('');
   const [accountQuery, setAccountQuery] = useState('');
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -641,41 +630,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
 
   const receivableTargets = chargeTargets.filter((entry) => entry.balance > 0);
   const totalDebt = receivableTargets.reduce((sum, entry) => sum + entry.balance, 0);
-  const chargeHistory = useMemo(
-    () =>
-      data.payments
-        .map((payment) => {
-          const account = payment.accountId ? data.accounts.find((entry) => entry.id === payment.accountId) : undefined;
-          const targetUser = payment.userId ? data.users.find((entry) => entry.id === payment.userId) : undefined;
-          const payerUser = payment.paidByUserId ? data.users.find((entry) => entry.id === payment.paidByUserId) : undefined;
-          return {
-            payment,
-            payerUser,
-            targetName: payment.targetType === 'user' ? targetUser?.name ?? 'Usuario' : account?.name ?? 'Cuenta completa'
-          };
-        })
-        .sort((a, b) => b.payment.createdAt.localeCompare(a.payment.createdAt)),
-    [data]
-  );
-  const adjustmentHistory = useMemo(
-    () =>
-      data.adjustments
-        .map((adjustment) => {
-          const account = adjustment.accountId
-            ? data.accounts.find((entry) => entry.id === adjustment.accountId)
-            : undefined;
-          const user = adjustment.userId
-            ? data.users.find((entry) => entry.id === adjustment.userId)
-            : undefined;
-          return {
-            adjustment,
-            targetName: adjustment.scope === 'user' ? user?.name ?? 'Usuario' : account?.name ?? 'Cuenta'
-          };
-        })
-        .sort((left, right) => right.adjustment.createdAt.localeCompare(left.adjustment.createdAt)),
-    [data]
-  );
-
   const financeSummary = useMemo(() => {
     const contribution = data.financeEvents.reduce((sum, event) => {
       if (event.eventType === 'capital_contribution') return sum + event.amount;
@@ -1374,31 +1328,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
 
           {activeSection === 'cobros' && (
             <div className="admin-section-content">
-              <div className="admin-charge-tabs-row">
-                <div className="admin-account-tabs" role="tablist" aria-label="Vista de cobros">
-                  <button
-                    type="button"
-                    className={chargeView === 'receivables' ? 'active' : ''}
-                    onClick={() => setChargeView('receivables')}
-                    role="tab"
-                    aria-selected={chargeView === 'receivables'}
-                  >
-                    <DollarSign size={16} /> Por cobrar
-                  </button>
-                  <button
-                    type="button"
-                    className={chargeView === 'history' ? 'active' : ''}
-                    onClick={() => setChargeView('history')}
-                    role="tab"
-                    aria-selected={chargeView === 'history'}
-                  >
-                    <ReceiptText size={16} /> Historial
-                  </button>
-                </div>
-              </div>
-
-              {chargeView === 'receivables' ? (
-                <div className="admin-smart-list admin-charge-list">
+              <div className="admin-smart-list admin-charge-list">
                   {receivableTargets.map((entry) => (
                     <article
                       key={`${entry.type}-${entry.id}`}
@@ -1440,71 +1370,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                     <p className="admin-empty-state">No hay saldos por cobrar.</p>
                   ) : null}
                 </div>
-              ) : (
-                <div className="admin-charge-history-list">
-                  {chargeHistory.map(({ payment, payerUser, targetName }) => (
-                    <article className="payment-card admin-charge-history-card" key={payment.id}>
-                      <span className="payment-icon">
-                        <CreditCard size={18} />
-                      </span>
-                      <div className="payment-card-copy">
-                        <strong>{targetName}</strong>
-                        <span>{formatCompactDate(payment.createdAt)}</span>
-                        {payerUser ? <small>Pago {payerUser.name}</small> : null}
-                      </div>
-                      <strong className="payment-amount">+ {formatMoney(payment.amount)}</strong>
-                      {payment.reversedMovementId ? (
-                        <span className="status-pill muted">Reversado</span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="ghost icon danger"
-                          title="Reversar pago"
-                          aria-label={`Reversar pago a ${targetName}`}
-                          onClick={() => setActiveModal({ type: 'reverse-payment', target: payment })}
-                        >
-                          <Undo2 size={17} />
-                        </button>
-                      )}
-                    </article>
-                  ))}
-                  {adjustmentHistory.map(({ adjustment, targetName }) => (
-                    <article className="payment-card admin-charge-history-card" key={adjustment.id}>
-                      <span className="payment-icon">
-                        <DollarSign size={18} />
-                      </span>
-                      <div className="payment-card-copy">
-                        <strong>
-                          {adjustment.movementType === 'adjustment_reversal' ? 'Reverso de ajuste' : `Ajuste · ${targetName}`}
-                        </strong>
-                        <span>{formatCompactDate(adjustment.createdAt)}</span>
-                        <small>{adjustment.note}</small>
-                      </div>
-                      <strong className="payment-amount">
-                        {adjustment.amount >= 0 ? '+ ' : '- '}{formatMoney(Math.abs(adjustment.amount))}
-                      </strong>
-                      {adjustment.movementType === 'adjustment_reversal' ? (
-                        <span className="status-pill muted">Reverso</span>
-                      ) : adjustment.reversedByMovementId ? (
-                        <span className="status-pill muted">Reversado</span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="ghost icon danger"
-                          title="Reversar ajuste"
-                          aria-label={`Reversar ajuste de ${targetName}`}
-                          onClick={() => setActiveModal({ type: 'reverse-adjustment', target: adjustment })}
-                        >
-                          <Undo2 size={17} />
-                        </button>
-                      )}
-                    </article>
-                  ))}
-                  {chargeHistory.length === 0 && adjustmentHistory.length === 0 ? (
-                    <p className="admin-empty-state">No hay cobros ni ajustes registrados.</p>
-                  ) : null}
-                </div>
-              )}
             </div>
           )}
 

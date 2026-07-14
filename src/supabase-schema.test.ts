@@ -16,6 +16,7 @@ const sheetsWebhooks = readFileSync(
   'utf8'
 );
 const appsScript = readFileSync(join(process.cwd(), 'apps-script', 'Code.gs'), 'utf8');
+const reportsScript = readFileSync(join(process.cwd(), 'apps-script', 'Reports.gs'), 'utf8');
 
 function capturedNames(pattern: RegExp): string[] {
   return [...schema.matchAll(pattern)].map((match) => match[1]).sort();
@@ -90,6 +91,18 @@ describe('contrato del esquema oficial', () => {
     expect(sheetsWebhooks.match(/after insert or update or delete/gi)).toHaveLength(tables.length);
     expect(appsScript).toMatch(/SENSITIVE_KEY\s*=\s*\/\(pin\|token\|hash\|salt\|secret\|password\)\/i/);
     expect(appsScript).toMatch(/const EVENT_SHEET = '_eventos'/);
+  });
+
+  it('incluye inversion, gastos y retiros en los reportes financieros', () => {
+    expect(reportsScript).toMatch(/readRawTable_\(spreadsheet, 'store_finance_events'\)/);
+    expect(reportsScript).toMatch(/'Finanzas'/);
+    expect(reportsScript).toMatch(/capital_contribution:\s*'INVERSIÓN'/);
+    expect(reportsScript).toMatch(/owner_withdrawal:\s*'RETIRO'/);
+    expect(reportsScript).toMatch(/writeKpiCard_\([\s\S]*?'Gastos del mes'/);
+    expect(reportsScript).toMatch(/'Utilidad neta'/);
+    expect(reportsScript).toMatch(/'Flujo neto del mes'/);
+    expect(reportsScript).toMatch(/function createDashboardCharts_/);
+    expect(reportsScript).toMatch(/'Alertas de inventario'/);
   });
 
   it('conserva idempotencia offline y elimina secretos de la auditoria', () => {

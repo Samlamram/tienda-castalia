@@ -1,18 +1,18 @@
 # Respaldo y reportes Supabase → Google Sheets
 
-Cada `INSERT`, `UPDATE` o `DELETE` confirmado en las 11 tablas oficiales se envía de forma asíncrona mediante `pg_net`. Apps Script mantiene:
+Cada `INSERT`, `UPDATE` o `DELETE` confirmado en las 12 tablas oficiales se envía de forma asíncrona mediante `pg_net`. Apps Script mantiene:
 
 - `_eventos`: historial técnico deduplicado por SHA-256.
 - una pestaña oculta por tabla: espejo del estado más reciente.
-- `Resumen`, `Ventas`, `Cobros`, `Compras_Gastos` e `Inventario`: vistas simples para análisis financiero.
+- `Resumen`, `Ventas`, `Cobros`, `Compras_Gastos`, `Finanzas` e `Inventario`: vistas simples para análisis financiero.
 
 Los campos cuyo nombre contiene `pin`, `token`, `hash`, `salt`, `secret` o `password` se reemplazan por `[REDACTED]` antes de escribirlos.
 
 ## Uso diario
 
-La información base llega casi en tiempo real. Los reportes calculados se actualizan desde el menú **Tienda → Actualizar reporte** o marcando la casilla `Resumen!B4`.
+La información base llega casi en tiempo real. Los reportes completos se actualizan desde el menú **Tienda → Actualizar reporte**. El dashboard permite elegir periodo, cuenta y usuario en `B4`, `D4` y `F4`; después se recalcula marcando `Resumen!H4`.
 
-El resumen permite elegir el mes e incluye ventas netas, costo FIFO, utilidad y margen bruto, cobros, saldos pendientes, compras, inventario y rankings por producto, usuario y cuenta. Los gastos operativos y la utilidad neta quedarán disponibles cuando exista una tabla real de gastos en Supabase.
+El dashboard incluye ventas, utilidad, márgenes, caja estimada, cuentas por cobrar, inventario, flujo del mes, tendencias, productos rentables y alertas operativas. Inversión, gastos y retiros permanecen separados para no mezclar caja con utilidad.
 
 ## Instalación reproducible
 
