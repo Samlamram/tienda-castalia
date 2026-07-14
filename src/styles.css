@@ -264,6 +264,10 @@ select:focus {
   touch-action: manipulation;
 }
 
+.app-shell.admin-shell {
+  padding: 0;
+}
+
 /* ── App Header ── */
 .app-header {
   display: flex;
@@ -419,8 +423,8 @@ select:focus {
 /* ── Toast ── */
 .toast {
   position: fixed;
-  top: 24px;
-  right: 24px;
+  top: calc(24px + var(--safe-top));
+  right: max(24px, var(--safe-right));
   z-index: 50;
   max-width: min(420px, calc(100vw - 48px));
   padding: 14px 18px;
@@ -575,12 +579,22 @@ select:focus {
   top: 0;
   z-index: 12;
   min-height: 76px;
-  padding: 14px 22px;
+  padding:
+    calc(14px + var(--safe-top))
+    max(22px, var(--safe-right))
+    14px
+    max(22px, var(--safe-left));
   display: grid;
   grid-template-columns: minmax(240px, 1fr) fit-content(360px) auto;
   align-items: center;
   gap: 14px;
-  background: var(--frost-bg-strong);
+  background: linear-gradient(
+    to bottom,
+    #052319 0,
+    #052319 var(--safe-top),
+    var(--frost-bg-strong) var(--safe-top),
+    var(--frost-bg-strong) 100%
+  );
   border-bottom: 1px solid var(--line);
 }
 
@@ -2657,7 +2671,11 @@ select:focus {
   .kiosk-header {
     grid-template-columns: minmax(0, 1fr) fit-content(238px) auto;
     min-height: auto;
-    padding: 12px 14px;
+    padding:
+      calc(12px + var(--safe-top))
+      max(14px, var(--safe-right))
+      12px
+      max(14px, var(--safe-left));
     gap: 10px;
   }
 
@@ -4089,7 +4107,7 @@ select:focus {
   max-width: 1380px;
   width: 100%;
   margin: 0 auto;
-  padding: 16px 24px 48px;
+  padding: 16px max(24px, var(--safe-right)) calc(48px + var(--safe-bottom)) max(24px, var(--safe-left));
 }
 
 .admin-dashboard-content {
@@ -4239,7 +4257,11 @@ select:focus {
     padding: 0 14px;
   }
   .admin-dashboard {
-    padding: 14px 14px 40px;
+    padding:
+      14px
+      max(14px, var(--safe-right))
+      calc(40px + var(--safe-bottom))
+      max(14px, var(--safe-left));
   }
   .admin-forms-row {
     grid-template-columns: 1fr;

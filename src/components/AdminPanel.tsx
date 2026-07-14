@@ -35,10 +35,9 @@ import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import * as adminApi from '../services/adminApi';
 import { formatMoney, toNumber } from '../utils/money';
 import { isSyncConfigured } from '../services/sync';
-import { AuditHistory } from './AuditHistory';
 
 type TiendaData = TiendaViewData;
-type AdminSection = null | 'catalogo' | 'cuentas' | 'cobros' | 'productos' | 'auditoria';
+type AdminSection = null | 'catalogo' | 'cuentas' | 'cobros' | 'productos';
 type ProductFilter = 'active' | 'inactive' | 'low' | 'all';
 type AccountFilter = 'debt' | 'clear' | 'inactive' | 'all';
 type AccountPanelTab = 'accounts' | 'users';
@@ -819,21 +818,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
               </div>
             </button>
 
-            <button
-              type="button"
-              className={`admin-shortcut-card ${activeSection === 'auditoria' ? 'active' : ''}`}
-              onClick={() => switchAdminSection('auditoria')}
-              role="tab"
-              aria-selected={activeSection === 'auditoria'}
-            >
-              <div className="shortcut-icon-wrapper audit">
-                <History size={28} />
-              </div>
-              <div className="shortcut-copy">
-                <h3>Auditoria</h3>
-                <span className="shortcut-badge">Cambios y reversos</span>
-              </div>
-            </button>
           </div>
 
           {activeSection === 'catalogo' && (
@@ -1370,11 +1354,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
             </div>
           )}
 
-          {activeSection === 'auditoria' ? (
-            <div className="admin-section-content">
-              <AuditHistory session={adminSession} users={data.users} onMessage={onMessage} />
-            </div>
-          ) : null}
         </div>
       </div>
 
