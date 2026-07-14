@@ -30,7 +30,7 @@ function onEdit(e) {
   if (!e || !e.range) return;
   if (e.range.getSheet().getName() !== 'Resumen') return;
   const cell = e.range.getA1Notation();
-  if (cell === 'H4' && e.value === 'TRUE') refreshDashboard();
+  if (cell === 'H5' && e.value === 'TRUE') refreshDashboard();
 }
 
 function refreshDashboard() {
@@ -296,9 +296,9 @@ function buildInventoryRows_(source) {
 
 function writeSummary_(spreadsheet, source, sales, collections, purchases, finance, inventory) {
   const sheet = getReportSheet_(spreadsheet, 'Resumen');
-  const previousMonth = String(sheet.getRange('B4').getDisplayValue() || '');
-  const previousAccount = String(sheet.getRange('D4').getDisplayValue() || 'TODAS');
-  const previousUser = String(sheet.getRange('F4').getDisplayValue() || 'TODOS');
+  const previousMonth = String(sheet.getRange('B5').getDisplayValue() || '');
+  const previousAccount = String(sheet.getRange('D5').getDisplayValue() || 'TODAS');
+  const previousUser = String(sheet.getRange('F5').getDisplayValue() || 'TODOS');
   const months = unique_(
     sales.concat(collections, purchases, finance)
       .map(function (row) { return row[1]; })
@@ -365,41 +365,49 @@ function writeSummary_(spreadsheet, source, sales, collections, purchases, finan
   sheet.getRange('A2:L2').merge().setValue(
     'Rentabilidad comercial, caja, inventario y alertas en una sola vista'
   );
-  sheet.getRange('A3:F3').merge().setValue('Filtros comerciales');
-  sheet.getRange('G3:L3').merge().setValue('Control del reporte');
-  sheet.getRange('A4').setValue('Periodo');
-  sheet.getRange('B4').setValue(selectedMonth);
+  sheet.getRange('A3:L3').merge().setValue(
+    'CÓMO ACTUALIZAR: 1. Elige periodo, cuenta o usuario · 2. Marca la casilla amarilla “Actualizar” · 3. Espera a que termine'
+  );
+  sheet.getRange('A4:F4').merge().setValue('Filtros comerciales');
+  sheet.getRange('G4:L4').merge().setValue('Actualización del dashboard');
+  sheet.getRange('A5').setValue('Periodo');
+  sheet.getRange('B5').setValue(selectedMonth);
   if (months.length) {
-    sheet.getRange('B4').setDataValidation(
+    sheet.getRange('B5').setDataValidation(
       SpreadsheetApp.newDataValidation().requireValueInList(months, true).build()
     );
   }
-  sheet.getRange('C4').setValue('Cuenta');
-  sheet.getRange('D4').setValue(selectedAccount).setDataValidation(
+  sheet.getRange('C5').setValue('Cuenta');
+  sheet.getRange('D5').setValue(selectedAccount).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(['TODAS'].concat(accountNames), true).build()
   );
-  sheet.getRange('E4').setValue('Usuario');
-  sheet.getRange('F4').setValue(selectedUser).setDataValidation(
+  sheet.getRange('E5').setValue('Usuario');
+  sheet.getRange('F5').setValue(selectedUser).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(['TODOS'].concat(userNames), true).build()
   );
-  sheet.getRange('G4').setValue('Actualizar');
-  sheet.getRange('H4').insertCheckboxes().setValue(false);
-  sheet.getRange('I4:J4').merge().setValue('Última actualización');
-  sheet.getRange('K4:L4').merge().setValue(new Date()).setNumberFormat('dd/mm/yyyy hh:mm');
+  sheet.getRange('G5').setValue('Actualizar →').setFontWeight('bold');
+  sheet.getRange('H5').insertCheckboxes().setValue(false).setBackground('#fce8b2');
+  sheet.getRange('I5:J5').merge().setValue('Última actualización');
+  sheet.getRange('K5:L5').merge().setValue(new Date()).setNumberFormat('dd/mm/yyyy hh:mm');
 
-  writeKpiCard_(sheet, 6, 1, 'Ventas netas', netSales, '#1a73e8', '$#,##0');
-  writeKpiCard_(sheet, 6, 3, commercialFilterActive ? 'Utilidad bruta filtrada' : 'Utilidad neta', reportedProfit, '#188038', '$#,##0');
-  writeKpiCard_(sheet, 6, 5, commercialFilterActive ? 'Margen bruto filtrado' : 'Margen neto', reportedMargin, '#188038', '0.0%');
-  writeKpiCard_(sheet, 6, 7, 'Cobros aplicados', collected, '#1a73e8', '$#,##0');
-  writeKpiCard_(sheet, 6, 9, 'Por cobrar', pending, '#f9ab00', '$#,##0');
-  writeKpiCard_(sheet, 6, 11, 'Caja estimada', cashAvailable, cashAvailable >= 0 ? '#188038' : '#d93025', '$#,##0');
+  writeKpiCard_(sheet, 7, 1, 'Ventas netas', netSales, '#1a73e8', '$#,##0');
+  writeKpiCard_(sheet, 7, 3, commercialFilterActive ? 'Utilidad bruta filtrada' : 'Utilidad neta', reportedProfit, '#188038', '$#,##0');
+  writeKpiCard_(sheet, 7, 5, commercialFilterActive ? 'Margen bruto filtrado' : 'Margen neto', reportedMargin, '#188038', '0.0%');
+  writeKpiCard_(sheet, 7, 7, 'Cobros aplicados', collected, '#1a73e8', '$#,##0');
+  writeKpiCard_(sheet, 7, 9, 'Por cobrar', pending, '#f9ab00', '$#,##0');
+  writeKpiCard_(sheet, 7, 11, 'Caja estimada', cashAvailable, cashAvailable >= 0 ? '#188038' : '#d93025', '$#,##0');
 
-  writeKpiCard_(sheet, 11, 1, 'Costo FIFO', fifoCost, '#5f6368', '$#,##0');
-  writeKpiCard_(sheet, 11, 3, 'Gastos del mes', expenses, '#d93025', '$#,##0');
-  writeKpiCard_(sheet, 11, 5, 'Compras de inventario', inventoryPurchases, '#5f6368', '$#,##0');
-  writeKpiCard_(sheet, 11, 7, 'Inventario al costo', inventoryValue, '#1a73e8', '$#,##0');
-  writeKpiCard_(sheet, 11, 9, 'Flujo neto del mes', netCashFlow, netCashFlow >= 0 ? '#188038' : '#d93025', '$#,##0');
-  writeKpiCard_(sheet, 11, 11, 'Valor estimado tienda', storeValue, storeValue >= 0 ? '#188038' : '#d93025', '$#,##0');
+  writeKpiCard_(sheet, 12, 1, 'Costo FIFO', fifoCost, '#5f6368', '$#,##0');
+  writeKpiCard_(sheet, 12, 3, 'Gastos del mes', expenses, '#d93025', '$#,##0');
+  writeKpiCard_(sheet, 12, 5, 'Compras de inventario', inventoryPurchases, '#5f6368', '$#,##0');
+  writeKpiCard_(sheet, 12, 7, 'Inventario al costo', inventoryValue, '#1a73e8', '$#,##0');
+  writeKpiCard_(sheet, 12, 9, 'Flujo neto del mes', netCashFlow, netCashFlow >= 0 ? '#188038' : '#d93025', '$#,##0');
+  writeKpiCard_(sheet, 12, 11, 'Valor estimado tienda', storeValue, storeValue >= 0 ? '#188038' : '#d93025', '$#,##0');
+  sheet.getRange('A16:L16').merge().setValue(
+    commercialFilterActive
+      ? 'Los indicadores de ventas respetan los filtros. Caja, gastos e inventario muestran el total de la tienda.'
+      : 'Vista completa de la tienda. Inversión y retiros afectan caja, pero no cambian la utilidad generada.'
+  ).setFontColor('#5f6368').setFontStyle('italic');
 
   const trendMonths = months.slice().reverse().slice(-12);
   const trendRows = trendMonths.map(function (month) {
@@ -417,10 +425,22 @@ function writeSummary_(spreadsheet, source, sales, collections, purchases, finan
     ['Inversión', roundMoney_(contributions)],
     ['Compras', roundMoney_(-inventoryPurchases)],
     ['Gastos', roundMoney_(-expenses)],
-    ['Retiros', roundMoney_(-withdrawals)],
-    ['Flujo neto', roundMoney_(netCashFlow)]
+    ['Retiros', roundMoney_(-withdrawals)]
   ], productProfit);
   createDashboardCharts_(sheet, dashboardData);
+
+  const productRanking = aggregateBusinessRanking_(periodSales, 5)
+    .slice(0, 10)
+    .map(function (row) { return [row[0], row[1], row[2], row[1] > 0 ? row[2] / row[1] : 0]; });
+  const accountRanking = aggregateBusinessRanking_(periodSales, 3)
+    .slice(0, 10)
+    .map(function (row) { return [row[0], row[1], row[3], row[2]]; });
+  const userRanking = aggregateBusinessRanking_(periodSales, 4)
+    .slice(0, 10)
+    .map(function (row) { return [row[0], row[1], row[2], row[1] > 0 ? row[2] / row[1] : 0]; });
+  writeDashboardTable_(sheet, 36, 1, 'Top productos', ['Producto', 'Ventas', 'Utilidad', 'Margen'], productRanking, 4);
+  writeDashboardTable_(sheet, 36, 5, 'Top cuentas', ['Cuenta', 'Ventas', 'Por cobrar', 'Utilidad'], accountRanking, 4);
+  writeDashboardTable_(sheet, 36, 9, 'Top usuarios', ['Usuario', 'Ventas', 'Utilidad', 'Margen'], userRanking, 4);
 
   const lowStock = inventory
     .filter(function (row) { return row[11] === 'SÍ' && row[2] === 'ACTIVO'; })
@@ -432,21 +452,23 @@ function writeSummary_(spreadsheet, source, sales, collections, purchases, finan
     .filter(function (row) { return row[1] === selectedMonth; })
     .slice(0, 10)
     .map(function (row) { return [row[0], row[3], row[7], row[4]]; });
-  writeDashboardTable_(sheet, 36, 1, 'Alertas de inventario', ['Producto', 'Stock', 'Mínimo', 'Alerta'], lowStock, 4);
-  writeDashboardTable_(sheet, 36, 5, 'Cuentas con saldo pendiente', ['Cuenta', 'Saldo'], accountDebt.slice(0, 10), 4);
-  writeDashboardTable_(sheet, 36, 9, 'Movimientos financieros recientes', ['Fecha', 'Tipo', 'Concepto', 'Caja'], recentFinance, 4);
+  writeDashboardTable_(sheet, 51, 1, 'Alertas de inventario', ['Producto', 'Stock', 'Mínimo', 'Alerta'], lowStock, 4);
+  writeDashboardTable_(sheet, 51, 5, 'Cuentas con saldo pendiente', ['Cuenta', 'Saldo'], accountDebt.slice(0, 10), 4);
+  writeDashboardTable_(sheet, 51, 9, 'Movimientos financieros recientes', ['Fecha', 'Tipo', 'Concepto', 'Caja'], recentFinance, 4);
 
   sheet.getRange('A1:L1').setFontWeight('bold').setFontSize(18).setFontColor('#202124').setHorizontalAlignment('left');
   sheet.getRange('A2:L2').setFontColor('#5f6368').setFontSize(10);
-  sheet.getRange('A3:F3').setFontWeight('bold').setBackground('#f1f3f4');
-  sheet.getRange('G3:L3').setFontWeight('bold').setBackground('#f1f3f4');
-  sheet.getRange('A4:L4').setVerticalAlignment('middle');
-  ['A4', 'C4', 'E4', 'G4', 'I4'].forEach(function (cell) { sheet.getRange(cell).setFontWeight('bold'); });
-  sheet.setFrozenRows(4);
+  sheet.getRange('A3:L3').setFontWeight('bold').setBackground('#e8f0fe').setFontColor('#174ea6');
+  sheet.getRange('A4:F4').setFontWeight('bold').setBackground('#f1f3f4');
+  sheet.getRange('G4:L4').setFontWeight('bold').setBackground('#f1f3f4');
+  sheet.getRange('A5:L5').setVerticalAlignment('middle');
+  ['A5', 'C5', 'E5', 'G5', 'I5'].forEach(function (cell) { sheet.getRange(cell).setFontWeight('bold'); });
+  sheet.setFrozenRows(5);
   sheet.setColumnWidths(1, 12, 95);
   sheet.setRowHeight(1, 32);
   sheet.setRowHeight(2, 22);
-  sheet.setRowHeight(4, 30);
+  sheet.setRowHeight(3, 32);
+  sheet.setRowHeight(5, 32);
   sheet.setTabColor('#1a73e8');
   sheet.activate();
 }
@@ -495,11 +517,11 @@ function createDashboardCharts_(sheet, data) {
   sheet.insertChart(trendChart);
 
   const cashChart = sheet.newChart()
-    .setChartType(Charts.ChartType.COLUMN)
+    .setChartType(Charts.ChartType.WATERFALL)
     .addRange(data.sheet.getRange(1, 5, data.cashCount + 1, 2))
     .setNumHeaders(1)
     .setPosition(17, 7, 0, 0)
-    .setOption('title', 'Flujo de caja del periodo')
+    .setOption('title', 'Waterfall · cómo se forma el flujo neto del mes')
     .setOption('legend', { position: 'none' })
     .setOption('colors', ['#1a73e8'])
     .setOption('backgroundColor', '#ffffff')
@@ -529,6 +551,13 @@ function writeDashboardTable_(sheet, row, column, title, headers, rows, width) {
     sheet.getRange(row + 2, column, paddedRows.length, 1).setNumberFormat('dd/mm/yyyy');
     sheet.getRange(row + 2, column + 3, paddedRows.length, 1).setNumberFormat('$#,##0');
   }
+  if (title === 'Top productos' || title === 'Top usuarios') {
+    sheet.getRange(row + 2, column + 1, paddedRows.length, 2).setNumberFormat('$#,##0');
+    sheet.getRange(row + 2, column + 3, paddedRows.length, 1).setNumberFormat('0.0%');
+  }
+  if (title === 'Top cuentas') {
+    sheet.getRange(row + 2, column + 1, paddedRows.length, 3).setNumberFormat('$#,##0');
+  }
 }
 
 function calculatePurchaseCash_(movements) {
@@ -553,6 +582,27 @@ function sumFinanceRows_(rows, baseLabel) {
       ? total + number_(row[4]) * (baseLabel === 'INVERSIÓN' ? 1 : -1)
       : total;
   }, 0);
+}
+
+function aggregateBusinessRanking_(rows, nameIndex) {
+  const totals = {};
+  rows.forEach(function (row) {
+    const name = String(row[nameIndex] || 'Sin dato');
+    if (!totals[name]) totals[name] = { sales: 0, profit: 0, pending: 0 };
+    totals[name].sales += number_(row[9]);
+    totals[name].profit += number_(row[11]);
+    totals[name].pending += number_(row[14]);
+  });
+  return Object.keys(totals)
+    .map(function (name) {
+      return [
+        name,
+        roundMoney_(totals[name].sales),
+        roundMoney_(totals[name].profit),
+        roundMoney_(totals[name].pending)
+      ];
+    })
+    .sort(function (left, right) { return right[1] - left[1]; });
 }
 
 function writeRanking_(sheet, row, column, title, values) {

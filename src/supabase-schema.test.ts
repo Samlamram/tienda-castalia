@@ -103,6 +103,11 @@ describe('contrato del esquema oficial', () => {
     expect(reportsScript).toMatch(/'Flujo neto del mes'/);
     expect(reportsScript).toMatch(/function createDashboardCharts_/);
     expect(reportsScript).toMatch(/'Alertas de inventario'/);
+    expect(reportsScript).toMatch(/Charts\.ChartType\.WATERFALL/);
+    expect(reportsScript).toMatch(/'Top productos'/);
+    expect(reportsScript).toMatch(/'Top cuentas'/);
+    expect(reportsScript).toMatch(/'Top usuarios'/);
+    expect(reportsScript).toMatch(/cell === 'H5'/);
   });
 
   it('conserva idempotencia offline y elimina secretos de la auditoria', () => {

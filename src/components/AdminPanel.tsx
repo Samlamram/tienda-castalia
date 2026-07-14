@@ -691,7 +691,9 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
       projectedMargin: projectedInventory - inventoryCost,
       storeValue,
       profit,
-      retainedProfit: profit - withdrawals
+      retainedProfit: profit - withdrawals,
+      totalIn: contribution + collected,
+      totalOut: purchases + expenses + withdrawals
     };
   }, [data, inventorySummary.value]);
 
@@ -1377,9 +1379,9 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
             <div className="admin-section-content finance-panel">
               <header className="finance-heading">
                 <div>
-                  <span className="finance-eyebrow">Estado actual</span>
-                  <h2>Así está la tienda</h2>
-                  <p>Los consumos se usan internamente para calcular la utilidad; aquí ves el dinero y lo pendiente.</p>
+                  <span className="finance-eyebrow">Finanzas</span>
+                  <h2>Estado de la tienda</h2>
+                  <p>Una vista simple de la caja, lo que tienes y lo que falta por cobrar.</p>
                 </div>
                 <div className="finance-actions">
                   <button type="button" className="primary small" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'capital_contribution' } })}>
@@ -1394,42 +1396,97 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 </div>
               </header>
 
-              <div className="finance-primary-grid">
-                <article className="finance-metric cash">
-                  <span>Dinero disponible</span>
-                  <strong>{formatMoney(financeSummary.cash)}</strong>
-                  <small>Cobros + inversión − compras − gastos − retiros</small>
-                </article>
-                <article className="finance-metric inventory">
-                  <span>Inventario al costo</span>
-                  <strong>{formatMoney(financeSummary.inventoryCost)}</strong>
-                  <small>Lo que costó la mercancía disponible</small>
-                </article>
-                <article className="finance-metric receivable">
-                  <span>Por cobrar</span>
-                  <strong>{formatMoney(financeSummary.receivable)}</strong>
-                  <small>{financeSummary.customerCredit > 0 ? `${formatMoney(financeSummary.customerCredit)} en saldos a favor` : 'Consumos todavía pendientes'}</small>
-                </article>
-                <article className="finance-metric store-value">
-                  <span>Valor actual de la tienda</span>
-                  <strong>{formatMoney(financeSummary.storeValue)}</strong>
-                  <small>Dinero + inventario + por cobrar</small>
-                </article>
-              </div>
-
-              <div className="finance-result-card">
-                <div>
-                  <span>Utilidad generada</span>
-                  <strong>{formatMoney(financeSummary.profit)}</strong>
-                  <small>Valor actual + retiros − inversión</small>
+              {financeSummary.contribution <= 0 && financeSummary.purchases > 0 ? (
+                <div className="finance-notice" role="status">
+                  <DollarSign size={20} />
+                  <div>
+                    <strong>Falta registrar la inversión inicial</strong>
+                    <span>La caja puede verse negativa porque ya hay compras, pero todavía no se registró el dinero con el que empezó la tienda.</span>
+                  </div>
+                  <button type="button" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'capital_contribution' } })}>
+                    Registrar inversión
+                  </button>
                 </div>
-                <dl>
-                  <div><dt>Inversión aportada</dt><dd>{formatMoney(financeSummary.contribution)}</dd></div>
-                  <div><dt>Retirado por dueños</dt><dd>{formatMoney(financeSummary.withdrawals)}</dd></div>
-                  <div><dt>Gastos registrados</dt><dd>{formatMoney(financeSummary.expenses)}</dd></div>
-                  <div><dt>Utilidad dentro de tienda</dt><dd>{formatMoney(financeSummary.retainedProfit)}</dd></div>
-                </dl>
-              </div>
+              ) : null}
+
+              <section className="finance-status-grid" aria-label="Estado financiero actual">
+                <article className={`finance-cash-card ${financeSummary.cash < 0 ? 'is-negative' : ''}`}>
+                  <div className="finance-card-label">
+                    <span>Caja calculada</span>
+                    <small>Según el sistema</small>
+                  </div>
+                  <strong>{formatMoney(financeSummary.cash)}</strong>
+                  <p>Lo que debería haber disponible después de todos los movimientos.</p>
+                  <div className="finance-cash-formula">
+                    <span>Entró <b>{formatMoney(financeSummary.totalIn)}</b></span>
+                    <span>Salió <b>{formatMoney(financeSummary.totalOut)}</b></span>
+                  </div>
+                </article>
+
+                <article className="finance-summary-card store-value">
+                  <span>Valor de la tienda</span>
+                  <strong>{formatMoney(financeSummary.storeValue)}</strong>
+                  <small>Caja + inventario + por cobrar</small>
+                </article>
+
+                <article className={`finance-summary-card profit ${financeSummary.profit < 0 ? 'is-negative' : ''}`}>
+                  <span>Utilidad acumulada</span>
+                  <strong>{formatMoney(financeSummary.profit)}</strong>
+                  <small>Incluye lo retirado por los dueños</small>
+                </article>
+              </section>
+
+              <section className="finance-breakdown-card" aria-labelledby="finance-assets-title">
+                <div className="finance-section-title">
+                  <div>
+                    <span className="finance-eyebrow">Lo que tienes</span>
+                    <h3 id="finance-assets-title">Dónde está el valor</h3>
+                  </div>
+                  <small>Valores actuales</small>
+                </div>
+                <div className="finance-assets-grid">
+                  <div>
+                    <span>En caja</span>
+                    <strong>{formatMoney(financeSummary.cash)}</strong>
+                  </div>
+                  <div>
+                    <span>En inventario</span>
+                    <strong>{formatMoney(financeSummary.inventoryCost)}</strong>
+                    <small>Al costo</small>
+                  </div>
+                  <div>
+                    <span>Por cobrar</span>
+                    <strong>{formatMoney(financeSummary.receivable)}</strong>
+                    <small>{financeSummary.customerCredit > 0 ? `${formatMoney(financeSummary.customerCredit)} en saldos a favor` : 'Pendiente de clientes'}</small>
+                  </div>
+                </div>
+              </section>
+
+              <section className="finance-flow-section" aria-labelledby="finance-flow-title">
+                <div className="finance-section-title">
+                  <div>
+                    <span className="finance-eyebrow">Movimientos</span>
+                    <h3 id="finance-flow-title">Entradas y salidas</h3>
+                  </div>
+                </div>
+                <div className="finance-flow-grid">
+                  <article className="finance-flow-card incoming">
+                    <header><span>Entradas</span><strong>{formatMoney(financeSummary.totalIn)}</strong></header>
+                    <dl>
+                      <div><dt>Inversión</dt><dd>{formatMoney(financeSummary.contribution)}</dd></div>
+                      <div><dt>Cobros</dt><dd>{formatMoney(financeSummary.collected)}</dd></div>
+                    </dl>
+                  </article>
+                  <article className="finance-flow-card outgoing">
+                    <header><span>Salidas</span><strong>{formatMoney(financeSummary.totalOut)}</strong></header>
+                    <dl>
+                      <div><dt>Compras</dt><dd>{formatMoney(financeSummary.purchases)}</dd></div>
+                      <div><dt>Gastos</dt><dd>{formatMoney(financeSummary.expenses)}</dd></div>
+                      <div><dt>Retiros</dt><dd>{formatMoney(financeSummary.withdrawals)}</dd></div>
+                    </dl>
+                  </article>
+                </div>
+              </section>
 
               <section className="finance-projection" aria-label="Proyección del inventario">
                 <div><span>Inventario al costo</span><strong>{formatMoney(financeSummary.inventoryCost)}</strong></div>

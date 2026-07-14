@@ -10,9 +10,9 @@ Los campos cuyo nombre contiene `pin`, `token`, `hash`, `salt`, `secret` o `pass
 
 ## Uso diario
 
-La información base llega casi en tiempo real. Los reportes completos se actualizan desde el menú **Tienda → Actualizar reporte**. El dashboard permite elegir periodo, cuenta y usuario en `B4`, `D4` y `F4`; después se recalcula marcando `Resumen!H4`.
+La información base llega casi en tiempo real. Los reportes completos se actualizan desde el menú **Tienda → Actualizar reporte**. El dashboard permite elegir periodo, cuenta y usuario en `B5`, `D5` y `F5`; después se recalcula marcando la casilla amarilla `Resumen!H5`.
 
-El dashboard incluye ventas, utilidad, márgenes, caja estimada, cuentas por cobrar, inventario, flujo del mes, tendencias, productos rentables y alertas operativas. Inversión, gastos y retiros permanecen separados para no mezclar caja con utilidad.
+El dashboard incluye ventas, utilidad, márgenes, caja estimada, cuentas por cobrar, inventario, tendencia mensual, waterfall financiero, rankings de productos, cuentas y usuarios, y alertas operativas. Inversión, gastos y retiros permanecen separados para no mezclar caja con utilidad.
 
 ## Instalación reproducible
 
