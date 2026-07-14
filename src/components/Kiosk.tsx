@@ -16,19 +16,18 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { BrandLogo } from './BrandLogo';
-import type { CartItem, PersonUser } from '../domain/types';
-import { calculateUserBalances } from '../domain/ledger';
-import type { useTiendaData } from '../hooks/useTiendaData';
+import type { CartItem, PersonUser, TiendaViewData } from '../domain/types';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import { createConsumption } from '../services/operations';
 import { formatMoney } from '../utils/money';
 
-type TiendaData = ReturnType<typeof useTiendaData>;
+type TiendaData = TiendaViewData;
 type AccountDetailTab = 'history' | 'payments';
 type AccountFilter = 'all' | string;
 type ConfirmConsumptionResult = {
   status: 'confirmed' | 'pending' | 'needs_review';
   message?: string;
+  officialTotal?: number;
+  requiresLogin?: boolean;
 };
 
 interface DatedEntry {
@@ -111,10 +110,22 @@ interface KioskProps {
   onLogout: () => void;
   isSharedDevice: boolean;
   onChangePin?: (currentPin: string, newPin: string) => Promise<void>;
-  onConfirmConsumption?: (userId: string, cart: CartItem[]) => Promise<ConfirmConsumptionResult>;
+  onConfirmConsumption: (userId: string, cart: CartItem[]) => Promise<ConfirmConsumptionResult>;
+  onRetryPendingConsumption?: (pendingId: string) => Promise<ConfirmConsumptionResult>;
+  onDiscardPendingConsumption?: (pendingId: string) => Promise<void>;
 }
 
-export function Kiosk({ data, onMessage, sessionUser, onLogout, isSharedDevice, onChangePin, onConfirmConsumption }: KioskProps) {
+export function Kiosk({
+  data,
+  onMessage,
+  sessionUser,
+  onLogout,
+  isSharedDevice,
+  onChangePin,
+  onConfirmConsumption,
+  onRetryPendingConsumption,
+  onDiscardPendingConsumption
+}: KioskProps) {
   return (
     <UserSession
       user={sessionUser}
@@ -124,6 +135,8 @@ export function Kiosk({ data, onMessage, sessionUser, onLogout, isSharedDevice, 
       isSharedDevice={isSharedDevice}
       onChangePin={onChangePin}
       onConfirmConsumption={onConfirmConsumption}
+      onRetryPendingConsumption={onRetryPendingConsumption}
+      onDiscardPendingConsumption={onDiscardPendingConsumption}
     />
   );
 }
@@ -135,15 +148,27 @@ interface UserSessionProps {
   onLogout: () => void;
   isSharedDevice: boolean;
   onChangePin?: (currentPin: string, newPin: string) => Promise<void>;
-  onConfirmConsumption?: (userId: string, cart: CartItem[]) => Promise<ConfirmConsumptionResult>;
+  onConfirmConsumption: (userId: string, cart: CartItem[]) => Promise<ConfirmConsumptionResult>;
+  onRetryPendingConsumption?: (pendingId: string) => Promise<ConfirmConsumptionResult>;
+  onDiscardPendingConsumption?: (pendingId: string) => Promise<void>;
 }
 
-function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChangePin, onConfirmConsumption }: UserSessionProps) {
+function UserSession({
+  user,
+  data,
+  onMessage,
+  onLogout,
+  isSharedDevice,
+  onChangePin,
+  onConfirmConsumption,
+  onRetryPendingConsumption,
+  onDiscardPendingConsumption
+}: UserSessionProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [productQuery, setProductQuery] = useState('');
   const [category, setCategory] = useState('Todas');
   const [checkout, setCheckout] = useState(false);
-  const [checkoutState, setCheckoutState] = useState<'idle' | 'submitting' | 'success'>('idle');
+  const [checkoutState, setCheckoutState] = useState<'idle' | 'submitting' | 'confirmed' | 'queued' | 'needs_review'>('idle');
   const [checkoutFeedback, setCheckoutFeedback] = useState('');
   const [confirmedCheckoutTotal, setConfirmedCheckoutTotal] = useState(0);
   const [accountDetailOpen, setAccountDetailOpen] = useState(false);
@@ -154,13 +179,14 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSubmitting, setPinSubmitting] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const catalogAreaRef = useRef<HTMLElement | null>(null);
   const lastCatalogScrollTop = useRef(0);
   const searchBarVisibleRef = useRef(true);
   const checkoutLogoutTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!isSharedDevice) return;
+    if (!isSharedDevice || data.pendingSync > 0) return;
     const events = ['click', 'keydown', 'touchstart'];
     let timeout = window.setTimeout(onLogout, 90_000);
     const reset = () => {
@@ -172,7 +198,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
       window.clearTimeout(timeout);
       events.forEach((event) => window.removeEventListener(event, reset));
     };
-  }, [isSharedDevice, onLogout]);
+  }, [data.pendingSync, isSharedDevice, onLogout]);
 
   useEffect(() => {
     return () => {
@@ -254,6 +280,9 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
   }, []);
 
   const account = user.accountId ? data.accounts.find((entry) => entry.id === user.accountId) : undefined;
+  const pendingReviews = data.pendingConsumptions.filter(
+    (entry) => entry.sessionUserId === user.id && entry.status === 'needs_review'
+  );
   const accountBalance = user.accountId ? data.accountBalances.find((entry) => entry.accountId === user.accountId) : undefined;
   const accountUsers = user.accountId
     ? data.users.filter((entry) => entry.accountId === user.accountId && entry.status === 'active')
@@ -286,17 +315,11 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
     .slice(0, 18);
   const groupedHistory = groupByDay(filteredHistory);
   const groupedPayments = groupByDay(filteredPayments);
+  const accountActivityAvailable = accountHistory.length > 0 || accountPayments.length > 0;
 
-  const selfBalance = calculateUserBalances({
-    users: [user],
-    consumptions: data.consumptions,
-    items: data.items,
-    payments: data.payments,
-    applications: data.applications,
-    adjustments: data.adjustments
-  })[0]?.balance ?? 0;
+  const selfBalance = data.userBalances.find((entry) => entry.userId === user.id)?.balance ?? 0;
   const currentBalance = accountBalance?.balance ?? selfBalance;
-  const projectRemainingBalance = currentBalance - cartTotal;
+  const projectedBalance = currentBalance + cartTotal;
 
   function addProduct(productId: string) {
     setCart((current) => {
@@ -332,7 +355,6 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
 
   async function confirmConsumption() {
     if (cart.length === 0 || checkoutState === 'submitting') return;
-    const shouldKeepSession = !isSharedDevice;
     const confirmedTotal = cartTotal;
 
     try {
@@ -341,20 +363,21 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
       setCheckoutFeedback('Registrando tu compra...');
       setConfirmedCheckoutTotal(confirmedTotal);
 
-      const result = onConfirmConsumption
-        ? await onConfirmConsumption(user.id, cart)
-        : { status: 'confirmed' as const, message: undefined };
-      if (!onConfirmConsumption) {
-        await createConsumption(user.id, cart);
+      const result = await onConfirmConsumption(user.id, cart);
+      if (result.status === 'confirmed' && Number.isFinite(result.officialTotal)) {
+        setConfirmedCheckoutTotal(result.officialTotal as number);
       }
+      const shouldLogout = isSharedDevice && result.status === 'confirmed';
       const message = result.message ?? `Consumo confirmado por ${formatMoney(confirmedTotal)}.`;
-      const nextFeedback = shouldKeepSession ? message : `${message} Cerrando sesion...`;
+      const nextFeedback = shouldLogout ? `${message} Cerrando sesion...` : message;
       setCheckoutFeedback(nextFeedback);
-      setCheckoutState('success');
-      onMessage(shouldKeepSession ? message : `${message} Sesion cerrada.`);
+      setCheckoutState(
+        result.status === 'confirmed' ? 'confirmed' : result.status === 'needs_review' ? 'needs_review' : 'queued'
+      );
+      onMessage(shouldLogout ? `${message} Sesion cerrada.` : message);
       setCart([]);
 
-      if (!shouldKeepSession) {
+      if (shouldLogout) {
         checkoutLogoutTimerRef.current = window.setTimeout(() => {
           onLogout();
         }, 1200);
@@ -367,10 +390,38 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
     }
   }
 
+  async function retryPendingConsumption(pendingId: string) {
+    if (!onRetryPendingConsumption || pendingActionId) return;
+    setPendingActionId(pendingId);
+    try {
+      const result = await onRetryPendingConsumption(pendingId);
+      onMessage(result.message ?? 'Compra pendiente procesada.');
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'No se pudo reintentar la compra pendiente.');
+    } finally {
+      setPendingActionId(null);
+    }
+  }
+
+  async function discardPendingConsumption(pendingId: string) {
+    if (!onDiscardPendingConsumption || pendingActionId) return;
+    if (!window.confirm('¿Descartar este intento local? Esta acción no elimina ninguna compra confirmada en Supabase.')) return;
+    setPendingActionId(pendingId);
+    try {
+      await onDiscardPendingConsumption(pendingId);
+      onMessage('Intento local descartado.');
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'No se pudo descartar el intento local.');
+    } finally {
+      setPendingActionId(null);
+    }
+  }
+
   async function handleChangePin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!onChangePin) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const currentPin = String(form.get('currentPin') ?? '');
     const newPin = String(form.get('newPin') ?? '');
     const confirmPin = String(form.get('confirmPin') ?? '');
@@ -389,7 +440,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
     try {
       await onChangePin(currentPin, newPin);
       setPinModalOpen(false);
-      event.currentTarget.reset();
+      formElement.reset();
       onMessage('PIN actualizado.');
     } catch (error) {
       setPinError(error instanceof Error ? error.message : 'No se pudo cambiar el PIN.');
@@ -427,7 +478,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
               }}
               aria-label={`Ver cuenta ${account?.name ?? user.name}`}
             >
-              <span>{account?.name ?? 'Individual'}</span>
+              <span>Mi saldo{account?.name ? ` · ${account.name}` : ''}</span>
               <strong>{formatMoney(currentBalance)}</strong>
             </button>
           </div>
@@ -437,6 +488,50 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
           <LogOut size={20} />
         </button>
       </header>
+
+      {data.pendingSync > 0 ? (
+        <section className="pending-sync-banner" role="status" aria-live="polite">
+          <strong>{data.pendingSync} compra{data.pendingSync === 1 ? '' : 's'} guardada{data.pendingSync === 1 ? '' : 's'} localmente</strong>
+          <span>Se enviará al recuperar la conexión. En un dispositivo compartido la sesión permanecerá abierta hasta terminar.</span>
+        </section>
+      ) : null}
+
+      {pendingReviews.length > 0 ? (
+        <section className="pending-review-banner" role="alert" aria-label="Compras pendientes de revisión">
+          <div>
+            <strong>
+              {pendingReviews.length} compra{pendingReviews.length === 1 ? '' : 's'} requiere{pendingReviews.length === 1 ? '' : 'n'} revisión
+            </strong>
+            <span>No se confirmó en Supabase. Reintenta después de corregir la causa o descarta solo el intento local.</span>
+          </div>
+          <div className="pending-review-list">
+            {pendingReviews.map((entry) => (
+              <article key={entry.id}>
+                <span>{entry.error ?? 'El servidor solicitó revisión manual.'}</span>
+                <small>{new Date(entry.createdAt).toLocaleString('es-CO')}</small>
+                <div className="inline-actions">
+                  <button
+                    type="button"
+                    className="ghost small"
+                    disabled={Boolean(pendingActionId)}
+                    onClick={() => void retryPendingConsumption(entry.id)}
+                  >
+                    Reintentar
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost small danger"
+                    disabled={Boolean(pendingActionId)}
+                    onClick={() => void discardPendingConsumption(entry.id)}
+                  >
+                    Descartar intento
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="kiosk-workspace">
         <main className="catalog-area" ref={catalogAreaRef}>
@@ -506,6 +601,12 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                         </div>
                       )}
                     </span>
+                    <div className="product-details">
+                      <strong className="product-name" title={product.name}>
+                        {product.name}
+                      </strong>
+                      <span className="product-price">{formatMoney(product.price)}</span>
+                    </div>
                   </div>
 
                   {quantityInCart > 0 && (
@@ -522,13 +623,6 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                       <X size={16} />
                     </button>
                   )}
-
-                  <div className="product-details">
-                    <strong className="product-name" title={product.name}>
-                      {product.name}
-                    </strong>
-                    <span className="product-price">{formatMoney(product.price)}</span>
-                  </div>
 
                   <div className={`product-tile-action-bar ${quantityInCart > 0 ? 'selected' : ''}`}>
                     {quantityInCart === 0 ? (
@@ -672,9 +766,9 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
               <strong>{formatMoney(cartTotal)}</strong>
             </div>
             <div className="summary-row balance-projection">
-              <span>Saldo Restante:</span>
-              <strong className={projectRemainingBalance >= 0 ? 'positive' : 'negative'}>
-                {formatMoney(projectRemainingBalance)}
+              <span>Saldo después de compra:</span>
+              <strong className={projectedBalance <= 0 ? 'positive' : 'negative'}>
+                {formatMoney(projectedBalance)}
               </strong>
             </div>
 
@@ -702,14 +796,14 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
 
       {accountDetailOpen ? (
         <div className="modal-backdrop">
-          <div className="modal account-modal">
+          <div className="modal account-modal" role="dialog" aria-modal="true" aria-label="Estado de cuenta">
             <div className="account-modal-hero">
               <div className="account-modal-title">
-                <span>Estado de cuenta</span>
-                <h2>{account?.name ?? 'Cuenta'}</h2>
+                <span>Saldo personal</span>
+                <h2>{user.name}</h2>
                 <p>
                   <Users size={15} />
-                  {accountUsers.length} usuarios asociados
+                  {account?.name ? `Cuenta ${account.name}` : 'Usuario independiente'}
                 </p>
               </div>
 
@@ -720,8 +814,8 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
 
             <section className="account-balance-stack" aria-label="Filtrar cuenta">
               <div className="account-balance-heading">
-                <span>Subtotales por usuario</span>
-                <small>Toca una fila para filtrar</small>
+                <span>Mi saldo oficial</span>
+                <small>Actualizado desde Supabase</small>
               </div>
 
               {accountUsers.map((entry) => {
@@ -752,14 +846,20 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
                   <Users size={17} />
                 </span>
                 <span className="account-balance-copy">
-                  <strong>Total cuenta</strong>
-                  <small>{account?.name ?? 'Cuenta completa'}</small>
+                  <strong>Mi saldo</strong>
+                  <small>{account?.name ?? 'Usuario independiente'}</small>
                 </span>
                 <strong className="account-balance-amount">{formatMoney(currentBalance)}</strong>
               </button>
             </section>
 
-            <div className="account-tabs" role="tablist" aria-label="Detalle de cuenta">
+            {!accountActivityAvailable ? (
+              <p className="account-empty-state">
+                Este dispositivo conserva solo el catálogo y las compras pendientes. El historial oficial se consulta en administración.
+              </p>
+            ) : null}
+
+            <div className="account-tabs" role="tablist" aria-label="Detalle de cuenta" hidden={!accountActivityAvailable}>
               <button
                 className={accountDetailTab === 'history' ? 'active' : ''}
                 onClick={() => setAccountDetailTab('history')}
@@ -774,7 +874,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
               </button>
             </div>
 
-            {accountDetailTab === 'history' ? (
+            {accountActivityAvailable && accountDetailTab === 'history' ? (
               <div className="account-timeline">
                 {groupedHistory.map((group) => (
                   <section className="account-day-group" key={group.key}>
@@ -858,7 +958,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
               </div>
             ) : null}
 
-            {accountDetailTab === 'payments' ? (
+            {accountActivityAvailable && accountDetailTab === 'payments' ? (
               <div className="account-timeline">
                 {groupedPayments.map((group) => (
                   <section className="account-day-group" key={group.key}>
@@ -903,9 +1003,22 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
 
       {checkout ? (
         <div className="modal-backdrop">
-          <div className={checkoutState === 'idle' ? 'modal wide checkout-modal' : 'modal checkout-feedback-modal'}>
+          <div
+            className={checkoutState === 'idle' ? 'modal wide checkout-modal' : 'modal checkout-feedback-modal'}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirmar compra"
+          >
             <div className="checkout-modal-header">
-              <h2>{checkoutState === 'success' ? 'Compra confirmada' : 'Confirmar consumo'}</h2>
+              <h2>
+                {checkoutState === 'confirmed'
+                  ? 'Compra confirmada'
+                  : checkoutState === 'queued'
+                    ? 'Compra guardada'
+                    : checkoutState === 'needs_review'
+                      ? 'Revisión necesaria'
+                      : 'Confirmar consumo'}
+              </h2>
               {checkoutState === 'idle' ? (
                 <button
                   type="button"
@@ -1005,14 +1118,28 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
               </>
             ) : (
               <div className="checkout-feedback-panel" role="status" aria-live="polite">
-                <span className={checkoutState === 'success' ? 'checkout-feedback-icon success' : 'checkout-feedback-icon'}>
-                  {checkoutState === 'success' ? <CheckCircle2 size={34} /> : <Loader2 size={34} />}
+                <span className={checkoutState === 'confirmed' ? 'checkout-feedback-icon success' : 'checkout-feedback-icon'}>
+                  {checkoutState === 'confirmed' ? (
+                    <CheckCircle2 size={34} />
+                  ) : checkoutState === 'submitting' ? (
+                    <Loader2 size={34} />
+                  ) : (
+                    <Package size={34} />
+                  )}
                 </span>
-                <strong>{checkoutState === 'success' ? formatMoney(confirmedCheckoutTotal) : 'Un momento'}</strong>
+                <strong>
+                  {checkoutState === 'confirmed'
+                    ? formatMoney(confirmedCheckoutTotal)
+                    : checkoutState === 'queued'
+                      ? 'Pendiente de envío'
+                      : checkoutState === 'needs_review'
+                        ? 'Sin confirmar'
+                        : 'Un momento'}
+                </strong>
                 <p>{checkoutFeedback}</p>
-                {checkoutState === 'success' && !isSharedDevice ? (
+                {checkoutState !== 'submitting' && !(checkoutState === 'confirmed' && isSharedDevice) ? (
                   <button type="button" className="checkout-primary-action" onClick={closeCheckout}>
-                    Seguir comprando
+                    {checkoutState === 'confirmed' ? 'Seguir comprando' : 'Volver al catálogo'}
                   </button>
                 ) : null}
               </div>
@@ -1023,7 +1150,7 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
 
       {pinModalOpen ? (
         <div className="modal-backdrop">
-          <div className="modal pin-modal">
+          <div className="modal pin-modal" role="dialog" aria-modal="true" aria-label="Cambiar PIN">
             <div className="pin-modal-header">
               <h2>Cambiar PIN</h2>
               <button className="account-close-button" onClick={() => setPinModalOpen(false)} aria-label="Cerrar">
@@ -1031,9 +1158,9 @@ function UserSession({ user, data, onMessage, onLogout, isSharedDevice, onChange
               </button>
             </div>
             <form className="pin-change-form" onSubmit={handleChangePin}>
-              <input name="currentPin" type="password" inputMode="numeric" placeholder="PIN actual" required />
-              <input name="newPin" type="password" inputMode="numeric" placeholder="Nuevo PIN" required />
-              <input name="confirmPin" type="password" inputMode="numeric" placeholder="Confirmar nuevo PIN" required />
+              <input name="currentPin" type="password" inputMode="numeric" placeholder="PIN actual" aria-label="PIN actual" required />
+              <input name="newPin" type="password" inputMode="numeric" placeholder="Nuevo PIN" aria-label="Nuevo PIN" required />
+              <input name="confirmPin" type="password" inputMode="numeric" placeholder="Confirmar nuevo PIN" aria-label="Confirmar nuevo PIN" required />
               {pinError ? <div className="login-error-message">{pinError}</div> : null}
               <div className="modal-actions">
                 <button type="submit" className="primary" disabled={pinSubmitting}>

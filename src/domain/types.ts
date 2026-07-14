@@ -1,177 +1,204 @@
 export type EntityStatus = 'active' | 'inactive';
 export type ConsumptionStatus = 'confirmed' | 'voided';
-export type CostStatus = 'final' | 'pending_recalc';
-export type PaymentTarget = 'account' | 'user';
-export type SyncStatus = 'pending' | 'synced' | 'failed';
-export type AdjustmentScope = 'account' | 'user';
+export type CostStatus = 'final' | 'pending_inventory';
 export type AppRole = 'admin' | 'user';
 export type DeviceMode = 'personal' | 'shared';
-export type PendingConsumptionStatus = 'pending' | 'sending' | 'confirmed' | 'failed' | 'needs_review';
+export type PendingConsumptionStatus =
+  | 'pending'
+  | 'sending'
+  | 'confirmed'
+  | 'failed'
+  | 'needs_review';
+export type FinancialMovementType =
+  | 'payment'
+  | 'adjustment'
+  | 'account_transfer'
+  | 'payment_reversal'
+  | 'adjustment_reversal';
+export type FinancialMovementScope = 'account' | 'user';
+export type InventoryMovementType =
+  | 'purchase'
+  | 'consumption'
+  | 'void_consumption'
+  | 'adjustment'
+  | 'adjustment_reversal';
+export type AuditAction =
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'archive'
+  | 'restore'
+  | 'void'
+  | 'reverse'
+  | 'command'
+  | 'login_failed'
+  | 'login_rejected'
+  | 'logout'
+  | 'pin_changed';
+export type ConsumptionPaymentState = 'unpaid' | 'partial' | 'paid' | 'voided';
 
-export interface Account {
-  id: string;
-  name: string;
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type AuditValues = Record<string, JsonValue>;
+
+interface ArchivedEntity {
   status: EntityStatus;
-  createdAt: string;
-  updatedAt: string;
-  version?: number;
+  archivedAt?: string;
+  archivedByUserId?: string;
+  archiveReason?: string;
 }
 
-export interface PersonUser {
+export interface Account extends ArchivedEntity {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+/** Public user data. PIN hashes and salts must never be returned to the client. */
+export interface PersonUser extends ArchivedEntity {
   id: string;
   accountId?: string;
   name: string;
-  pinHash: string;
   username?: string;
-  role?: AppRole;
-  status: EntityStatus;
+  role: AppRole;
   createdAt: string;
   updatedAt: string;
-  version?: number;
+  version: number;
 }
 
-export interface Product {
+export interface Product extends ArchivedEntity {
   id: string;
   name: string;
   category: string;
   price: number;
   stockMin: number;
-  lastCost: number;
   imageUrl?: string;
   imageSourceUrl?: string;
   imageCredit?: string;
-  status: EntityStatus;
   createdAt: string;
   updatedAt: string;
-  version?: number;
+  version: number;
+  /** Derived by the server from inventory entries; it is not stored on products. */
+  lastCost?: number;
 }
 
 export interface Consumption {
   id: string;
   accountId?: string;
   userId: string;
+  clientOperationId: string;
+  deviceId?: string;
   status: ConsumptionStatus;
   total: number;
-  costTotal: number;
-  costStatus: CostStatus;
   createdAt: string;
   voidedAt?: string;
+  voidedByUserId?: string;
   voidReason?: string;
+  requestId?: string;
+  /** Values projected by consumption_costs. */
+  costTotal?: number;
+  pendingCostQuantity?: number;
+  costStatus?: CostStatus;
 }
 
 export interface ConsumptionItem {
   id: string;
   consumptionId: string;
-  accountId?: string;
-  userId: string;
   productId: string;
   productName: string;
   quantity: number;
   unitPrice: number;
   total: number;
-  unitCost: number;
-  costTotal: number;
-  pendingCostQuantity: number;
-  costStatus: CostStatus;
   createdAt: string;
+  /** Values projected by consumption_costs. */
+  unitCost?: number;
+  costTotal?: number;
+  pendingCostQuantity?: number;
+  costStatus?: CostStatus;
 }
 
-export interface Payment {
+/**
+ * Immutable financial entry. Payment amounts reduce debt; adjustment amounts are
+ * signed debt changes. A reversal is another entry linked through reversalOfId.
+ */
+export interface FinancialMovement {
   id: string;
   accountId?: string;
-  targetType: PaymentTarget;
+  scope: FinancialMovementScope;
   userId?: string;
   paidByUserId?: string;
+  movementType: FinancialMovementType;
   amount: number;
-  unappliedAmount: number;
+  fromAccountId?: string;
+  toAccountId?: string;
   note?: string;
+  reversedMovementId?: string;
+  createdBy?: string;
+  requestId: string;
   createdAt: string;
+  /** Derived as payment amount minus its applications. */
+  unappliedAmount?: number;
 }
 
+/** A signed application of a payment to one complete consumption. */
 export interface PaymentApplication {
   id: string;
-  paymentId: string;
+  financialMovementId: string;
   accountId?: string;
   userId: string;
-  consumptionItemId: string;
+  consumptionId: string;
   amount: number;
+  reversedApplicationId?: string;
   createdAt: string;
 }
 
-export interface Purchase {
-  id: string;
-  productId: string;
-  quantity: number;
-  unitCost: number;
-  totalCost: number;
-  note?: string;
-  createdAt: string;
-}
-
-export interface InventoryLot {
-  id: string;
-  productId: string;
-  purchaseId: string;
-  quantity: number;
-  remainingQuantity: number;
-  unitCost: number;
-  createdAt: string;
-}
-
+/** Immutable stock entry. Stock is always the sum of quantityDelta. */
 export interface InventoryMovement {
   id: string;
   productId: string;
-  type: 'purchase' | 'consumption' | 'void_consumption' | 'adjustment' | 'cost_recalc';
+  movementType: InventoryMovementType;
   quantityDelta: number;
   unitCost?: number;
-  referenceId?: string;
+  consumptionItemId?: string;
+  reversedMovementId?: string;
   note?: string;
+  createdBy?: string;
+  requestId: string;
   createdAt: string;
 }
 
-export interface BalanceAdjustment {
+/** FIFO link between a sale item and the inventory entry that supplied its cost. */
+export interface FifoCostAllocation {
   id: string;
-  accountId?: string;
-  scope: AdjustmentScope;
-  userId?: string;
-  amount: number;
-  note: string;
+  productId: string;
+  consumptionItemId?: string;
+  targetMovementId: string;
+  sourceMovementId: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  reversedAllocationId?: string;
   createdAt: string;
 }
 
-export interface AccountTransfer {
+export interface AuditLogEntry {
   id: string;
-  userId: string;
-  fromAccountId?: string;
-  toAccountId?: string;
-  movedBalance: number;
-  note: string;
+  requestId: string;
+  idempotencyKey?: string;
+  actorUserId?: string;
+  actorName?: string;
+  action: AuditAction;
+  entityType: string;
+  recordId?: string;
+  beforeData?: AuditValues;
+  afterData?: AuditValues;
+  changedFields: string[];
+  reason?: string;
+  deviceId?: string;
+  metadata?: AuditValues;
   createdAt: string;
-}
-
-export interface SyncOperation {
-  id: string;
-  entity: string;
-  entityId: string;
-  action: 'upsert' | 'delete';
-  payload: unknown;
-  status: SyncStatus;
-  attempts: number;
-  error?: string;
-  createdAt: string;
-  syncedAt?: string;
-}
-
-export interface ExportBatch {
-  id: string;
-  sheetId: string;
-  dateFrom: string;
-  dateTo: string;
-  rowsHash: string;
-  status: SyncStatus;
-  error?: string;
-  createdAt: string;
-  exportedAt?: string;
 }
 
 export interface Setting {
@@ -200,6 +227,7 @@ export interface AppSession {
   updatedAt: string;
 }
 
+/** Minimal server catalog cached for user purchases while offline. */
 export interface CatalogProduct {
   id: string;
   name: string;
@@ -213,6 +241,7 @@ export interface CatalogProduct {
   updatedAt: string;
 }
 
+/** Durable outbox. clientOperationId is also the server idempotency key. */
 export interface PendingConsumption {
   id: string;
   clientOperationId: string;
@@ -237,6 +266,7 @@ export interface UserBalance {
   paid: number;
   adjustments: number;
   balance: number;
+  unappliedCredit: number;
 }
 
 export interface AccountBalance {
@@ -254,4 +284,106 @@ export interface ProductStock {
   stock: number;
   stockMin: number;
   isLow: boolean;
+  lastCost?: number;
+  inventoryValue?: number;
+}
+
+export interface ConsumptionCost {
+  consumptionId: string;
+  costTotal: number;
+  pendingCostQuantity: number;
+  costStatus: CostStatus;
+}
+
+export interface ConsumptionPaymentStatus {
+  consumptionId: string;
+  userId: string;
+  accountId?: string;
+  total: number;
+  paid: number;
+  openAmount: number;
+  status: ConsumptionPaymentState;
+}
+
+/** Complete, in-memory administrative response. It is never persisted in IndexedDB. */
+export interface AdminSnapshot {
+  accounts: Account[];
+  users: PersonUser[];
+  products: Product[];
+  consumptions: Consumption[];
+  consumptionItems: ConsumptionItem[];
+  financialMovements: FinancialMovement[];
+  paymentApplications: PaymentApplication[];
+  inventoryMovements: InventoryMovement[];
+  fifoCostAllocations: FifoCostAllocation[];
+  auditLog: AuditLogEntry[];
+  productStocks: ProductStock[];
+  consumptionCosts: ConsumptionCost[];
+  userBalances: UserBalance[];
+  accountBalances: AccountBalance[];
+  consumptionPaymentStatuses: ConsumptionPaymentStatus[];
+  catalogVersion: number;
+  generatedAt: string;
+}
+
+/** Read-only projections used by the existing UI; they are not database tables. */
+export interface PaymentView {
+  id: string;
+  accountId?: string;
+  targetType: FinancialMovementScope;
+  userId?: string;
+  paidByUserId?: string;
+  amount: number;
+  unappliedAmount: number;
+  note?: string;
+  reversedMovementId?: string;
+  createdAt: string;
+}
+
+export interface BalanceAdjustmentView {
+  id: string;
+  accountId?: string;
+  scope: FinancialMovementScope;
+  userId?: string;
+  movementType: 'adjustment' | 'adjustment_reversal';
+  amount: number;
+  note: string;
+  reversalOfId?: string;
+  reversedByMovementId?: string;
+  createdAt: string;
+}
+
+export interface PurchaseView {
+  id: string;
+  productId: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  note?: string;
+  createdAt: string;
+}
+
+/** Shared view contract for the online admin and the cached user catalog. */
+export interface TiendaViewData {
+  accounts: Account[];
+  users: PersonUser[];
+  products: Product[];
+  consumptions: Consumption[];
+  items: ConsumptionItem[];
+  financialMovements: FinancialMovement[];
+  payments: PaymentView[];
+  applications: PaymentApplication[];
+  purchases: PurchaseView[];
+  movements: InventoryMovement[];
+  adjustments: BalanceAdjustmentView[];
+  fifoCostAllocations: FifoCostAllocation[];
+  auditLog: AuditLogEntry[];
+  pendingSync: number;
+  pendingConsumptions: PendingConsumption[];
+  settings: Setting[];
+  accountBalances: AccountBalance[];
+  userBalances: UserBalance[];
+  productStocks: ProductStock[];
+  consumptionCosts: ConsumptionCost[];
+  consumptionPaymentStatuses: ConsumptionPaymentStatus[];
 }

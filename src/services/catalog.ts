@@ -90,11 +90,18 @@ export async function refreshCatalog(session: AppSession): Promise<AppSession> {
 
     const account = payload.account ?? {};
     const user = payload.user ?? {};
+    const hasAccountPayload = payload.account !== undefined;
+    const accountId = hasAccountPayload
+      ? (typeof account.id === 'string' && account.id ? account.id : undefined)
+      : session.accountId;
+    const accountName = hasAccountPayload
+      ? (typeof account.name === 'string' && account.name ? account.name : undefined)
+      : session.accountName;
     const updated: AppSession = {
       ...session,
       userName: stringValue(user.name ?? user.userName ?? user.user_name, session.userName),
-      accountId: account.id || session.accountId ? stringValue(account.id, session.accountId) : undefined,
-      accountName: account.name || session.accountName ? stringValue(account.name, session.accountName) : undefined,
+      accountId,
+      accountName,
       balance: numberValue(payload.balance, session.balance ?? 0),
       updatedAt: nowIso()
     };

@@ -1,90 +1,77 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { calculateAccountBalance, calculateProductStocks } from '../domain/ledger';
-import type { Product } from '../domain/types';
-import { createId } from '../utils/id';
-import { verifyPin } from '../utils/security';
-import { db } from './db';
-import { ensureSeedData, resetDemoData } from './seed';
+import Dexie from 'dexie';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  db,
+  initializeLocalDatabase,
+  LEGACY_LOCAL_DATABASE_NAME,
+  LOCAL_DATABASE_NAME
+} from './db';
 
-async function resetDb() {
-  await db.delete();
-  await db.open();
-}
-
-describe('demo seed data', () => {
+describe('base local v2', () => {
   beforeEach(async () => {
-    await resetDb();
+    db.close();
+    await Dexie.delete(LOCAL_DATABASE_NAME);
+    await Dexie.delete(LEGACY_LOCAL_DATABASE_NAME);
   });
 
-  it('loads a usable local demo with history, payments, stock and images', async () => {
-    await resetDemoData();
+  afterEach(async () => {
+    db.close();
+    await Dexie.delete(LOCAL_DATABASE_NAME);
+    await Dexie.delete(LEGACY_LOCAL_DATABASE_NAME);
+  });
 
-    const [accounts, users, products, consumptions, items, payments, applications, movements, adjustments, settings] =
-      await Promise.all([
-        db.accounts.toArray(),
-        db.users.toArray(),
-        db.products.toArray(),
-        db.consumptions.toArray(),
-        db.consumptionItems.toArray(),
-        db.payments.toArray(),
-        db.paymentApplications.toArray(),
-        db.inventoryMovements.toArray(),
-        db.adjustments.toArray(),
-        db.settings.toArray()
-      ]);
+  it('expone exactamente los cuatro stores permitidos', async () => {
+    await db.open();
 
-    const stocks = calculateProductStocks(products, movements);
-    const balances = accounts.map((account) =>
-      calculateAccountBalance({
-        account,
-        users,
-        consumptions,
-        items,
-        payments,
-        applications,
-        adjustments
+    expect(db.tables.map((table) => table.name).sort()).toEqual([
+      'appSessions',
+      'catalogProducts',
+      'pendingConsumptions',
+      'settings'
+    ]);
+  });
+
+  it('abre v2 antes de retirar de forma idempotente la base demo v1', async () => {
+    const legacy = new Dexie(LEGACY_LOCAL_DATABASE_NAME);
+    legacy.version(1).stores({ products: 'id' });
+    await legacy.open();
+    await legacy.table('products').put({ id: 'legacy-product' });
+    legacy.close();
+
+    await initializeLocalDatabase();
+    await initializeLocalDatabase();
+
+    expect(db.isOpen()).toBe(true);
+    expect(await Dexie.exists(LEGACY_LOCAL_DATABASE_NAME)).toBe(false);
+    await expect(db.settings.get('legacy_v1_removed')).resolves.toEqual({
+      key: 'legacy_v1_removed',
+      value: 'true'
+    });
+  });
+
+  it('impide dos filas de outbox con el mismo clientOperationId', async () => {
+    await db.open();
+    const pending = {
+      id: '00000000-0000-4000-8000-000000000001',
+      clientOperationId: '00000000-0000-4000-8000-000000000101',
+      sessionUserId: '00000000-0000-4000-8000-000000000201',
+      deviceId: 'device-1',
+      catalogVersion: 1,
+      items: [{ productId: '00000000-0000-4000-8000-000000000301', quantity: 1 }],
+      status: 'pending' as const,
+      attempts: 0,
+      createdAt: '2026-07-14T12:00:00.000Z',
+      updatedAt: '2026-07-14T12:00:00.000Z'
+    };
+
+    await db.pendingConsumptions.add(pending);
+
+    await expect(
+      db.pendingConsumptions.add({
+        ...pending,
+        id: '00000000-0000-4000-8000-000000000002'
       })
-    );
-    const adminPinHash = settings.find((setting) => setting.key === 'admin_pin_hash')?.value;
-
-    expect(accounts.length).toBeGreaterThanOrEqual(4);
-    expect(users.length).toBeGreaterThanOrEqual(8);
-    expect(products.length).toBeGreaterThanOrEqual(50);
-    expect(products.every((product) => product.imageUrl)).toBe(true);
-    expect(products.some((product) => product.imageCredit?.includes('Open Food Facts'))).toBe(true);
-    expect(consumptions.length).toBeGreaterThanOrEqual(12);
-    expect(consumptions.some((consumption) => consumption.status === 'voided')).toBe(true);
-    expect(payments.length).toBeGreaterThanOrEqual(5);
-    expect(applications.length).toBeGreaterThan(0);
-    expect(stocks.some((stock) => stock.isLow)).toBe(true);
-    expect(balances.some((balance) => balance.paid > 0)).toBe(true);
-    expect(balances.some((balance) => balance.unappliedCredit > 0)).toBe(true);
-    expect(adminPinHash && (await verifyPin('0000', adminPinHash))).toBe(true);
-  });
-
-  it('does not duplicate the demo catalog when seed runs concurrently', async () => {
-    await Promise.all([ensureSeedData(), ensureSeedData()]);
-
-    const products = await db.products.toArray();
-    const productNames = products.map((product) => product.name.trim().toLowerCase());
-
-    expect(new Set(productNames).size).toBe(productNames.length);
-  });
-
-  it('cleans an existing duplicated demo catalog on the next seed check', async () => {
-    await resetDemoData();
-
-    const product = (await db.products.where('name').equals('Agua Cristal 600 ml').first()) as Product;
-    await db.products.add({ ...product, id: createId('prd') });
-    await db.settings.delete('demo_cleanup_version');
-
-    await ensureSeedData();
-
-    const products = await db.products.toArray();
-    const duplicateCount = products.filter((entry) => entry.name === 'Agua Cristal 600 ml').length;
-    const productNames = products.map((entry) => entry.name.trim().toLowerCase());
-
-    expect(duplicateCount).toBe(1);
-    expect(new Set(productNames).size).toBe(productNames.length);
+    ).rejects.toMatchObject({ name: 'ConstraintError' });
+    await expect(db.pendingConsumptions.count()).resolves.toBe(1);
   });
 });

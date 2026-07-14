@@ -1,70 +1,81 @@
 # App Tienda
 
-PWA para una tienda/casa con dos modos:
+PWA para consumos, cuentas compartidas e inventario. Supabase es la única fuente oficial; el navegador conserva únicamente sesión, catálogo, configuración y compras pendientes para permitir compras sin conexión.
 
-- **Local/demo:** datos completos en IndexedDB para trabajar offline sin Supabase.
-- **Cloud:** usuarios con catalogo offline liviano, compras pendientes por dispositivo y admin multi-dispositivo con operaciones transaccionales en Supabase.
-
-## Arranque Local
+## Arranque
 
 ```bash
 npm install
 npm run dev
 ```
 
-Datos demo:
-
-- PIN usuarios: `1234`
-- PIN admin: `0000`
-- Sin variables de Supabase, la app carga la demo local completa.
-- Con Supabase configurado, la app no siembra demo en dispositivos nuevos; inicia sesion contra `login_pin` y cachea solo lo necesario.
-
-## Variables
-
-Copia `.env.example` a `.env` si vas a conectar nube/exportacion:
+Copia `.env.example` a `.env` y configura como mínimo:
 
 ```bash
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
-VITE_EXPORT_FUNCTION_URL=
-VITE_DEFAULT_SHEET_ID=
 ```
 
-Sin `VITE_EXPORT_FUNCTION_URL`, la exportacion descarga un JSON local con las pestanas que se enviarian a Google Sheets.
+La administración requiere internet. Los usuarios con sesión personal pueden consultar el catálogo y registrar compras sin conexión; la cola se reintenta con un UUID idempotente al recuperar la red.
 
-## Supabase
+## Base de datos
 
-1. Crea un proyecto en Supabase.
-2. Ejecuta `supabase/schema.sql`.
-3. Crea una cuenta y usuario admin con el bloque de bootstrap comentado al final del schema.
-4. Publica la funcion `supabase/functions/export-to-sheets` si necesitas exportar a Google Sheets.
-5. Configura secretos de la funcion:
-   - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
-   - `GOOGLE_PRIVATE_KEY`
-6. Comparte el Google Sheet con el email del service account.
+`supabase/schema.sql` recrea el esquema v2 desde cero. Es destructivo porque el modelo anterior contenía únicamente datos demo. El modelo tiene 11 tablas:
 
-RPCs principales:
+- `accounts`, `app_users`, `app_sessions`, `products`
+- `consumptions`, `consumption_items`
+- `financial_movements`, `payment_applications`
+- `inventory_movements`, `fifo_cost_allocations`
+- `audit_log`
 
-- `login_pin`: valida usuario + PIN y entrega sesion de app.
-- `get_user_catalog`: devuelve catalogo versionado, cuenta y saldo propio.
-- `create_consumption`: registra compras con `clientOperationId` idempotente.
-- `admin_get_snapshot`: refresca el cache completo del admin.
-- `admin_command`: ejecuta mutaciones admin con audit log e idempotencia.
-- `recalculate_fifo_costs`: recalcula costos FIFO de forma idempotente.
+Stock, costos FIFO, saldos y estado de pago se consultan mediante vistas. Los registros comerciales son inmutables y cualquier corrección se representa con una anulación o movimiento inverso.
 
-`sync_operations` queda como compatibilidad del modo local/v1; no es la ruta principal para produccion multi-dispositivo.
+Aplicación inicial:
 
-## Flujos Cubiertos
+1. Ejecuta `supabase/schema.sql` o la migración base de `supabase/migrations`.
+2. Ejecuta `supabase/seed.sql` para cargar la demostración repetible.
+3. Si necesitas el respaldo secundario en Google Sheets, despliega `apps-script/Code.gs` como Web App.
+4. Configura sus propiedades `SPREADSHEET_ID` y `WEBHOOK_TOKEN`.
+5. Sustituye los marcadores y ejecuta `supabase/apps-script-webhooks.sql`.
 
-- Usuario inicia sesion con PIN online, cachea catalogo y puede navegarlo offline.
-- Compra sin conexion queda como `pending` y se reintenta al reconectar.
-- El celular de usuario no descarga otros usuarios, pagos globales ni historial completo.
-- Admin crea/edita cuentas, usuarios y productos mediante RPC transaccional.
-- Admin registra pagos con bloqueo por cuenta para evitar doble aplicacion.
-- Inventario y anulaciones generan movimientos; FIFO se recalcula despues en servidor.
-- Imagenes del catalogo se cargan lazy y el service worker las cachea con `CacheFirst`.
+Datos del seed:
 
-## Comandos
+- Administrador: `admin` / `0000`
+- Usuarios demo: PIN `1234`
+
+Estas credenciales son solo para desarrollo. Antes de publicar, entra como administrador y usa el botón de llave del encabezado para cambiar el PIN temporal.
+
+RPC principales:
+
+- `login_pin`, `logout_session`, `change_my_pin`
+- `get_user_catalog`, `create_consumption`
+- `admin_get_snapshot`, `admin_get_audit_log`
+- `admin_command`
+
+Las tablas tienen RLS y permisos directos revocados. Los clientes operan únicamente mediante RPC. La auditoría automática registra actor, solicitud, dispositivo, motivo y valores anterior/nuevo; excluye PIN, hashes, salts y tokens.
+
+Las operaciones masivas de productos se ejecutan en una sola transacción e idempotency key. Si una fila falla, PostgreSQL revierte el lote completo. Los pagos, ajustes e inventario se corrigen mediante movimientos inversos enlazados; nunca se elimina físicamente un registro comercial.
+
+## Base local
+
+IndexedDB usa `app_tienda_v2` con exactamente cuatro stores:
+
+- `appSessions`
+- `catalogProducts`
+- `pendingConsumptions`
+- `settings`
+
+Al abrir v2 se elimina de forma idempotente la antigua `app_tienda_v1`. Los snapshots administrativos nunca se persisten localmente.
+
+Una compra rechazada por una causa permanente queda visible como “requiere revisión”; el usuario puede reintentarla tras corregir la causa o descartar únicamente el intento local no confirmado. Una sesión vencida conserva la compra como pendiente para el siguiente inicio de sesión del mismo usuario.
+
+## Respaldo en Google Sheets
+
+Sheets funciona como respaldo secundario automático, no como fuente de datos ni como exportación manual desde el navegador. Los Database Webhooks de Supabase envían cada `INSERT`, `UPDATE` y `DELETE` confirmado al Web App de Apps Script de manera asíncrona.
+
+El script mantiene un historial append-only en `_eventos` y un espejo por tabla. Deduplica entregas repetidas, marca los borrados y elimina secretos antes de escribir. La instalación completa está documentada en `apps-script/README.md`.
+
+## Verificación
 
 ```bash
 npm run lint

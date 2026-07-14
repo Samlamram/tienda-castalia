@@ -3,7 +3,7 @@ interface BrandLogoProps {
   className?: string;
 }
 
-const logoSource = '/brand/logo.png';
+const logoSource = '/brand/logo-transparent.png';
 
 export function BrandLogo({ alt = '', className = '' }: BrandLogoProps) {
   return (

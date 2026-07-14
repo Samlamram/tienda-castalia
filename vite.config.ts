@@ -13,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Tienda Castalia',
         short_name: 'Castalia',
-        description: 'Consumos, cuentas compartidas e inventario offline-first.',
+        description: 'Consumos, cuentas compartidas e inventario con compras offline seguras.',
         theme_color: '#052319',
         background_color: '#f7f8f3',
         display: 'standalone',

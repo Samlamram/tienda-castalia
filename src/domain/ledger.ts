@@ -1,65 +1,104 @@
 import type {
   Account,
   AccountBalance,
-  BalanceAdjustment,
   Consumption,
+  ConsumptionCost,
   ConsumptionItem,
+  ConsumptionPaymentStatus,
+  FifoCostAllocation,
+  FinancialMovement,
   InventoryMovement,
-  Payment,
   PaymentApplication,
   Product,
   ProductStock,
   UserBalance
 } from './types';
 
-function round(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+const MONEY_FACTOR = 100;
+const QUANTITY_FACTOR = 1_000;
+
+function round(value: number, factor: number): number {
+  return Math.round((value + Number.EPSILON) * factor) / factor;
 }
 
-function confirmedConsumptionIds(consumptions: Consumption[]): Set<string> {
-  return new Set(consumptions.filter((item) => item.status === 'confirmed').map((item) => item.id));
+export function roundMoney(value: number): number {
+  return round(value, MONEY_FACTOR);
+}
+
+export function roundQuantity(value: number): number {
+  return round(value, QUANTITY_FACTOR);
+}
+
+function applicationsForMovement(
+  movementId: string,
+  applications: PaymentApplication[]
+): number {
+  return applications
+    .filter((application) => application.financialMovementId === movementId)
+    .reduce((sum, application) => sum + application.amount, 0);
+}
+
+function unappliedPaymentForUser(
+  userId: string,
+  movements: FinancialMovement[],
+  applications: PaymentApplication[]
+): number {
+  return movements
+    .filter(
+      (movement) =>
+        (movement.movementType === 'payment' ||
+          movement.movementType === 'payment_reversal') &&
+        (movement.paidByUserId ?? movement.userId) === userId
+    )
+    .reduce(
+      (sum, movement) =>
+        sum + movement.amount - applicationsForMovement(movement.id, applications),
+      0
+    );
 }
 
 export function calculateUserBalances(input: {
   accountId?: string;
   users: { id: string; accountId?: string }[];
   consumptions: Consumption[];
-  items: ConsumptionItem[];
-  payments: Payment[];
+  financialMovements: FinancialMovement[];
   applications: PaymentApplication[];
-  adjustments: BalanceAdjustment[];
 }): UserBalance[] {
-  const confirmedIds = confirmedConsumptionIds(input.consumptions);
   const scopedUsers = input.accountId
     ? input.users.filter((user) => user.accountId === input.accountId)
     : input.users;
 
   return scopedUsers.map((user) => {
-    const consumed = input.items
-      .filter((item) => item.userId === user.id && confirmedIds.has(item.consumptionId))
-      .reduce((sum, item) => sum + item.total, 0);
+    const consumed = input.consumptions
+      .filter((consumption) => consumption.userId === user.id && consumption.status === 'confirmed')
+      .reduce((sum, consumption) => sum + consumption.total, 0);
     const appliedPaid = input.applications
       .filter((application) => application.userId === user.id)
       .reduce((sum, application) => sum + application.amount, 0);
-    const unappliedUserPaid = input.payments
+    const unappliedCredit = unappliedPaymentForUser(
+      user.id,
+      input.financialMovements,
+      input.applications
+    );
+    const adjustments = input.financialMovements
       .filter(
-        (payment) =>
-          payment.paidByUserId === user.id ||
-          (!payment.paidByUserId && payment.targetType === 'user' && payment.userId === user.id)
+        (movement) =>
+          (movement.movementType === 'adjustment' ||
+            movement.movementType === 'adjustment_reversal') &&
+          movement.scope === 'user' &&
+          movement.userId === user.id
       )
-      .reduce((sum, payment) => sum + payment.unappliedAmount, 0);
-    const adjustments = input.adjustments
-      .filter((adjustment) => adjustment.scope === 'user' && adjustment.userId === user.id)
-      .reduce((sum, adjustment) => sum + adjustment.amount, 0);
+      .reduce((sum, movement) => sum + movement.amount, 0);
+    const paid = appliedPaid + unappliedCredit;
 
-    const paid = appliedPaid + unappliedUserPaid;
     return {
       userId: user.id,
       accountId: user.accountId,
-      consumed: round(consumed),
-      paid: round(paid),
-      adjustments: round(adjustments),
-      balance: round(consumed - paid + adjustments)
+      consumed: roundMoney(consumed),
+      paid: roundMoney(paid),
+      adjustments: roundMoney(adjustments),
+      balance: roundMoney(consumed - paid + adjustments),
+      unappliedCredit: roundMoney(unappliedCredit)
     };
   });
 }
@@ -68,34 +107,38 @@ export function calculateAccountBalance(input: {
   account: Account;
   users: { id: string; accountId?: string }[];
   consumptions: Consumption[];
-  items: ConsumptionItem[];
-  payments: Payment[];
+  financialMovements: FinancialMovement[];
   applications: PaymentApplication[];
-  adjustments: BalanceAdjustment[];
 }): AccountBalance {
   const users = calculateUserBalances({
     accountId: input.account.id,
     users: input.users,
     consumptions: input.consumptions,
-    items: input.items,
-    payments: input.payments,
-    applications: input.applications,
-    adjustments: input.adjustments
+    financialMovements: input.financialMovements,
+    applications: input.applications
   });
+  const accountAdjustments = input.financialMovements
+    .filter(
+      (movement) =>
+        (movement.movementType === 'adjustment' ||
+          movement.movementType === 'adjustment_reversal') &&
+        movement.scope === 'account' &&
+        movement.accountId === input.account.id
+    )
+    .reduce((sum, movement) => sum + movement.amount, 0);
   const consumed = users.reduce((sum, user) => sum + user.consumed, 0);
   const paid = users.reduce((sum, user) => sum + user.paid, 0);
-  const adjustments = users.reduce((sum, user) => sum + user.adjustments, 0);
-  const unappliedCredit = input.payments
-    .filter((payment) => users.some((user) => user.userId === payment.paidByUserId))
-    .reduce((sum, payment) => sum + payment.unappliedAmount, 0);
+  const adjustments =
+    users.reduce((sum, user) => sum + user.adjustments, 0) + accountAdjustments;
+  const unappliedCredit = users.reduce((sum, user) => sum + user.unappliedCredit, 0);
 
   return {
     accountId: input.account.id,
-    consumed: round(consumed),
-    paid: round(paid),
-    adjustments: round(adjustments),
-    balance: round(consumed - paid + adjustments),
-    unappliedCredit: round(unappliedCredit),
+    consumed: roundMoney(consumed),
+    paid: roundMoney(paid),
+    adjustments: roundMoney(adjustments),
+    balance: roundMoney(consumed - paid + adjustments),
+    unappliedCredit: roundMoney(unappliedCredit),
     users
   };
 }
@@ -108,48 +151,119 @@ export function calculateProductStocks(
     const stock = movements
       .filter((movement) => movement.productId === product.id)
       .reduce((sum, movement) => sum + movement.quantityDelta, 0);
+    const roundedStock = roundQuantity(stock);
 
     return {
       productId: product.id,
-      stock: round(stock),
+      stock: roundedStock,
       stockMin: product.stockMin,
-      isLow: stock <= product.stockMin
+      isLow: roundedStock <= product.stockMin
     };
   });
 }
 
-export function itemOpenAmount(
-  item: ConsumptionItem,
-  consumptions: Consumption[],
+export function consumptionOpenAmount(
+  consumption: Consumption,
   applications: PaymentApplication[]
 ): number {
-  const consumption = consumptions.find((entry) => entry.id === item.consumptionId);
-  if (!consumption || consumption.status !== 'confirmed') return 0;
+  if (consumption.status !== 'confirmed') return 0;
   const paid = applications
-    .filter((application) => application.consumptionItemId === item.id)
+    .filter((application) => application.consumptionId === consumption.id)
     .reduce((sum, application) => sum + application.amount, 0);
-  return round(Math.max(0, item.total - paid));
+  return roundMoney(Math.max(0, consumption.total - paid));
 }
 
-export function calculateOpenItems(input: {
+export function calculateConsumptionPaymentStatuses(input: {
+  consumptions: Consumption[];
+  applications: PaymentApplication[];
+}): ConsumptionPaymentStatus[] {
+  return input.consumptions.map((consumption) => {
+    const paid = input.applications
+      .filter((application) => application.consumptionId === consumption.id)
+      .reduce((sum, application) => sum + application.amount, 0);
+    const normalizedPaid = roundMoney(Math.max(0, paid));
+    const openAmount = consumptionOpenAmount(consumption, input.applications);
+    const status =
+      consumption.status === 'voided'
+        ? ('voided' as const)
+        : openAmount === 0
+          ? ('paid' as const)
+          : normalizedPaid > 0
+            ? ('partial' as const)
+            : ('unpaid' as const);
+
+    return {
+      consumptionId: consumption.id,
+      userId: consumption.userId,
+      accountId: consumption.accountId,
+      total: roundMoney(consumption.total),
+      paid: consumption.status === 'voided' ? 0 : normalizedPaid,
+      openAmount,
+      status
+    };
+  });
+}
+
+export function calculateOpenConsumptions(input: {
   accountId?: string;
   userId?: string;
   userIds?: string[];
   consumptions: Consumption[];
-  items: ConsumptionItem[];
   applications: PaymentApplication[];
-}): Array<ConsumptionItem & { openAmount: number }> {
+}): Array<Consumption & { openAmount: number }> {
   const userIdSet = input.userIds ? new Set(input.userIds) : undefined;
-  return input.items
-    .filter((item) => {
-      if (input.userId) return item.userId === input.userId;
-      if (userIdSet) return userIdSet.has(item.userId);
-      return input.accountId ? item.accountId === input.accountId : true;
+
+  return input.consumptions
+    .filter((consumption) => {
+      if (input.userId) return consumption.userId === input.userId;
+      if (userIdSet) return userIdSet.has(consumption.userId);
+      return input.accountId ? consumption.accountId === input.accountId : true;
     })
-    .map((item) => ({
-      ...item,
-      openAmount: itemOpenAmount(item, input.consumptions, input.applications)
+    .map((consumption) => ({
+      ...consumption,
+      openAmount: consumptionOpenAmount(consumption, input.applications)
     }))
-    .filter((item) => item.openAmount > 0)
+    .filter((consumption) => consumption.openAmount > 0)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export function calculateConsumptionCosts(input: {
+  consumptions: Consumption[];
+  items: ConsumptionItem[];
+  allocations: FifoCostAllocation[];
+}): ConsumptionCost[] {
+  return input.consumptions.map((consumption) => {
+    if (consumption.status === 'voided') {
+      return {
+        consumptionId: consumption.id,
+        costTotal: 0,
+        pendingCostQuantity: 0,
+        costStatus: 'final'
+      };
+    }
+
+    const items = input.items.filter((item) => item.consumptionId === consumption.id);
+    let costTotal = 0;
+    let pendingCostQuantity = 0;
+
+    for (const item of items) {
+      const allocations = input.allocations.filter(
+        (allocation) => allocation.consumptionItemId === item.id
+      );
+      const allocatedQuantity = allocations.reduce(
+        (sum, allocation) => sum + allocation.quantity,
+        0
+      );
+      costTotal += allocations.reduce((sum, allocation) => sum + allocation.totalCost, 0);
+      pendingCostQuantity += Math.max(0, item.quantity - allocatedQuantity);
+    }
+
+    const roundedPending = roundQuantity(pendingCostQuantity);
+    return {
+      consumptionId: consumption.id,
+      costTotal: roundMoney(costTotal),
+      pendingCostQuantity: roundedPending,
+      costStatus: roundedPending > 0 ? 'pending_inventory' : 'final'
+    };
+  });
 }

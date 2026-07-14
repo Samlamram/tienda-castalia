@@ -1,81 +1,47 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
-  Account,
-  AccountTransfer,
   AppSession,
-  BalanceAdjustment,
   CatalogProduct,
-  Consumption,
-  ConsumptionItem,
-  ExportBatch,
-  InventoryLot,
-  InventoryMovement,
-  Payment,
-  PaymentApplication,
   PendingConsumption,
-  PersonUser,
-  Product,
-  Purchase,
-  Setting,
-  SyncOperation
+  Setting
 } from '../domain/types';
 
+export const LOCAL_DATABASE_NAME = 'app_tienda_v2';
+export const LEGACY_LOCAL_DATABASE_NAME = 'app_tienda_v1';
+const LEGACY_CLEANUP_SETTING = 'legacy_v1_removed';
+
+/**
+ * The browser database is only an offline cache/outbox. Business and
+ * administrative records always come from Supabase and are kept in memory.
+ */
 export class TiendaDatabase extends Dexie {
-  accounts!: EntityTable<Account, 'id'>;
-  users!: EntityTable<PersonUser, 'id'>;
-  products!: EntityTable<Product, 'id'>;
-  consumptions!: EntityTable<Consumption, 'id'>;
-  consumptionItems!: EntityTable<ConsumptionItem, 'id'>;
-  payments!: EntityTable<Payment, 'id'>;
-  paymentApplications!: EntityTable<PaymentApplication, 'id'>;
-  purchases!: EntityTable<Purchase, 'id'>;
-  inventoryLots!: EntityTable<InventoryLot, 'id'>;
-  inventoryMovements!: EntityTable<InventoryMovement, 'id'>;
-  adjustments!: EntityTable<BalanceAdjustment, 'id'>;
-  accountTransfers!: EntityTable<AccountTransfer, 'id'>;
-  syncOperations!: EntityTable<SyncOperation, 'id'>;
-  exportBatches!: EntityTable<ExportBatch, 'id'>;
-  settings!: EntityTable<Setting, 'key'>;
   appSessions!: EntityTable<AppSession, 'key'>;
   catalogProducts!: EntityTable<CatalogProduct, 'id'>;
   pendingConsumptions!: EntityTable<PendingConsumption, 'id'>;
+  settings!: EntityTable<Setting, 'key'>;
 
   constructor() {
-    super('app_tienda_v1');
+    super(LOCAL_DATABASE_NAME);
     this.version(1).stores({
-      accounts: 'id, status, name, updatedAt',
-      users: 'id, accountId, status, name, updatedAt',
-      products: 'id, status, category, name, updatedAt',
-      consumptions: 'id, accountId, userId, status, createdAt, costStatus',
-      consumptionItems:
-        'id, consumptionId, accountId, userId, productId, createdAt, costStatus, pendingCostQuantity',
-      payments: 'id, accountId, userId, targetType, createdAt',
-      paymentApplications: 'id, paymentId, accountId, userId, consumptionItemId, createdAt',
-      purchases: 'id, productId, createdAt',
-      inventoryLots: 'id, productId, purchaseId, remainingQuantity, createdAt',
-      inventoryMovements: 'id, productId, type, referenceId, createdAt',
-      adjustments: 'id, accountId, userId, scope, createdAt',
-      accountTransfers: 'id, userId, fromAccountId, toAccountId, createdAt',
-      syncOperations: 'id, entity, entityId, status, createdAt',
-      exportBatches: 'id, sheetId, dateFrom, dateTo, rowsHash, status, createdAt',
-      settings: 'key'
-    });
-    this.version(2).stores({
       appSessions: 'key, role, userId, expiresAt, updatedAt',
       catalogProducts: 'id, status, category, name, version, updatedAt',
-      pendingConsumptions: 'id, clientOperationId, sessionUserId, accountId, status, createdAt, updatedAt'
-    });
-    this.version(3).stores({
-      users: 'id, accountId, status, name, updatedAt',
-      consumptions: 'id, accountId, userId, status, createdAt, costStatus',
-      consumptionItems:
-        'id, consumptionId, accountId, userId, productId, createdAt, costStatus, pendingCostQuantity',
-      payments: 'id, accountId, userId, paidByUserId, targetType, createdAt',
-      paymentApplications: 'id, paymentId, accountId, userId, consumptionItemId, createdAt',
-      adjustments: 'id, accountId, userId, scope, createdAt',
-      accountTransfers: 'id, userId, fromAccountId, toAccountId, createdAt'
+      pendingConsumptions:
+        'id, &clientOperationId, sessionUserId, accountId, status, createdAt, updatedAt',
+      settings: 'key'
     });
   }
 }
 
 export const db = new TiendaDatabase();
+
+/**
+ * Opens v2 first and then retires the demo-era database. Cleanup is idempotent;
+ * callers may retry it after another browser tab releases the legacy database.
+ */
+export async function initializeLocalDatabase(): Promise<void> {
+  await db.open();
+  if ((await db.settings.get(LEGACY_CLEANUP_SETTING))?.value === 'true') return;
+
+  await Dexie.delete(LEGACY_LOCAL_DATABASE_NAME);
+  await db.settings.put({ key: LEGACY_CLEANUP_SETTING, value: 'true' });
+}

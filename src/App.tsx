@@ -1,18 +1,28 @@
 import type { FormEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
 import { BrandLogo } from './components/BrandLogo';
 import { Kiosk } from './components/Kiosk';
-import { ensureSeedData } from './data/seed';
+import { initializeLocalDatabase } from './data/db';
 import type { AppSession } from './domain/types';
+import { useAdminData } from './hooks/useAdminData';
 import { useCloudUserData } from './hooks/useCloudUserData';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
-import { useTiendaData } from './hooks/useTiendaData';
-import { changeCurrentPin, clearStoredSession, getStoredSession, loginPin } from './services/auth';
-import { loadAdminSnapshot } from './services/adminApi';
+import {
+  changeCurrentPin,
+  getStoredSession,
+  isSessionAuthenticationError,
+  loginPin,
+  logoutSession
+} from './services/auth';
 import { refreshCatalog } from './services/catalog';
-import { queueOrSubmitConsumption, syncPendingConsumptions } from './services/consumptions';
-import { isSyncConfigured, syncNow } from './services/sync';
+import {
+  discardReviewedConsumption,
+  queueOrSubmitConsumption,
+  retryReviewedConsumption,
+  syncPendingConsumptions
+} from './services/consumptions';
+import { isSyncConfigured } from './services/sync';
 
 type AuthSession =
   | { role: 'admin'; cloudSession?: AppSession }
@@ -25,31 +35,50 @@ function authSessionFromAppSession(session: AppSession): AuthSession {
 }
 
 export function App() {
-  const cloudMode = isSyncConfigured();
-  const data = useTiendaData();
   const online = useOnlineStatus();
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(null);
-  const [message, setMessage] = useState('Listo para trabajar offline.');
+  const sessionRef = useRef<AuthSession | null>(null);
+  const [message, setMessage] = useState('');
   const cloudUserData = useCloudUserData(session?.role === 'user' ? session.cloudSession : null);
+  const adminData = useAdminData(session?.role === 'admin' ? session.cloudSession : null, online);
+  const logout = useCallback(() => {
+    const cloudSession = sessionRef.current?.cloudSession;
+    setSession(null);
+    void logoutSession(cloudSession).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function boot() {
       try {
-        if (!cloudMode) {
-          await ensureSeedData();
-          return;
-        }
-
+        await initializeLocalDatabase();
         const stored = await getStoredSession();
         if (!stored) return;
         let current = stored;
 
-        if (online) {
-          if (stored.role === 'user') current = await refreshCatalog(stored);
-          if (stored.role === 'admin') await loadAdminSnapshot(stored);
+        if (navigator.onLine && stored.role === 'user') {
+          try {
+            current = await refreshCatalog(stored);
+          } catch (error) {
+            if (isSessionAuthenticationError(error)) {
+              await logoutSession(stored).catch(() => undefined);
+              if (!cancelled) setMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.');
+              return;
+            }
+            if (!cancelled) {
+              setMessage(
+                error instanceof Error
+                  ? `Se usará el catálogo guardado: ${error.message}`
+                  : 'Se usará el catálogo guardado.'
+              );
+            }
+          }
         }
 
         if (!cancelled) {
@@ -66,35 +95,37 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [cloudMode, online]);
+  }, []);
 
   useEffect(() => {
-    if (!online || !isSyncConfigured()) return;
+    if (!online || !isSyncConfigured() || session?.role !== 'user' || !session.cloudSession) return;
+    const userSession = session.cloudSession;
 
     const run = async () => {
       try {
-        if (!cloudMode) {
-          await syncNow();
+        const result = await syncPendingConsumptions(userSession);
+        if (result.requiresLogin) {
+          setMessage('Tu sesión expiró. La compra quedó guardada para revisarla al volver a iniciar sesión.');
+          logout();
           return;
         }
-
-        const stored = await getStoredSession();
-        if (!stored) return;
-
-        if (stored.role === 'user') {
-          const result = await syncPendingConsumptions(stored);
-          await refreshCatalog(stored);
-          if (result.submitted > 0) {
-            setMessage(
-              `${result.submitted} compra${result.submitted === 1 ? '' : 's'} pendiente${
-                result.submitted === 1 ? '' : 's'
-              } sincronizada${result.submitted === 1 ? '' : 's'}.`
-            );
+        await refreshCatalog(userSession);
+        if (result.submitted > 0) {
+          setMessage(
+            `${result.submitted} compra${result.submitted === 1 ? '' : 's'} pendiente${
+              result.submitted === 1 ? '' : 's'
+            } sincronizada${result.submitted === 1 ? '' : 's'}.`
+          );
+          if (userSession.deviceMode === 'shared') {
+            logout();
           }
-        } else {
-          await loadAdminSnapshot(stored);
         }
       } catch (error) {
+        if (isSessionAuthenticationError(error)) {
+          setMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.');
+          logout();
+          return;
+        }
         setMessage(error instanceof Error ? error.message : 'Sincronizacion fallida.');
       }
     };
@@ -102,7 +133,13 @@ export function App() {
     run();
     const interval = window.setInterval(run, 30_000);
     return () => window.clearInterval(interval);
-  }, [cloudMode, online]);
+  }, [logout, online, session]);
+
+  useEffect(() => {
+    if (session?.role !== 'admin' || !adminData.error || !isSessionAuthenticationError(adminData.error)) return;
+    setMessage('Tu sesión administrativa ya no es válida. Inicia sesión nuevamente.');
+    logout();
+  }, [adminData.error, logout, session?.role]);
 
   useEffect(() => {
     if (!message) return;
@@ -110,28 +147,97 @@ export function App() {
     return () => window.clearTimeout(timeout);
   }, [message]);
 
-  const activeData = session?.role === 'user' && cloudMode ? cloudUserData : data;
+  const activeData = cloudUserData;
   const loggedUser = session?.role === 'user' ? activeData.users.find((user) => user.id === session.userId) : undefined;
-
-  function logout() {
-    clearStoredSession().catch(() => undefined);
-    setSession(null);
-  }
 
   async function handleAuthenticatedSession(nextSession: AppSession) {
     let current = nextSession;
-    if (cloudMode && online) {
-      if (nextSession.role === 'user') current = await refreshCatalog(nextSession);
-      if (nextSession.role === 'admin') await loadAdminSnapshot(nextSession);
+    if (online && nextSession.role === 'user') {
+      try {
+        current = await refreshCatalog(nextSession);
+      } catch (error) {
+        if (isSessionAuthenticationError(error)) {
+          setMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.');
+          await logoutSession(nextSession).catch(() => undefined);
+          return;
+        }
+        setMessage(
+          error instanceof Error
+            ? `Sesión iniciada; se usará el catálogo guardado: ${error.message}`
+            : 'Sesión iniciada; se usará el catálogo guardado.'
+        );
+      }
     }
     setSession(authSessionFromAppSession(current));
   }
 
   async function handleChangePin(currentPin: string, newPin: string) {
-    if (session?.role !== 'user' || !session.cloudSession) {
-      throw new Error('No hay una sesion de usuario activa.');
+    if (!session?.cloudSession) {
+      throw new Error('No hay una sesion activa.');
     }
     await changeCurrentPin(session.cloudSession, currentPin, newPin);
+  }
+
+  async function handleConfirmConsumption(userId: string, cart: Parameters<typeof queueOrSubmitConsumption>[2]) {
+    const userSession = session?.role === 'user' ? session.cloudSession : undefined;
+    const result = await queueOrSubmitConsumption(userSession, userId, cart);
+
+    if (result.requiresLogin) {
+      logout();
+      return result;
+    }
+
+    if (online && userSession && result.status !== 'pending') {
+      try {
+        const refreshed = await refreshCatalog(userSession);
+        setSession(authSessionFromAppSession(refreshed));
+      } catch (error) {
+        if (isSessionAuthenticationError(error)) {
+          setMessage('La compra quedó guardada, pero tu sesión venció. Inicia sesión nuevamente.');
+          logout();
+          return result;
+        }
+        setMessage(
+          error instanceof Error
+            ? `Compra guardada; el saldo se actualizará después: ${error.message}`
+            : 'Compra guardada; el saldo se actualizará después.'
+        );
+      }
+    }
+
+    return result;
+  }
+
+  async function handleRetryPendingConsumption(pendingId: string) {
+    const userSession = session?.role === 'user' ? session.cloudSession : undefined;
+    const result = await retryReviewedConsumption(userSession, pendingId);
+    if (result.requiresLogin) {
+      logout();
+      return result;
+    }
+    if (result.status === 'confirmed' && userSession) {
+      try {
+        const refreshed = await refreshCatalog(userSession);
+        setSession(authSessionFromAppSession(refreshed));
+      } catch (error) {
+        if (isSessionAuthenticationError(error)) {
+          setMessage('La compra se confirmó, pero tu sesión venció. Inicia sesión nuevamente.');
+          logout();
+          return result;
+        }
+        setMessage(
+          error instanceof Error
+            ? `Compra confirmada; el saldo se actualizará después: ${error.message}`
+            : 'Compra confirmada; el saldo se actualizará después.'
+        );
+      }
+    }
+    return result;
+  }
+
+  async function handleDiscardPendingConsumption(pendingId: string) {
+    if (session?.role !== 'user') throw new Error('No hay una sesión de usuario activa.');
+    await discardReviewedConsumption(session.userId, pendingId);
   }
 
   if (!ready) {
@@ -149,7 +255,7 @@ export function App() {
         session?.role === 'user' ? 'app-shell user-shell' : session?.role === 'admin' ? 'app-shell admin-shell' : 'app-shell'
       }
     >
-      {message ? <div className="toast">{message}</div> : null}
+      {message ? <div className="toast" role="status" aria-live="polite">{message}</div> : null}
 
       {!session ? <LoginScreen onLogin={handleAuthenticatedSession} onMessage={setMessage} /> : null}
 
@@ -161,20 +267,81 @@ export function App() {
           onLogout={logout}
           isSharedDevice={session.cloudSession?.deviceMode !== 'personal'}
           onChangePin={handleChangePin}
-          onConfirmConsumption={(userId, cart) => queueOrSubmitConsumption(session.cloudSession, userId, cart)}
+          onConfirmConsumption={handleConfirmConsumption}
+          onRetryPendingConsumption={handleRetryPendingConsumption}
+          onDiscardPendingConsumption={handleDiscardPendingConsumption}
         />
       ) : null}
 
       {session?.role === 'admin' ? (
-        <AdminPanel
-          data={data}
-          onMessage={setMessage}
-          onLogout={logout}
-          online={online}
-          adminSession={session.cloudSession}
-        />
+        !online ? (
+          <AdminConnectionGate onLogout={logout} />
+        ) : adminData.loading && !adminData.snapshot.generatedAt ? (
+          <section className="loading-screen">
+            <BrandLogo alt="Tienda Castalia" className="loading-logo" />
+            <p className="muted">Cargando administracion...</p>
+          </section>
+        ) : adminData.error && !adminData.snapshot.generatedAt ? (
+          <AdminLoadError message={adminData.error} onRetry={adminData.refresh} onLogout={logout} />
+        ) : (
+          <AdminPanel
+            data={adminData.data}
+            onMessage={setMessage}
+            onLogout={logout}
+            online={online}
+            adminSession={session.cloudSession}
+            onRefresh={adminData.refresh}
+            onChangePin={handleChangePin}
+          />
+        )
       ) : null}
     </main>
+  );
+}
+
+function AdminConnectionGate({ onLogout }: { onLogout: () => void }) {
+  return (
+    <section className="loading-screen admin-connection-gate">
+      <BrandLogo alt="Tienda Castalia" className="loading-logo" />
+      <h1>Administracion sin conexion</h1>
+      <p className="muted">Por seguridad, los datos administrativos solo se consultan y modifican con internet.</p>
+      <button type="button" onClick={onLogout}>Salir</button>
+    </section>
+  );
+}
+
+function AdminLoadError({
+  message,
+  onRetry,
+  onLogout
+}: {
+  message: string;
+  onRetry: () => Promise<void>;
+  onLogout: () => void;
+}) {
+  const [retrying, setRetrying] = useState(false);
+
+  async function retry() {
+    setRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  return (
+    <section className="loading-screen admin-connection-gate">
+      <BrandLogo alt="Tienda Castalia" className="loading-logo" />
+      <h1>No se pudo cargar la administracion</h1>
+      <p className="login-error-message">{message}</p>
+      <div className="inline-actions">
+        <button type="button" onClick={() => void retry()} disabled={retrying}>
+          {retrying ? 'Reintentando...' : 'Reintentar'}
+        </button>
+        <button type="button" className="ghost" onClick={onLogout}>Salir</button>
+      </div>
+    </section>
   );
 }
 
@@ -243,6 +410,7 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
 
         <div className="login-inputs-group">
           <input
+            aria-label="Usuario"
             value={username}
             onChange={(event) => handleUsernameChange(event.target.value)}
             placeholder="Usuario"
@@ -252,6 +420,7 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
             className={error ? 'input-error' : ''}
           />
           <input
+            aria-label="PIN de acceso"
             value={password}
             onChange={(event) => handlePasswordChange(event.target.value)}
             placeholder="PIN de acceso"
@@ -272,7 +441,7 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
           <span>Este es mi dispositivo personal</span>
         </label>
 
-        {error ? <div className="login-error-message">{error}</div> : null}
+        {error ? <div className="login-error-message" role="alert">{error}</div> : null}
         {helpMessage ? <div className="login-help-message">{helpMessage}</div> : null}
 
         <button type="submit" className="login-submit-btn" disabled={submitting}>
@@ -292,7 +461,7 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
         >
           Olvide mi PIN
         </button>
-        <p className="demo-help">Demo: admin / 0000 - Papa, Mama, Hijo / 1234</p>
+        {import.meta.env.DEV ? <p className="demo-help">Demo local: admin / 0000 · usuarios / 1234</p> : null}
       </form>
     </section>
   );

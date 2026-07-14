@@ -1,343 +1,613 @@
-import { db } from '../data/db';
+import {
+  calculateAccountBalance,
+  calculateConsumptionCosts,
+  calculateConsumptionPaymentStatuses,
+  calculateProductStocks,
+  calculateUserBalances
+} from '../domain/ledger';
 import type {
   Account,
-  AccountTransfer,
+  AdminSnapshot,
   AppSession,
-  BalanceAdjustment,
+  AuditLogEntry,
+  AuditValues,
   Consumption,
+  ConsumptionCost,
   ConsumptionItem,
+  ConsumptionPaymentStatus,
+  FifoCostAllocation,
+  FinancialMovement,
+  FinancialMovementType,
   InventoryMovement,
-  Payment,
+  InventoryMovementType,
   PaymentApplication,
   PersonUser,
   Product,
-  Purchase
+  ProductStock,
+  UserBalance,
+  AccountBalance
 } from '../domain/types';
-import { createId, nowIso } from '../utils/id';
 import { getSupabaseClient, isSyncConfigured } from './sync';
-import * as localOps from './operations';
 
-type SnapshotPayload = {
-  accounts?: unknown[];
-  users?: unknown[];
-  products?: unknown[];
-  consumptions?: unknown[];
-  consumptionItems?: unknown[];
-  consumption_items?: unknown[];
-  payments?: unknown[];
-  paymentApplications?: unknown[];
-  payment_applications?: unknown[];
-  purchases?: unknown[];
-  inventoryMovements?: unknown[];
-  inventory_movements?: unknown[];
-  adjustments?: unknown[];
-  accountTransfers?: unknown[];
-  account_transfers?: unknown[];
-};
+type JsonRow = Record<string, unknown>;
 
-function shouldUseCloud(session?: AppSession): boolean {
-  return Boolean(isSyncConfigured() && session?.token && !session.token.startsWith('local-'));
+export interface AuditLogFilters {
+  search?: string;
+  action?: string;
+  entityType?: string;
+  actorUserId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
 }
 
-function s(row: Record<string, unknown>, camel: string, snake = camel, fallback = ''): string {
-  const value = row[camel] ?? row[snake];
-  return typeof value === 'string' ? value : fallback;
+export interface AuditLogPage {
+  entries: AuditLogEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
-function n(row: Record<string, unknown>, camel: string, snake = camel, fallback = 0): number {
-  const value = Number(row[camel] ?? row[snake]);
-  return Number.isFinite(value) ? value : fallback;
+function row(value: unknown): JsonRow {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRow) : {};
 }
 
-function opt(row: Record<string, unknown>, camel: string, snake = camel): string | undefined {
-  const value = row[camel] ?? row[snake];
-  return typeof value === 'string' && value ? value : undefined;
+function value(source: JsonRow, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (source[key] !== undefined && source[key] !== null) return source[key];
+  }
+  return undefined;
 }
 
-function row(value: unknown): Record<string, unknown> {
-  return (value ?? {}) as Record<string, unknown>;
+function textValue(source: JsonRow, keys: string[], fallback = ''): string {
+  const found = value(source, ...keys);
+  return typeof found === 'string' ? found : fallback;
 }
 
-function mapAccount(value: unknown): Account {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    name: s(item, 'name'),
-    status: item.status === 'inactive' ? 'inactive' : 'active',
-    createdAt: s(item, 'createdAt', 'created_at', nowIso()),
-    updatedAt: s(item, 'updatedAt', 'updated_at', nowIso()),
-    version: n(item, 'version', 'version', 1)
-  };
+function optionalText(source: JsonRow, keys: string[]): string | undefined {
+  const found = value(source, ...keys);
+  return typeof found === 'string' && found.length > 0 ? found : undefined;
 }
 
-function mapUser(value: unknown): PersonUser {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    accountId: opt(item, 'accountId', 'account_id'),
-    name: s(item, 'name'),
-    username: opt(item, 'username'),
-    role: item.role === 'admin' ? 'admin' : 'user',
-    pinHash: s(item, 'pinHash', 'pin_hash'),
-    status: item.status === 'inactive' ? 'inactive' : 'active',
-    createdAt: s(item, 'createdAt', 'created_at', nowIso()),
-    updatedAt: s(item, 'updatedAt', 'updated_at', nowIso()),
-    version: n(item, 'version', 'version', 1)
-  };
+function numberValue(source: JsonRow, keys: string[], fallback = 0): number {
+  const parsed = Number(value(source, ...keys));
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function mapProduct(value: unknown): Product {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    name: s(item, 'name'),
-    category: s(item, 'category', 'category', 'General'),
-    price: n(item, 'price'),
-    stockMin: n(item, 'stockMin', 'stock_min'),
-    lastCost: n(item, 'lastCost', 'last_cost'),
-    imageUrl: opt(item, 'imageUrl', 'image_url'),
-    imageSourceUrl: opt(item, 'imageSourceUrl', 'image_source_url'),
-    imageCredit: opt(item, 'imageCredit', 'image_credit'),
-    status: item.status === 'inactive' ? 'inactive' : 'active',
-    createdAt: s(item, 'createdAt', 'created_at', nowIso()),
-    updatedAt: s(item, 'updatedAt', 'updated_at', nowIso()),
-    version: n(item, 'version', 'version', 1)
-  };
+function arrayValue(source: JsonRow, ...keys: string[]): unknown[] {
+  const found = value(source, ...keys);
+  return Array.isArray(found) ? found : [];
 }
 
-function mapConsumption(value: unknown): Consumption {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    accountId: opt(item, 'accountId', 'account_id'),
-    userId: s(item, 'userId', 'user_id'),
-    status: item.status === 'voided' ? 'voided' : 'confirmed',
-    total: n(item, 'total'),
-    costTotal: n(item, 'costTotal', 'cost_total'),
-    costStatus: item.costStatus === 'final' || item.cost_status === 'final' ? 'final' : 'pending_recalc',
-    createdAt: s(item, 'createdAt', 'created_at', nowIso()),
-    voidedAt: opt(item, 'voidedAt', 'voided_at'),
-    voidReason: opt(item, 'voidReason', 'void_reason')
-  };
+const SENSITIVE_AUDIT_KEYS = new Set([
+  'authorization',
+  'accesstoken',
+  'currentpin',
+  'hash',
+  'newpin',
+  'password',
+  'pin',
+  'pinhash',
+  'pinsalt',
+  'psessiontoken',
+  'refreshtoken',
+  'salt',
+  'secret',
+  'sessiontoken',
+  'token',
+  'tokenhash'
+]);
+
+function normalizedAuditKey(key: string): string {
+  return key.toLocaleLowerCase('en-US').replace(/[^a-z0-9]/g, '');
 }
 
-function mapConsumptionItem(value: unknown): ConsumptionItem {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    consumptionId: s(item, 'consumptionId', 'consumption_id'),
-    accountId: opt(item, 'accountId', 'account_id'),
-    userId: s(item, 'userId', 'user_id'),
-    productId: s(item, 'productId', 'product_id'),
-    productName: s(item, 'productName', 'product_name'),
-    quantity: n(item, 'quantity'),
-    unitPrice: n(item, 'unitPrice', 'unit_price'),
-    total: n(item, 'total'),
-    unitCost: n(item, 'unitCost', 'unit_cost'),
-    costTotal: n(item, 'costTotal', 'cost_total'),
-    pendingCostQuantity: n(item, 'pendingCostQuantity', 'pending_cost_quantity'),
-    costStatus: item.costStatus === 'final' || item.cost_status === 'final' ? 'final' : 'pending_recalc',
-    createdAt: s(item, 'createdAt', 'created_at', nowIso())
-  };
+function isSensitiveAuditKey(key: string): boolean {
+  const normalized = normalizedAuditKey(key);
+  return SENSITIVE_AUDIT_KEYS.has(normalized) ||
+    normalized.endsWith('token') ||
+    normalized.endsWith('tokenhash') ||
+    normalized.endsWith('pinhash') ||
+    normalized.endsWith('pinsalt');
 }
 
-function mapPayment(value: unknown): Payment {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    accountId: opt(item, 'accountId', 'account_id'),
-    targetType: item.targetType === 'user' || item.target_type === 'user' ? 'user' : 'account',
-    userId: opt(item, 'userId', 'user_id'),
-    paidByUserId: opt(item, 'paidByUserId', 'paid_by_user_id'),
-    amount: n(item, 'amount'),
-    unappliedAmount: n(item, 'unappliedAmount', 'unapplied_amount'),
-    note: opt(item, 'note'),
-    createdAt: s(item, 'createdAt', 'created_at', nowIso())
-  };
-}
+function sanitizeAuditValue(input: unknown): unknown {
+  if (Array.isArray(input)) return input.map(sanitizeAuditValue);
+  if (!input || typeof input !== 'object') return input;
 
-function mapPaymentApplication(value: unknown): PaymentApplication {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    paymentId: s(item, 'paymentId', 'payment_id'),
-    accountId: opt(item, 'accountId', 'account_id'),
-    userId: s(item, 'userId', 'user_id'),
-    consumptionItemId: s(item, 'consumptionItemId', 'consumption_item_id'),
-    amount: n(item, 'amount'),
-    createdAt: s(item, 'createdAt', 'created_at', nowIso())
-  };
-}
-
-function mapPurchase(value: unknown): Purchase {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    productId: s(item, 'productId', 'product_id'),
-    quantity: n(item, 'quantity'),
-    unitCost: n(item, 'unitCost', 'unit_cost'),
-    totalCost: n(item, 'totalCost', 'total_cost'),
-    note: opt(item, 'note'),
-    createdAt: s(item, 'createdAt', 'created_at', nowIso())
-  };
-}
-
-function mapMovement(value: unknown): InventoryMovement {
-  const item = row(value);
-  const type = s(item, 'type');
-  return {
-    id: s(item, 'id'),
-    productId: s(item, 'productId', 'product_id'),
-    type:
-      type === 'purchase' ||
-      type === 'consumption' ||
-      type === 'void_consumption' ||
-      type === 'adjustment' ||
-    type === 'cost_recalc'
-        ? type
-        : 'adjustment',
-    quantityDelta: n(item, 'quantityDelta', 'quantity_delta'),
-    unitCost: 'unitCost' in item || 'unit_cost' in item ? n(item, 'unitCost', 'unit_cost') : undefined,
-    referenceId: opt(item, 'referenceId', 'reference_id'),
-    note: opt(item, 'note'),
-    createdAt: s(item, 'createdAt', 'created_at', nowIso())
-  };
-}
-
-function mapAdjustment(value: unknown): BalanceAdjustment {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    accountId: opt(item, 'accountId', 'account_id'),
-    scope: item.scope === 'user' ? 'user' : 'account',
-    userId: opt(item, 'userId', 'user_id'),
-    amount: n(item, 'amount'),
-    note: s(item, 'note'),
-    createdAt: s(item, 'createdAt', 'created_at', nowIso())
-  };
-}
-
-function mapTransfer(value: unknown): AccountTransfer {
-  const item = row(value);
-  return {
-    id: s(item, 'id'),
-    userId: s(item, 'userId', 'user_id'),
-    fromAccountId: opt(item, 'fromAccountId', 'from_account_id'),
-    toAccountId: opt(item, 'toAccountId', 'to_account_id'),
-    movedBalance: n(item, 'movedBalance', 'moved_balance'),
-    note: s(item, 'note'),
-    createdAt: s(item, 'createdAt', 'created_at', nowIso())
-  };
-}
-
-async function adminCommand<T = unknown>(
-  session: AppSession | undefined,
-  command: string,
-  payload: Record<string, unknown>
-): Promise<T | null> {
-  if (!shouldUseCloud(session)) return null;
-  const supabase = getSupabaseClient();
-  if (!supabase || !session) throw new Error('Supabase no esta configurado.');
-
-  const { data, error } = await supabase.rpc('admin_command', {
-    p_session_token: session.token,
-    p_idempotency_key: createId('adm'),
-    p_command: command,
-    p_payload: payload
-  });
-
-  if (error) throw new Error(error.message);
-  await loadAdminSnapshot(session);
-  return data as T;
-}
-
-export async function loadAdminSnapshot(session: AppSession | undefined): Promise<void> {
-  if (!shouldUseCloud(session)) return;
-  const supabase = getSupabaseClient();
-  if (!supabase || !session) throw new Error('Supabase no esta configurado.');
-
-  const { data, error } = await supabase.rpc('admin_get_snapshot', {
-    p_session_token: session.token
-  });
-
-  if (error) throw new Error(error.message);
-  const payload = (data ?? {}) as SnapshotPayload;
-  const consumptionItems = payload.consumptionItems ?? payload.consumption_items ?? [];
-  const paymentApplications = payload.paymentApplications ?? payload.payment_applications ?? [];
-  const inventoryMovements = payload.inventoryMovements ?? payload.inventory_movements ?? [];
-  const accountTransfers = payload.accountTransfers ?? payload.account_transfers ?? [];
-
-  await db.transaction(
-    'rw',
-    [
-      db.accounts,
-      db.users,
-      db.products,
-      db.consumptions,
-      db.consumptionItems,
-      db.payments,
-      db.paymentApplications,
-      db.purchases,
-      db.inventoryMovements,
-      db.adjustments,
-      db.accountTransfers
-    ],
-    async () => {
-      await Promise.all([
-        db.accounts.clear(),
-        db.users.clear(),
-        db.products.clear(),
-        db.consumptions.clear(),
-        db.consumptionItems.clear(),
-        db.payments.clear(),
-        db.paymentApplications.clear(),
-        db.purchases.clear(),
-        db.inventoryMovements.clear(),
-        db.adjustments.clear(),
-        db.accountTransfers.clear()
-      ]);
-      await db.accounts.bulkPut((payload.accounts ?? []).map(mapAccount));
-      await db.users.bulkPut((payload.users ?? []).map(mapUser));
-      await db.products.bulkPut((payload.products ?? []).map(mapProduct));
-      await db.consumptions.bulkPut((payload.consumptions ?? []).map(mapConsumption));
-      await db.consumptionItems.bulkPut(consumptionItems.map(mapConsumptionItem));
-      await db.payments.bulkPut((payload.payments ?? []).map(mapPayment));
-      await db.paymentApplications.bulkPut(paymentApplications.map(mapPaymentApplication));
-      await db.purchases.bulkPut((payload.purchases ?? []).map(mapPurchase));
-      await db.inventoryMovements.bulkPut(inventoryMovements.map(mapMovement));
-      await db.adjustments.bulkPut((payload.adjustments ?? []).map(mapAdjustment));
-      await db.accountTransfers.bulkPut(accountTransfers.map(mapTransfer));
-    }
+  return Object.fromEntries(
+    Object.entries(input as JsonRow)
+      .filter(([key]) => !isSensitiveAuditKey(key))
+      .map(([key, nested]) => [key, sanitizeAuditValue(nested)])
   );
 }
 
-export async function createAccount(input: { name: string }, session?: AppSession): Promise<Account | null> {
-  if (shouldUseCloud(session)) return adminCommand<Account>(session, 'create_account', input);
-  return localOps.createAccount(input.name);
+function auditValues(source: JsonRow, keys: string[]): AuditValues | undefined {
+  const found = value(source, ...keys);
+  return found && typeof found === 'object' && !Array.isArray(found)
+    ? (sanitizeAuditValue(found) as AuditValues)
+    : undefined;
 }
 
-export async function updateAccount(account: Account, session?: AppSession): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'update_account', account as unknown as Record<string, unknown>);
-    return;
+function mapAccount(input: unknown): Account {
+  const item = row(input);
+  return {
+    id: textValue(item, ['id']),
+    name: textValue(item, ['name']),
+    status: value(item, 'status') === 'inactive' ? 'inactive' : 'active',
+    archivedAt: optionalText(item, ['archivedAt', 'archived_at']),
+    archivedByUserId: optionalText(item, ['archivedByUserId', 'archivedBy', 'archived_by']),
+    archiveReason: optionalText(item, ['archiveReason', 'archive_reason']),
+    createdAt: textValue(item, ['createdAt', 'created_at']),
+    updatedAt: textValue(item, ['updatedAt', 'updated_at']),
+    version: numberValue(item, ['version'], 1)
+  };
+}
+
+function mapUser(input: unknown): PersonUser {
+  const item = row(input);
+  return {
+    id: textValue(item, ['id']),
+    accountId: optionalText(item, ['accountId', 'account_id']),
+    username: optionalText(item, ['username']),
+    name: textValue(item, ['name']),
+    role: value(item, 'role') === 'admin' ? 'admin' : 'user',
+    status: value(item, 'status') === 'inactive' ? 'inactive' : 'active',
+    archivedAt: optionalText(item, ['archivedAt', 'archived_at']),
+    archivedByUserId: optionalText(item, ['archivedByUserId', 'archivedBy', 'archived_by']),
+    archiveReason: optionalText(item, ['archiveReason', 'archive_reason']),
+    createdAt: textValue(item, ['createdAt', 'created_at']),
+    updatedAt: textValue(item, ['updatedAt', 'updated_at']),
+    version: numberValue(item, ['version'], 1)
+  };
+}
+
+function mapProduct(input: unknown): Product {
+  const item = row(input);
+  return {
+    id: textValue(item, ['id']),
+    name: textValue(item, ['name']),
+    category: textValue(item, ['category'], 'General'),
+    price: numberValue(item, ['price']),
+    stockMin: numberValue(item, ['stockMin', 'stock_min']),
+    lastCost: numberValue(item, ['lastCost', 'last_cost']),
+    imageUrl: optionalText(item, ['imageUrl', 'image_url']),
+    imageSourceUrl: optionalText(item, ['imageSourceUrl', 'image_source_url']),
+    imageCredit: optionalText(item, ['imageCredit', 'image_credit']),
+    status: value(item, 'status') === 'inactive' ? 'inactive' : 'active',
+    archivedAt: optionalText(item, ['archivedAt', 'archived_at']),
+    archivedByUserId: optionalText(item, ['archivedByUserId', 'archivedBy', 'archived_by']),
+    archiveReason: optionalText(item, ['archiveReason', 'archive_reason']),
+    createdAt: textValue(item, ['createdAt', 'created_at']),
+    updatedAt: textValue(item, ['updatedAt', 'updated_at']),
+    version: numberValue(item, ['version'], 1)
+  };
+}
+
+function mapConsumption(input: unknown): Consumption {
+  const item = row(input);
+  const costStatus = value(item, 'costStatus', 'cost_status');
+  return {
+    id: textValue(item, ['id']),
+    clientOperationId: textValue(item, ['clientOperationId', 'client_operation_id']),
+    accountId: optionalText(item, ['accountId', 'account_id']),
+    userId: textValue(item, ['userId', 'user_id']),
+    deviceId: optionalText(item, ['deviceId', 'device_id']),
+    status: value(item, 'status') === 'voided' ? 'voided' : 'confirmed',
+    total: numberValue(item, ['total']),
+    costTotal: numberValue(item, ['costTotal', 'cost_total']),
+    pendingCostQuantity: numberValue(item, ['pendingCostQuantity', 'pending_cost_quantity']),
+    costStatus: costStatus === 'final' ? 'final' : 'pending_inventory',
+    createdAt: textValue(item, ['createdAt', 'created_at']),
+    voidedAt: optionalText(item, ['voidedAt', 'voided_at']),
+    voidedByUserId: optionalText(item, ['voidedByUserId', 'voidedBy', 'voided_by']),
+    voidReason: optionalText(item, ['voidReason', 'void_reason']),
+    requestId: optionalText(item, ['requestId', 'request_id'])
+  };
+}
+
+function mapConsumptionItem(input: unknown): ConsumptionItem {
+  const item = row(input);
+  const costStatus = value(item, 'costStatus', 'cost_status');
+  return {
+    id: textValue(item, ['id']),
+    consumptionId: textValue(item, ['consumptionId', 'consumption_id']),
+    productId: textValue(item, ['productId', 'product_id']),
+    productName: textValue(item, ['productName', 'product_name']),
+    quantity: numberValue(item, ['quantity']),
+    unitPrice: numberValue(item, ['unitPrice', 'unit_price']),
+    total: numberValue(item, ['total']),
+    unitCost: numberValue(item, ['unitCost', 'unit_cost']),
+    costTotal: numberValue(item, ['costTotal', 'cost_total']),
+    pendingCostQuantity: numberValue(item, ['pendingCostQuantity', 'pending_cost_quantity']),
+    costStatus: costStatus === 'final' ? 'final' : 'pending_inventory',
+    createdAt: textValue(item, ['createdAt', 'created_at'])
+  };
+}
+
+function financialMovementType(input: unknown): FinancialMovementType {
+  return input === 'adjustment' || input === 'account_transfer' || input === 'payment_reversal' || input === 'adjustment_reversal'
+    ? input
+    : 'payment';
+}
+
+function mapFinancialMovement(input: unknown): FinancialMovement {
+  const item = row(input);
+  const id = textValue(item, ['id']);
+  return {
+    id,
+    accountId: optionalText(item, ['accountId', 'account_id']),
+    scope: value(item, 'scope') === 'user' ? 'user' : 'account',
+    userId: optionalText(item, ['userId', 'user_id']),
+    paidByUserId: optionalText(item, ['paidByUserId', 'paid_by_user_id']),
+    movementType: financialMovementType(value(item, 'movementType', 'movement_type', 'type')),
+    amount: numberValue(item, ['amount']),
+    fromAccountId: optionalText(item, ['fromAccountId', 'from_account_id']),
+    toAccountId: optionalText(item, ['toAccountId', 'to_account_id']),
+    note: optionalText(item, ['note']),
+    reversedMovementId: optionalText(item, ['reversedMovementId', 'reversed_movement_id']),
+    createdBy: optionalText(item, ['createdBy', 'created_by']),
+    requestId: textValue(item, ['requestId', 'request_id'], id),
+    unappliedAmount: numberValue(item, ['unappliedAmount', 'unapplied_amount']),
+    createdAt: textValue(item, ['createdAt', 'created_at'])
+  };
+}
+
+function mapPaymentApplication(input: unknown): PaymentApplication {
+  const item = row(input);
+  return {
+    id: textValue(item, ['id']),
+    financialMovementId: textValue(item, ['financialMovementId', 'financial_movement_id', 'paymentId', 'payment_id']),
+    accountId: optionalText(item, ['accountId', 'account_id']),
+    userId: textValue(item, ['userId', 'user_id']),
+    consumptionId: textValue(item, ['consumptionId', 'consumption_id']),
+    amount: numberValue(item, ['amount']),
+    reversedApplicationId: optionalText(item, ['reversedApplicationId', 'reversed_application_id']),
+    createdAt: textValue(item, ['createdAt', 'created_at'])
+  };
+}
+
+function inventoryMovementType(input: unknown): InventoryMovementType {
+  return input === 'consumption' || input === 'void_consumption' || input === 'adjustment' || input === 'adjustment_reversal'
+    ? input
+    : 'purchase';
+}
+
+function mapInventoryMovement(input: unknown): InventoryMovement {
+  const item = row(input);
+  const id = textValue(item, ['id']);
+  return {
+    id,
+    productId: textValue(item, ['productId', 'product_id']),
+    movementType: inventoryMovementType(value(item, 'movementType', 'movement_type', 'type')),
+    quantityDelta: numberValue(item, ['quantityDelta', 'quantity_delta']),
+    unitCost: numberValue(item, ['unitCost', 'unit_cost']),
+    consumptionItemId: optionalText(item, ['consumptionItemId', 'consumption_item_id']),
+    reversedMovementId: optionalText(item, ['reversedMovementId', 'reversed_movement_id']),
+    note: optionalText(item, ['note']),
+    createdBy: optionalText(item, ['createdBy', 'created_by']),
+    requestId: textValue(item, ['requestId', 'request_id'], id),
+    createdAt: textValue(item, ['createdAt', 'created_at'])
+  };
+}
+
+function mapFifoAllocation(input: unknown): FifoCostAllocation {
+  const item = row(input);
+  return {
+    id: textValue(item, ['id']),
+    productId: textValue(item, ['productId', 'product_id']),
+    consumptionItemId: optionalText(item, ['consumptionItemId', 'consumption_item_id']),
+    targetMovementId: textValue(item, ['targetMovementId', 'target_movement_id']),
+    sourceMovementId: textValue(item, ['sourceMovementId', 'source_movement_id']),
+    quantity: numberValue(item, ['quantity']),
+    unitCost: numberValue(item, ['unitCost', 'unit_cost']),
+    totalCost: numberValue(item, ['totalCost', 'total_cost', 'costTotal', 'cost_total']),
+    reversedAllocationId: optionalText(item, ['reversedAllocationId', 'reversed_allocation_id']),
+    createdAt: textValue(item, ['createdAt', 'created_at'])
+  };
+}
+
+export function mapAuditLogEntry(input: unknown): AuditLogEntry {
+  const item = row(input);
+  const id = textValue(item, ['id']);
+  const changed = value(item, 'changedFields', 'changed_fields');
+  return {
+    id,
+    requestId: textValue(item, ['requestId', 'request_id'], id),
+    idempotencyKey: optionalText(item, ['idempotencyKey', 'idempotency_key']),
+    actorUserId: optionalText(item, ['actorUserId', 'actor_user_id']),
+    actorName: optionalText(item, ['actorName', 'actor_name']),
+    action: (
+      [
+        'create',
+        'update',
+        'delete',
+        'archive',
+        'restore',
+        'void',
+        'reverse',
+        'command',
+        'login_failed',
+        'login_rejected',
+        'logout',
+        'pin_changed'
+      ] as const
+    ).includes(value(item, 'action') as AuditLogEntry['action'])
+      ? (value(item, 'action') as AuditLogEntry['action'])
+      : 'create',
+    entityType: textValue(item, ['entityType', 'entity_type']),
+    recordId: optionalText(item, ['recordId', 'record_id']),
+    beforeData: auditValues(item, ['beforeData', 'before_data']),
+    afterData: auditValues(item, ['afterData', 'after_data']),
+    changedFields: Array.isArray(changed)
+      ? changed.map(String).filter((field) => !isSensitiveAuditKey(field))
+      : [],
+    reason: optionalText(item, ['reason']),
+    deviceId: optionalText(item, ['deviceId', 'device_id']),
+    metadata: auditValues(item, ['metadata']),
+    createdAt: textValue(item, ['createdAt', 'created_at'])
+  };
+}
+
+function mapProductStock(input: unknown): ProductStock {
+  const item = row(input);
+  const stock = numberValue(item, ['stock', 'stockQuantity', 'stock_quantity']);
+  const stockMin = numberValue(item, ['stockMin', 'stock_min']);
+  return {
+    productId: textValue(item, ['productId', 'product_id']),
+    stock,
+    stockMin,
+    isLow: value(item, 'isLow', 'is_low') === true || stock <= stockMin,
+    lastCost: numberValue(item, ['lastCost', 'last_cost']),
+    inventoryValue: numberValue(item, ['inventoryValue', 'inventory_value'])
+  };
+}
+
+function mapConsumptionCost(input: unknown): ConsumptionCost {
+  const item = row(input);
+  const pending = numberValue(item, ['pendingCostQuantity', 'pending_cost_quantity', 'pendingQuantity', 'pending_quantity']);
+  return {
+    consumptionId: textValue(item, ['consumptionId', 'consumption_id']),
+    costTotal: numberValue(item, ['costTotal', 'cost_total']),
+    pendingCostQuantity: pending,
+    costStatus: value(item, 'costStatus', 'cost_status') === 'final' && pending <= 0 ? 'final' : 'pending_inventory'
+  };
+}
+
+function mapUserBalance(input: unknown): UserBalance {
+  const item = row(input);
+  return {
+    userId: textValue(item, ['userId', 'user_id']),
+    accountId: optionalText(item, ['accountId', 'account_id']),
+    consumed: numberValue(item, ['consumed']),
+    paid: numberValue(item, ['paid']),
+    adjustments: numberValue(item, ['adjustments']),
+    balance: numberValue(item, ['balance']),
+    unappliedCredit: numberValue(item, ['unappliedCredit', 'unapplied_credit'])
+  };
+}
+
+function mapAccountBalance(input: unknown, users: UserBalance[]): AccountBalance {
+  const item = row(input);
+  const accountId = textValue(item, ['accountId', 'account_id']);
+  return {
+    accountId,
+    consumed: numberValue(item, ['consumed']),
+    paid: numberValue(item, ['paid']),
+    adjustments: numberValue(item, ['adjustments']),
+    balance: numberValue(item, ['balance']),
+    unappliedCredit: numberValue(item, ['unappliedCredit', 'unapplied_credit']),
+    users: arrayValue(item, 'users').length > 0
+      ? arrayValue(item, 'users').map(mapUserBalance)
+      : users.filter((entry) => entry.accountId === accountId)
+  };
+}
+
+function mapPaymentStatus(input: unknown): ConsumptionPaymentStatus {
+  const item = row(input);
+  const status = value(item, 'status', 'paymentStatus', 'payment_status');
+  return {
+    consumptionId: textValue(item, ['consumptionId', 'consumption_id']),
+    userId: textValue(item, ['userId', 'user_id']),
+    accountId: optionalText(item, ['accountId', 'account_id']),
+    total: numberValue(item, ['total', 'totalDue', 'total_due']),
+    paid: numberValue(item, ['paid', 'appliedAmount', 'applied_amount']),
+    openAmount: numberValue(item, ['openAmount', 'open_amount']),
+    status: status === 'paid' || status === 'partial' || status === 'voided' ? status : 'unpaid'
+  };
+}
+
+export function mapAdminSnapshot(input: unknown): AdminSnapshot {
+  const payload = row(Array.isArray(input) ? input[0] : input);
+  const accounts = arrayValue(payload, 'accounts').map(mapAccount);
+  const users = arrayValue(payload, 'users').map(mapUser);
+  const products = arrayValue(payload, 'products').map(mapProduct);
+  const consumptions = arrayValue(payload, 'consumptions').map(mapConsumption);
+  const consumptionItems = arrayValue(payload, 'consumptionItems', 'consumption_items').map(mapConsumptionItem);
+  const financialMovements = arrayValue(payload, 'financialMovements', 'financial_movements').map(mapFinancialMovement);
+  const paymentApplications = arrayValue(payload, 'paymentApplications', 'payment_applications').map(mapPaymentApplication);
+  const inventoryMovements = arrayValue(payload, 'inventoryMovements', 'inventory_movements').map(mapInventoryMovement);
+  const fifoCostAllocations = arrayValue(payload, 'fifoCostAllocations', 'fifo_cost_allocations').map(mapFifoAllocation);
+
+  const productStockRows = arrayValue(payload, 'productStocks', 'productStock', 'product_stock');
+  const productStocks = productStockRows.length > 0
+    ? productStockRows.map(mapProductStock)
+    : calculateProductStocks(products, inventoryMovements);
+
+  const costRows = arrayValue(payload, 'consumptionCosts', 'consumption_costs');
+  const consumptionCosts = costRows.length > 0
+    ? costRows.map(mapConsumptionCost)
+    : calculateConsumptionCosts({ consumptions, items: consumptionItems, allocations: fifoCostAllocations });
+
+  const userBalanceRows = arrayValue(payload, 'userBalances', 'user_balances');
+  const userBalances = userBalanceRows.length > 0
+    ? userBalanceRows.map(mapUserBalance)
+    : calculateUserBalances({ users, consumptions, financialMovements, applications: paymentApplications });
+
+  const accountBalanceRows = arrayValue(payload, 'accountBalances', 'account_balances');
+  const accountBalances = accountBalanceRows.length > 0
+    ? accountBalanceRows.map((entry) => mapAccountBalance(entry, userBalances))
+    : accounts.map((account) => calculateAccountBalance({
+        account,
+        users,
+        consumptions,
+        financialMovements,
+        applications: paymentApplications
+      }));
+
+  const paymentStatusRows = arrayValue(
+    payload,
+    'consumptionPaymentStatuses',
+    'consumptionPaymentStatus',
+    'consumption_payment_status'
+  );
+  const consumptionPaymentStatuses = paymentStatusRows.length > 0
+    ? paymentStatusRows.map(mapPaymentStatus)
+    : calculateConsumptionPaymentStatuses({ consumptions, applications: paymentApplications });
+
+  return {
+    accounts,
+    users,
+    products,
+    consumptions,
+    consumptionItems,
+    financialMovements,
+    paymentApplications,
+    inventoryMovements,
+    fifoCostAllocations,
+    auditLog: arrayValue(payload, 'auditLog', 'audit_log').map(mapAuditLogEntry),
+    productStocks,
+    consumptionCosts,
+    userBalances,
+    accountBalances,
+    consumptionPaymentStatuses,
+    catalogVersion: numberValue(payload, ['catalogVersion', 'catalog_version']),
+    generatedAt: textValue(payload, ['generatedAt', 'generated_at'], new Date().toISOString())
+  };
+}
+
+function requireAdminOnline(session?: AppSession): AppSession {
+  if (!isSyncConfigured()) throw new Error('Supabase no esta configurado.');
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('La administracion requiere conexion a internet.');
   }
-  await localOps.updateAccount(account);
+  if (!session?.token || session.role !== 'admin') throw new Error('Sesion de administrador requerida.');
+  return session;
+}
+
+async function adminCommand<T = JsonRow>(
+  session: AppSession | undefined,
+  command: string,
+  payload: JsonRow,
+  idempotencyKey?: string
+): Promise<T> {
+  const activeSession = requireAdminOnline(session);
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase no esta configurado.');
+
+  const { data, error } = await supabase.rpc('admin_command', {
+    p_session_token: activeSession.token,
+    p_idempotency_key: idempotencyKey ?? crypto.randomUUID(),
+    p_command: command,
+    p_payload: { ...payload, deviceId: activeSession.deviceId }
+  });
+
+  if (error) throw new Error(error.message);
+  return (data ?? {}) as T;
+}
+
+export async function loadAdminSnapshot(session: AppSession | undefined): Promise<AdminSnapshot> {
+  const activeSession = requireAdminOnline(session);
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase no esta configurado.');
+  const { data, error } = await supabase.rpc('admin_get_snapshot', { p_session_token: activeSession.token });
+  if (error) throw new Error(error.message);
+  return mapAdminSnapshot(data);
+}
+
+export async function loadAuditLog(session: AppSession | undefined, filters: AuditLogFilters = {}): Promise<AuditLogPage> {
+  const activeSession = requireAdminOnline(session);
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase no esta configurado.');
+  const { data, error } = await supabase.rpc('admin_get_audit_log', {
+    p_session_token: activeSession.token,
+    p_page: Math.max(1, filters.page ?? 1),
+    p_page_size: Math.min(200, Math.max(1, filters.limit ?? 50)),
+    p_entity_type: filters.entityType || null,
+    p_action: filters.action || null,
+    p_actor_user_id: filters.actorUserId || null,
+    p_search: filters.search?.trim() || null,
+    p_date_from: filters.dateFrom || null,
+    p_date_to: filters.dateTo || null
+  });
+  if (error) throw new Error(error.message);
+  const payload = row(Array.isArray(data) ? data[0] : data);
+  const entries = arrayValue(payload, 'items', 'entries', 'auditLog', 'audit_log').map(mapAuditLogEntry);
+  return {
+    entries,
+    page: numberValue(payload, ['page'], filters.page ?? 1),
+    pageSize: numberValue(payload, ['pageSize', 'page_size'], filters.limit ?? 50),
+    total: numberValue(payload, ['total'], entries.length)
+  };
+}
+
+export async function loadAllAuditLog(
+  session: AppSession | undefined,
+  filters: Omit<AuditLogFilters, 'page' | 'limit'> = {}
+): Promise<AuditLogEntry[]> {
+  const entries: AuditLogEntry[] = [];
+  let page = 1;
+  let total = 0;
+  let pageSize = 200;
+
+  do {
+    const result = await loadAuditLog(session, { ...filters, page, limit: 200 });
+    entries.push(...result.entries);
+    total = result.total;
+    pageSize = Math.max(1, result.pageSize);
+    page += 1;
+  } while ((page - 1) * pageSize < total);
+
+  return entries;
+}
+
+export async function createAccount(
+  input: { name: string; userIds?: string[] },
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<{ id: string; assignedUserIds?: string[] }> {
+  return adminCommand(session, 'create_account', input, idempotencyKey);
+}
+
+export async function updateAccount(account: Account & { reason?: string }, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  await adminCommand(session, 'update_account', account as unknown as JsonRow, idempotencyKey);
+}
+
+export async function setAccountStatus(accountId: string, status: 'active' | 'inactive', reason: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  await adminCommand(session, status === 'inactive' ? 'archive_account' : 'restore_account', {
+    id: accountId,
+    reason: reason.trim() || (status === 'inactive' ? 'Archivado por administrador' : 'Restaurado por administrador')
+  }, idempotencyKey);
 }
 
 export async function createUser(
   input: { accountId?: string; name: string; username?: string; pin: string; role?: 'admin' | 'user' },
-  session?: AppSession
-): Promise<PersonUser | null> {
-  if (shouldUseCloud(session)) return adminCommand<PersonUser>(session, 'create_user', input);
-  return localOps.createUser({ accountId: input.accountId, name: input.name, pin: input.pin });
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<{ id: string }> {
+  return adminCommand(session, 'create_user', input, idempotencyKey);
 }
 
-export async function updateUser(input: PersonUser & { newPin?: string }, session?: AppSession): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'update_user', input as unknown as Record<string, unknown>);
-    return;
-  }
-  await localOps.updateUser(input);
+export async function updateUser(input: PersonUser & { newPin?: string; reason?: string }, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  await adminCommand(session, 'update_user', input as unknown as JsonRow, idempotencyKey);
+}
+
+export async function setUserStatus(userId: string, status: 'active' | 'inactive', reason: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  await adminCommand(session, status === 'inactive' ? 'archive_user' : 'restore_user', {
+    id: userId,
+    reason: reason.trim() || (status === 'inactive' ? 'Archivado por administrador' : 'Restaurado por administrador')
+  }, idempotencyKey);
 }
 
 export async function createProduct(
@@ -346,103 +616,107 @@ export async function createProduct(
     category: string;
     price: number;
     stockMin: number;
-    lastCost: number;
+    lastCost?: number;
     imageUrl?: string;
     imageSourceUrl?: string;
     imageCredit?: string;
   },
-  session?: AppSession
-): Promise<Product | null> {
-  if (shouldUseCloud(session)) return adminCommand<Product>(session, 'create_product', input);
-  return localOps.createProduct(input);
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<{ id: string }> {
+  return adminCommand(session, 'create_product', input, idempotencyKey);
 }
 
-export async function updateProduct(product: Product, session?: AppSession): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'update_product', product as unknown as Record<string, unknown>);
-    return;
-  }
-  await localOps.updateProduct(product);
+export async function updateProduct(product: Product & { reason?: string }, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  await adminCommand(session, 'update_product', product as unknown as JsonRow, idempotencyKey);
+}
+
+export async function setProductStatus(productId: string, status: 'active' | 'inactive', reason: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  await adminCommand(session, status === 'inactive' ? 'archive_product' : 'restore_product', {
+    id: productId,
+    reason: reason.trim() || (status === 'inactive' ? 'Archivado por administrador' : 'Restaurado por administrador')
+  }, idempotencyKey);
 }
 
 export async function createPurchase(
   input: { productId: string; quantity: number; unitCost: number; note?: string },
-  session?: AppSession
-): Promise<Purchase | null> {
-  if (shouldUseCloud(session)) return adminCommand<Purchase>(session, 'create_purchase', input);
-  return localOps.createPurchase(input);
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<{ id: string }> {
+  return adminCommand(session, 'create_purchase', input, idempotencyKey);
 }
 
 export async function createPayment(
   input: { accountId?: string; targetType: 'account' | 'user'; userId?: string; paidByUserId?: string; amount: number; note?: string },
-  session?: AppSession
-): Promise<Payment | null> {
-  if (shouldUseCloud(session)) return adminCommand<Payment>(session, 'create_payment', input);
-  return localOps.createPayment(input);
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<{ id: string }> {
+  return adminCommand(session, 'create_payment', input, idempotencyKey);
+}
+
+export async function reverseFinancialMovement(movementId: string, reason: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  if (!reason.trim()) throw new Error('El motivo de la reversión es obligatorio.');
+  await adminCommand(session, 'reverse_financial_movement', { movementId, reason: reason.trim() }, idempotencyKey);
 }
 
 export async function createBalanceAdjustment(
-  input: { accountId: string; scope: 'account' | 'user'; userId?: string; amount: number; note: string },
-  session?: AppSession
-): Promise<BalanceAdjustment | null> {
-  if (shouldUseCloud(session)) return adminCommand<BalanceAdjustment>(session, 'create_adjustment', input);
-  return localOps.createBalanceAdjustment(input);
+  input: { accountId?: string; scope: 'account' | 'user'; userId?: string; amount: number; note: string },
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<{ id: string }> {
+  return adminCommand(session, 'create_adjustment', input, idempotencyKey);
 }
 
 export async function adjustInventory(
-  input: { productId: string; quantityDelta: number; note: string },
-  session?: AppSession
+  input: { productId: string; quantityDelta: number; unitCost?: number; note: string },
+  session?: AppSession,
+  idempotencyKey?: string
 ): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'adjust_inventory', input);
-    return;
-  }
-  await localOps.adjustInventory(input);
+  await adminCommand(session, 'adjust_inventory', input, idempotencyKey);
 }
 
-export async function voidConsumption(consumptionId: string, reason: string, session?: AppSession): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'void_consumption', { consumptionId, reason });
-    return;
-  }
-  await localOps.voidConsumption(consumptionId, reason);
+export async function applyBulkProductOperation(
+  mode: 'purchase' | 'inventory' | 'prices',
+  items: JsonRow[],
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<{ count: number; items?: JsonRow[] }> {
+  if (items.length === 0) throw new Error('Ingresa al menos un cambio para aplicar.');
+  return adminCommand(session, 'bulk_products', { mode, items }, idempotencyKey);
+}
+
+export async function voidConsumption(consumptionId: string, reason: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  if (!reason.trim()) throw new Error('El motivo de anulación es obligatorio.');
+  await adminCommand(session, 'void_consumption', { consumptionId, reason: reason.trim() }, idempotencyKey);
 }
 
 export async function independizeUser(
   userId: string,
   newAccountName: string,
-  session?: AppSession
-): Promise<AccountTransfer | null> {
-  if (shouldUseCloud(session)) return adminCommand<AccountTransfer>(session, 'independize_user', { userId, newAccountName });
-  return localOps.independizeUser(userId, newAccountName);
+  session?: AppSession,
+  idempotencyKey?: string,
+  expectedVersion?: number
+): Promise<{ id: string }> {
+  return adminCommand(session, 'independize_user', { userId, newAccountName, expectedVersion }, idempotencyKey);
 }
 
-export async function mergeAccounts(sourceAccountId: string, targetAccountId: string, session?: AppSession): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'merge_accounts', { sourceAccountId, targetAccountId });
-    return;
-  }
-  await localOps.mergeAccounts(sourceAccountId, targetAccountId);
+export async function mergeAccounts(sourceAccountId: string, targetAccountId: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  await adminCommand(session, 'merge_accounts', { sourceAccountId, targetAccountId }, idempotencyKey);
 }
 
-export async function assignUserToAccount(userId: string, accountId: string, session?: AppSession): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'assign_user_to_account', { userId, accountId });
-    return;
-  }
-  await localOps.assignUserToAccount(userId, accountId);
+export async function assignUserToAccount(userId: string, accountId: string, session?: AppSession, idempotencyKey?: string, expectedVersion?: number): Promise<void> {
+  await adminCommand(session, 'assign_user_to_account', { userId, accountId, expectedVersion }, idempotencyKey);
 }
 
-export async function removeUserFromAccount(userId: string, session?: AppSession): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'remove_user_from_account', { userId });
-    return;
-  }
-  await localOps.removeUserFromAccount(userId);
+export async function removeUserFromAccount(userId: string, session?: AppSession, idempotencyKey?: string, expectedVersion?: number): Promise<void> {
+  await adminCommand(session, 'remove_user_from_account', { userId, expectedVersion }, idempotencyKey);
 }
 
-export async function recalculateFifo(input: { productId?: string } = {}, session?: AppSession): Promise<void> {
-  if (shouldUseCloud(session)) {
-    await adminCommand(session, 'recalculate_fifo', input);
-  }
+export async function reverseInventoryMovement(movementId: string, reason: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  if (!reason.trim()) throw new Error('El motivo de la reversión es obligatorio.');
+  await adminCommand(session, 'reverse_inventory_movement', { movementId, reason: reason.trim() }, idempotencyKey);
+}
+
+export async function recalculateFifo(input: { productId?: string } = {}, session?: AppSession, idempotencyKey?: string): Promise<void> {
+  await adminCommand(session, 'recalculate_fifo', input, idempotencyKey);
 }

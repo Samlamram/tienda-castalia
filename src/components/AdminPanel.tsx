@@ -5,7 +5,6 @@ import {
   BrushCleaning,
   CreditCard,
   DollarSign,
-  Download,
   Edit,
   Eye,
   CircleCheck,
@@ -23,22 +22,23 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
+  History,
+  KeyRound,
+  Undo2,
   ToggleLeft,
   ToggleRight
 } from 'lucide-react';
-import type { Account, AppSession, PersonUser, Product } from '../domain/types';
+import type { Account, AppSession, Product, TiendaViewData } from '../domain/types';
 import { BrandLogo } from './BrandLogo';
-import { calculateOpenItems, calculateUserBalances } from '../domain/ledger';
-import type { useTiendaData } from '../hooks/useTiendaData';
+import { calculateOpenConsumptions, roundMoney } from '../domain/ledger';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import { resetDemoData } from '../data/seed';
-import { buildExportRows, exportToGoogleSheets } from '../services/export';
 import * as adminApi from '../services/adminApi';
 import { formatMoney, toNumber } from '../utils/money';
-import { isSyncConfigured, syncNow } from '../services/sync';
+import { isSyncConfigured } from '../services/sync';
+import { AuditHistory } from './AuditHistory';
 
-type TiendaData = ReturnType<typeof useTiendaData>;
-type AdminSection = null | 'catalogo' | 'cuentas' | 'cobros' | 'productos';
+type TiendaData = TiendaViewData;
+type AdminSection = null | 'catalogo' | 'cuentas' | 'cobros' | 'productos' | 'auditoria';
 type ProductFilter = 'active' | 'inactive' | 'low' | 'all';
 type AccountFilter = 'debt' | 'clear' | 'inactive' | 'all';
 type AccountPanelTab = 'accounts' | 'users';
@@ -59,6 +59,8 @@ interface AdminPanelProps {
   onLogout: () => void;
   online: boolean;
   adminSession?: AppSession;
+  onRefresh?: () => Promise<void>;
+  onChangePin?: (currentPin: string, newPin: string) => Promise<void>;
 }
 
 function normalizeSearch(value: string): string {
@@ -156,6 +158,14 @@ function formatMovementTime(value: string) {
   }).format(new Date(value));
 }
 
+function formatCompactDate(value: string) {
+  return new Intl.DateTimeFormat('es-CO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit'
+  }).format(new Date(value));
+}
+
 function groupByDay<T extends DatedEntry>(entries: T[]) {
   const groups: Array<{ key: string; label: string; entries: T[] }> = [];
 
@@ -182,7 +192,7 @@ function countLabel(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: AdminPanelProps) {
+function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession, onRefresh }: AdminPanelProps) {
   const [activeSection, setActiveSection] = useState<AdminSection>(null);
   const [activeModal, setActiveModal] = useState<ModalState>(null);
 
@@ -214,9 +224,9 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: A
             pendingSync={data.pendingSync}
             onMessage={onMessage}
             onManualSync={
-              adminSession
+              onRefresh
                 ? async () => {
-                    await adminApi.loadAdminSnapshot(adminSession);
+                    await onRefresh();
                     return 'Datos de administrador actualizados.';
                   }
                 : undefined
@@ -380,9 +390,6 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: A
               >
                 <RefreshCw size={16} /> Recalcular FIFO
               </button>
-              <button type="button" className="secondary small" onClick={() => setActiveModal({ type: 'export' })}>
-                <Download size={16} /> Exportar a Sheets
-              </button>
             </div>
 
             <div className="admin-list-card">
@@ -397,7 +404,7 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: A
                         <span className="category-tag">{product.category}</span>
                       </div>
                       <span>Venta: {formatMoney(product.price)}</span>
-                      <span>Costo: {formatMoney(product.lastCost)}</span>
+                      <span>Costo: {formatMoney(product.lastCost ?? 0)}</span>
                       <span className={stock <= product.stockMin ? 'danger-text' : ''}>
                         Stock: {stock} (Min {product.stockMin})
                       </span>
@@ -440,6 +447,7 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: A
           onClose={() => setActiveModal(null)}
           onMessage={onMessage}
           adminSession={adminSession}
+          onDataChanged={onRefresh}
         />
       )}
     </section>
@@ -450,7 +458,7 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession }: A
    HeaderSyncWidget
    ═══════════════════════════════════════════════════════ */
 
-export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: AdminPanelProps) {
+export function AdminPanel({ data, onMessage, onLogout, online, adminSession, onRefresh, onChangePin }: AdminPanelProps) {
   const [activeSection, setActiveSection] = useState<AdminSection>('catalogo');
   const [activeModal, setActiveModal] = useState<ModalState>(null);
   const [productFilter, setProductFilter] = useState<ProductFilter>('all');
@@ -468,11 +476,12 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
   const totalProductsCount = data.products.length;
   const inventorySummary = data.products.reduce(
     (summary, product) => {
-      const stock = productStock(data, product.id);
+      const stockProjection = data.productStocks.find((entry) => entry.productId === product.id);
+      const stock = stockProjection?.stock ?? 0;
       const availableStock = Math.max(0, stock);
       return {
         units: summary.units + availableStock,
-        value: summary.value + availableStock * product.price
+        value: summary.value + (stockProjection?.inventoryValue ?? availableStock * (product.lastCost ?? 0))
       };
     },
     { units: 0, value: 0 }
@@ -524,7 +533,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
     const query = normalizeSearch(accountQuery);
     return data.accounts
       .map((account) => {
-        const users = data.users.filter((user) => user.accountId === account.id);
+        const users = data.users.filter((user) => user.role === 'user' && user.accountId === account.id);
         const balance = data.accountBalances.find((entry) => entry.accountId === account.id);
         return { account, users, balance };
       })
@@ -549,22 +558,12 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
       });
   }, [accountFilter, accountQuery, data]);
 
-  const userBalances = useMemo(
-    () =>
-      calculateUserBalances({
-        users: data.users,
-        consumptions: data.consumptions,
-        items: data.items,
-        payments: data.payments,
-        applications: data.applications,
-        adjustments: data.adjustments
-      }),
-    [data]
-  );
+  const userBalances = data.userBalances;
 
   const filteredUsers = useMemo(() => {
     const query = normalizeSearch(accountQuery);
     return data.users
+      .filter((user) => user.role === 'user')
       .map((user) => {
         const account = data.accounts.find((entry) => entry.id === user.accountId);
         return { user, account };
@@ -588,7 +587,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
 
   const chargeTargets = useMemo(() => {
     const accountTargets = data.accounts.map((account) => {
-      const users = data.users.filter((user) => user.accountId === account.id);
+      const users = data.users.filter((user) => user.role === 'user' && user.accountId === account.id);
       const activeUsers = users.filter((user) => user.status === 'active');
       const balance = data.accountBalances.find((entry) => entry.accountId === account.id)?.balance ?? 0;
       return {
@@ -604,7 +603,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
     });
 
     const independentUserTargets = data.users
-      .filter((user) => !user.accountId)
+      .filter((user) => user.role === 'user' && !user.accountId)
       .map((user) => {
         const balance = userBalances.find((entry) => entry.userId === user.id)?.balance ?? 0;
         return {
@@ -645,6 +644,24 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
         .sort((a, b) => b.payment.createdAt.localeCompare(a.payment.createdAt)),
     [data]
   );
+  const adjustmentHistory = useMemo(
+    () =>
+      data.adjustments
+        .map((adjustment) => {
+          const account = adjustment.accountId
+            ? data.accounts.find((entry) => entry.id === adjustment.accountId)
+            : undefined;
+          const user = adjustment.userId
+            ? data.users.find((entry) => entry.id === adjustment.userId)
+            : undefined;
+          return {
+            adjustment,
+            targetName: adjustment.scope === 'user' ? user?.name ?? 'Usuario' : account?.name ?? 'Cuenta'
+          };
+        })
+        .sort((left, right) => right.adjustment.createdAt.localeCompare(left.adjustment.createdAt)),
+    [data]
+  );
 
   return (
     <section className={`admin-session ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}>
@@ -665,9 +682,9 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
             pendingSync={data.pendingSync}
             onMessage={onMessage}
             onManualSync={
-              adminSession
+              onRefresh
                 ? async () => {
-                    await adminApi.loadAdminSnapshot(adminSession);
+                    await onRefresh();
                     return 'Datos de administrador actualizados.';
                   }
                 : undefined
@@ -675,6 +692,16 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
           />
         </div>
 
+        {onChangePin ? (
+          <button
+            className="ghost icon pin-action-button"
+            onClick={() => setActiveModal({ type: 'change-pin' })}
+            aria-label="Cambiar mi PIN"
+            title="Cambiar mi PIN"
+          >
+            <KeyRound size={20} />
+          </button>
+        ) : null}
         <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir">
           <LogOut size={20} />
         </button>
@@ -708,6 +735,38 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
               <span>Unidades</span>
             </div>
           </div>
+        </div>
+
+        <div className="admin-global-actions" aria-label="Operaciones administrativas">
+          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'purchase' })}>
+            <PackagePlus size={16} /> Comprar inventario
+          </button>
+          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'stock-adjustment' })}>
+            <Boxes size={16} /> Ajustar stock
+          </button>
+          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'adjustment' })}>
+            <DollarSign size={16} /> Ajustar saldo
+          </button>
+          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'move-user' })}>
+            <User size={16} /> Mover usuario
+          </button>
+          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'independize' })}>
+            <Split size={16} /> Independizar
+          </button>
+          <button
+            type="button"
+            className="ghost small"
+            onClick={() => setActiveModal({ type: 'merge' })}
+            disabled={data.accounts.filter((account) => account.status === 'active').length < 2}
+          >
+            <Users size={16} /> Unir cuentas
+          </button>
+          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'history' })}>
+            <History size={16} /> Consumos
+          </button>
+          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'inventory-history' })}>
+            <Boxes size={16} /> Inventario
+          </button>
         </div>
 
         <div className="admin-workspace">
@@ -759,6 +818,22 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                 <span className="shortcut-badge">{chargeTargets.length} destinos</span>
               </div>
             </button>
+
+            <button
+              type="button"
+              className={`admin-shortcut-card ${activeSection === 'auditoria' ? 'active' : ''}`}
+              onClick={() => switchAdminSection('auditoria')}
+              role="tab"
+              aria-selected={activeSection === 'auditoria'}
+            >
+              <div className="shortcut-icon-wrapper audit">
+                <History size={28} />
+              </div>
+              <div className="shortcut-copy">
+                <h3>Auditoria</h3>
+                <span className="shortcut-badge">Cambios y reversos</span>
+              </div>
+            </button>
           </div>
 
           {activeSection === 'catalogo' && (
@@ -807,7 +882,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
               <div className="admin-inventory-table" role="table" aria-label="Catalogo e inventario">
                 <div className="admin-inventory-head" role="row">
                   <span>Producto</span>
-                  <span>Inventario</span>
                   <span>Valores</span>
                   <span>Acciones</span>
                 </div>
@@ -849,42 +923,36 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                           ) : null}
                         </button>
                         <span className="admin-inventory-copy">
-                          <strong title={product.name}>{product.name}</strong>
-                          <small>{product.category}</small>
+                          <span className="admin-inventory-title-line">
+                            <strong title={product.name}>{product.name}</strong>
+                          </span>
+                          <small className="admin-inventory-category">{product.category}</small>
                         </span>
                       </div>
 
-                      <div className="admin-inventory-stock" role="cell">
-                        <span className="admin-inventory-stock-main">
-                          <small>Stock</small>
-                          <strong>{stock}</strong>
+                      <div className="admin-inventory-metrics" role="cell">
+                        <span className="admin-inventory-stock">
+                          <span className="admin-inventory-stock-main">
+                            <small>Stock</small>
+                            <strong>{stock}</strong>
+                          </span>
+                          <span className={`admin-inventory-stock-meta inventory-${tone}`}>
+                            {productStatusLabel(tone)}
+                          </span>
                         </span>
-                        <span className={`admin-inventory-stock-meta inventory-${tone}`}>
-                          {productStatusLabel(tone)}
-                        </span>
-                      </div>
-
-                      <div className="admin-inventory-values" role="cell">
-                        <span>
-                          <small>Venta</small>
-                          <strong>{formatMoney(product.price)}</strong>
-                        </span>
-                        <span>
-                          <small>Inventario</small>
-                          <strong>{formatMoney(subtotal)}</strong>
-                        </span>
+                        <div className="admin-inventory-values">
+                          <span>
+                            <small>Venta</small>
+                            <strong>{formatMoney(product.price)}</strong>
+                          </span>
+                          <span>
+                            <small>Total</small>
+                            <strong>{formatMoney(subtotal)}</strong>
+                          </span>
+                        </div>
                       </div>
 
                       <div className="admin-inventory-actions" role="cell">
-                        <button
-                          type="button"
-                          className="ghost icon admin-inventory-action"
-                          onClick={() => setActiveModal({ type: 'edit-product', target: product })}
-                          aria-label={`Modificar ${product.name}`}
-                          title="Modificar"
-                        >
-                          <Edit size={17} />
-                        </button>
                         <button
                           type="button"
                           className={`ghost icon admin-inventory-action admin-row-toggle ${
@@ -895,6 +963,15 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                           title={product.status === 'active' ? 'Activo' : 'Inactivo'}
                         >
                           {product.status === 'active' ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost icon admin-inventory-action"
+                          onClick={() => setActiveModal({ type: 'edit-product', target: product })}
+                          aria-label={`Modificar ${product.name}`}
+                          title="Modificar"
+                        >
+                          <Edit size={17} />
                         </button>
                       </div>
                     </article>
@@ -1234,19 +1311,70 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
                       </span>
                       <div className="payment-card-copy">
                         <strong>{targetName}</strong>
-                        <span>{formatMovementTime(payment.createdAt)}</span>
+                        <span>{formatCompactDate(payment.createdAt)}</span>
                         {payerUser ? <small>Pago {payerUser.name}</small> : null}
                       </div>
                       <strong className="payment-amount">+ {formatMoney(payment.amount)}</strong>
+                      {payment.reversedMovementId ? (
+                        <span className="status-pill muted">Reversado</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ghost icon danger"
+                          title="Reversar pago"
+                          aria-label={`Reversar pago a ${targetName}`}
+                          onClick={() => setActiveModal({ type: 'reverse-payment', target: payment })}
+                        >
+                          <Undo2 size={17} />
+                        </button>
+                      )}
                     </article>
                   ))}
-                  {chargeHistory.length === 0 ? (
-                    <p className="admin-empty-state">No hay cobros registrados.</p>
+                  {adjustmentHistory.map(({ adjustment, targetName }) => (
+                    <article className="payment-card admin-charge-history-card" key={adjustment.id}>
+                      <span className="payment-icon">
+                        <DollarSign size={18} />
+                      </span>
+                      <div className="payment-card-copy">
+                        <strong>
+                          {adjustment.movementType === 'adjustment_reversal' ? 'Reverso de ajuste' : `Ajuste · ${targetName}`}
+                        </strong>
+                        <span>{formatCompactDate(adjustment.createdAt)}</span>
+                        <small>{adjustment.note}</small>
+                      </div>
+                      <strong className="payment-amount">
+                        {adjustment.amount >= 0 ? '+ ' : '- '}{formatMoney(Math.abs(adjustment.amount))}
+                      </strong>
+                      {adjustment.movementType === 'adjustment_reversal' ? (
+                        <span className="status-pill muted">Reverso</span>
+                      ) : adjustment.reversedByMovementId ? (
+                        <span className="status-pill muted">Reversado</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ghost icon danger"
+                          title="Reversar ajuste"
+                          aria-label={`Reversar ajuste de ${targetName}`}
+                          onClick={() => setActiveModal({ type: 'reverse-adjustment', target: adjustment })}
+                        >
+                          <Undo2 size={17} />
+                        </button>
+                      )}
+                    </article>
+                  ))}
+                  {chargeHistory.length === 0 && adjustmentHistory.length === 0 ? (
+                    <p className="admin-empty-state">No hay cobros ni ajustes registrados.</p>
                   ) : null}
                 </div>
               )}
             </div>
           )}
+
+          {activeSection === 'auditoria' ? (
+            <div className="admin-section-content">
+              <AuditHistory session={adminSession} users={data.users} onMessage={onMessage} />
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -1297,6 +1425,8 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession }: 
           onBulkComplete={() => setSelectedProductIds([])}
           onMessage={onMessage}
           adminSession={adminSession}
+          onDataChanged={onRefresh}
+          onChangePin={onChangePin}
         />
       )}
     </section>
@@ -1315,17 +1445,12 @@ function HeaderSyncWidget({ online, pendingSync, onMessage, onManualSync }: Head
   const syncConfigured = isSyncConfigured();
 
   async function handleSync() {
-    if (syncing || !online || !syncConfigured) return;
+    if (syncing || !online || !syncConfigured || !onManualSync) return;
     setSyncing(true);
     try {
-      if (onManualSync) {
-        onMessage(await onManualSync());
-        return;
-      }
-      const result = await syncNow();
-      onMessage(`Sincronización: ${result.pushed} enviados, ${result.pulled} recibidos.`);
+      onMessage(await onManualSync());
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : 'No se pudo sincronizar.');
+      onMessage(error instanceof Error ? error.message : 'No se pudieron actualizar los datos.');
     } finally {
       setSyncing(false);
     }
@@ -1335,7 +1460,7 @@ function HeaderSyncWidget({ online, pendingSync, onMessage, onManualSync }: Head
     <div className="header-sync-widget">
       <span
         className={`sync-status-icon ${online ? 'online' : 'offline'}`}
-        title={online ? 'Conectado a Internet' : 'Trabajando Offline (sin internet)'}
+        title={online ? 'Administración conectada a Supabase' : 'Administración sin conexión'}
       >
         {online ? <Cloud size={18} /> : <CloudOff size={18} />}
       </span>
@@ -1344,13 +1469,13 @@ function HeaderSyncWidget({ online, pendingSync, onMessage, onManualSync }: Head
         type="button"
         className={`sync-action-btn ${pendingSync > 0 ? 'has-pending' : ''} ${syncing ? 'is-syncing' : ''}`}
         onClick={handleSync}
-        disabled={!online || syncing || !syncConfigured}
+        disabled={!online || syncing || !syncConfigured || !onManualSync}
         title={
           !syncConfigured
-            ? 'Sincronización no configurada (falta Supabase)'
+            ? 'Supabase no está configurado'
             : pendingSync > 0
-              ? `${pendingSync} cambio(s) pendiente(s). Haz clic para sincronizar.`
-              : 'Todo sincronizado. Haz clic para forzar sync.'
+              ? `${pendingSync} operación pendiente. Haz clic para actualizar.`
+              : 'Actualizar datos oficiales desde Supabase'
         }
       >
         <RefreshCw size={16} />
@@ -1372,6 +1497,8 @@ interface AdminModalContainerProps {
   onBulkComplete?: () => void;
   onMessage: (message: string) => void;
   adminSession?: AppSession;
+  onDataChanged?: () => Promise<void>;
+  onChangePin?: (currentPin: string, newPin: string) => Promise<void>;
 }
 
 function AdminModalContainer({
@@ -1381,15 +1508,18 @@ function AdminModalContainer({
   onSwitchModal,
   onBulkComplete,
   onMessage,
-  adminSession
+  adminSession,
+  onDataChanged,
+  onChangePin
 }: AdminModalContainerProps) {
   useBodyScrollLock(true);
 
   const activeAccounts = data.accounts.filter((a) => a.status === 'active');
-  const activeUsers = data.users.filter((u) => u.status === 'active');
+  const activeUsers = data.users.filter((u) => u.role === 'user' && u.status === 'active');
   const unassignedUsers = activeUsers.filter((u) => !u.accountId);
-  const modalTargetIsUser = Boolean(modal.target && typeof modal.target === 'object' && 'pinHash' in modal.target);
-  const modalTargetIsAccount = Boolean(modal.target && typeof modal.target === 'object' && !modalTargetIsUser && 'name' in modal.target && 'status' in modal.target);
+  const modalTargetId = typeof modal.target?.id === 'string' ? modal.target.id : '';
+  const modalTargetIsUser = data.users.some((entry) => entry.role === 'user' && entry.id === modalTargetId);
+  const modalTargetIsAccount = data.accounts.some((entry) => entry.id === modalTargetId);
   const targetAccountId =
     typeof modal.target?.accountId === 'string'
       ? modal.target.accountId
@@ -1412,7 +1542,7 @@ function AdminModalContainer({
   const [paymentUserId, setPaymentUserId] = useState(targetUserId);
   const paymentUsers =
     paymentTargetType === 'account'
-      ? data.users.filter((u) => u.accountId === paymentAccount && u.status === 'active')
+      ? activeUsers.filter((u) => u.accountId === paymentAccount)
       : activeUsers;
   const paymentPayers = paymentTargetType === 'account' ? paymentUsers : activeUsers;
   const fixedPaymentTarget = modal.type === 'payment' && (modalTargetIsAccount || modalTargetIsUser);
@@ -1422,47 +1552,46 @@ function AdminModalContainer({
       return data.accountBalances.find((entry) => entry.accountId === modal.target.id)?.balance ?? 0;
     }
     if (modalTargetIsUser && typeof modal.target?.id === 'string') {
-      return calculateUserBalances({
-        users: [modal.target as PersonUser],
-        consumptions: data.consumptions,
-        items: data.items,
-        payments: data.payments,
-        applications: data.applications,
-        adjustments: data.adjustments
-      })[0]?.balance ?? 0;
+      return data.userBalances.find((entry) => entry.userId === modal.target.id)?.balance ?? 0;
     }
     return 0;
   })();
   const fixedPaymentAmount = fixedPaymentBalance > 0 ? String(fixedPaymentBalance) : '';
-  const paymentOpenItems =
+  const paymentOpenConsumptions =
     modal.type === 'payment' && fixedPaymentTarget && typeof modal.target?.id === 'string'
-      ? calculateOpenItems({
-          accountId: modalTargetIsAccount ? modal.target.id : undefined,
+      ? calculateOpenConsumptions({
+          userIds: modalTargetIsAccount
+            ? activeUsers.filter((user) => user.accountId === modal.target.id).map((user) => user.id)
+            : undefined,
           userId: modalTargetIsUser ? modal.target.id : undefined,
           consumptions: data.consumptions,
-          items: data.items,
           applications: data.applications
         })
       : [];
-  const paymentOpenItemsTotal = paymentOpenItems.reduce((sum, item) => sum + item.openAmount, 0);
-  const paymentCarryoverBalance = Math.max(0, Math.round(fixedPaymentBalance - paymentOpenItemsTotal));
+  const paymentOpenTotal = paymentOpenConsumptions.reduce((sum, consumption) => sum + consumption.openAmount, 0);
+  const paymentCarryoverBalance = Math.max(0, roundMoney(fixedPaymentBalance - paymentOpenTotal));
   const shouldShowPaymentCheckout =
     modal.type === 'payment' &&
     fixedPaymentTarget &&
     fixedPaymentBalance > 0 &&
-    (paymentOpenItems.length > 0 || paymentCarryoverBalance > 0);
+    (paymentOpenConsumptions.length > 0 || paymentCarryoverBalance > 0);
 
   // Ajuste manual
   const [adjAccount, setAdjAccount] = useState(targetAccountId);
   const [adjScope, setAdjScope] = useState(
-    modal.type === 'adjustment' && typeof modal.target?.accountId === 'string' ? 'user' : 'account'
+    modal.type === 'adjustment' && (modalTargetIsUser || activeAccounts.length === 0) ? 'user' : 'account'
   );
-  const adjUsers = data.users.filter((u) => u.accountId === adjAccount && u.status === 'active');
+  const [adjUserId, setAdjUserId] = useState(
+    modal.type === 'adjustment' && modalTargetIsUser ? modalTargetId : activeUsers[0]?.id ?? ''
+  );
+  const adjUsers = activeUsers;
   const [selectedProductId, setSelectedProductId] = useState(targetProductId);
   const [productImageDraft, setProductImageDraft] = useState(
     modal.type === 'edit-product' ? (modal.target?.imageUrl ?? '') : ''
   );
   const [bulkFailedImages, setBulkFailedImages] = useState<Record<string, boolean>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [operationId] = useState(() => crypto.randomUUID());
   const [detailAccountTab, setDetailAccountTab] = useState<AdminAccountDetailTab>('history');
   const [detailAccountFilter, setDetailAccountFilter] = useState('all');
   const bulkMode = modal.type === 'bulk-products' ? (modal.target?.mode as BulkProductAction | undefined) : undefined;
@@ -1473,30 +1602,44 @@ function AdminModalContainer({
     .map((id) => data.products.find((product) => product.id === id))
     .filter(Boolean) as Product[];
 
-  // Export
-  const today = new Date().toISOString().slice(0, 10);
-  const firstDay = useMemo(() => {
-    const date = new Date();
-    date.setDate(1);
-    return date.toISOString().slice(0, 10);
-  }, []);
-  const sheetSetting = data.settings.find((s) => s.key === 'sheet_id')?.value ?? '';
+  function requestKey(suffix = modal.type): string {
+    return `${operationId}:${suffix}`;
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     const form = new FormData(event.currentTarget);
 
     try {
       switch (modal.type) {
+        case 'change-pin':
+          if (!onChangePin) throw new Error('El cambio de PIN no está disponible.');
+          const currentPin = String(form.get('currentPin') ?? '');
+          const requestedPin = String(form.get('newPin') ?? '');
+          const confirmedPin = String(form.get('confirmPin') ?? '');
+          if (!/^\d{4,8}$/.test(requestedPin)) throw new Error('El nuevo PIN debe tener entre 4 y 8 dígitos.');
+          if (requestedPin !== confirmedPin) throw new Error('La confirmación del nuevo PIN no coincide.');
+          await onChangePin(currentPin, requestedPin);
+          onMessage('Tu PIN administrativo fue actualizado.');
+          break;
+
         case 'create-account':
-          const createdAccount = await adminApi.createAccount({ name: String(form.get('name') ?? '') }, adminSession);
-          const createdAccountId = createdAccount?.id;
-          if (createdAccountId) {
-            for (const userId of form.getAll('userIds')) {
-              await adminApi.assignUserToAccount(String(userId), createdAccountId, adminSession);
-            }
-          }
-          onMessage('Cuenta creada.');
+          const createdAccount = await adminApi.createAccount(
+            {
+              name: String(form.get('name') ?? ''),
+              userIds: form.getAll('userIds').map(String)
+            },
+            adminSession,
+            requestKey('create-account')
+          );
+          const assignedCount = createdAccount.assignedUserIds?.length ?? 0;
+          onMessage(
+            assignedCount > 0
+              ? `Cuenta creada con ${assignedCount} usuario${assignedCount === 1 ? '' : 's'}.`
+              : 'Cuenta creada.'
+          );
           break;
 
         case 'create-user':
@@ -1504,23 +1647,56 @@ function AdminModalContainer({
           await adminApi.createUser({
             accountId: newUserAccountId || undefined,
             name: String(form.get('name') ?? ''),
-            pin: String(form.get('pin') ?? '1234')
-          }, adminSession);
+            username: String(form.get('username') ?? '').trim() || undefined,
+            pin: String(form.get('pin') ?? '')
+          }, adminSession, requestKey('create-user'));
           onMessage('Usuario creado.');
           break;
 
         case 'assign-user':
+          const assignedUserId = String(form.get('userId') ?? '');
+          const assignedUser = data.users.find((entry) => entry.id === assignedUserId);
           await adminApi.assignUserToAccount(
-            String(form.get('userId') ?? ''),
+            assignedUserId,
             String(form.get('accountId') ?? modal.target?.id ?? ''),
-            adminSession
+            adminSession,
+            requestKey('assign-user'),
+            assignedUser?.version
           );
           onMessage('Usuario agregado a la cuenta.');
           break;
 
         case 'remove-user-account':
-          await adminApi.removeUserFromAccount(String(modal.target.id), adminSession);
+          await adminApi.removeUserFromAccount(
+            String(modal.target.id),
+            adminSession,
+            requestKey('remove-user-account'),
+            Number(modal.target.version) || undefined
+          );
           onMessage('Usuario removido de la cuenta.');
+          break;
+
+        case 'move-user':
+          const movedUserId = String(form.get('userId') ?? '');
+          const movedUser = data.users.find((entry) => entry.id === movedUserId);
+          const destinationAccountId = String(form.get('accountId') ?? '');
+          if (destinationAccountId) {
+            await adminApi.assignUserToAccount(
+              movedUserId,
+              destinationAccountId,
+              adminSession,
+              requestKey('move-user'),
+              movedUser?.version
+            );
+          } else {
+            await adminApi.removeUserFromAccount(
+              movedUserId,
+              adminSession,
+              requestKey('move-user'),
+              movedUser?.version
+            );
+          }
+          onMessage('Pertenencia del usuario actualizada; su saldo lo acompaña.');
           break;
 
         case 'payment':
@@ -1536,26 +1712,65 @@ function AdminModalContainer({
             paidByUserId: String(form.get('paidByUserId') ?? ''),
             amount: toNumber(form.get('amount')),
             note: String(form.get('note') ?? '')
-          }, adminSession);
+          }, adminSession, requestKey('payment'));
           onMessage('Cobro registrado.');
           break;
 
+        case 'reverse-payment':
+          await adminApi.reverseFinancialMovement(
+            String(modal.target?.id ?? ''),
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey('reverse-payment')
+          );
+          onMessage('Pago reversado. Las compras asociadas quedaron abiertas nuevamente.');
+          break;
+
+        case 'reverse-adjustment':
+          await adminApi.reverseFinancialMovement(
+            String(modal.target?.id ?? ''),
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey('reverse-adjustment')
+          );
+          onMessage('Ajuste reversado mediante un movimiento financiero inverso.');
+          break;
+
+        case 'void-consumption':
+          await adminApi.voidConsumption(
+            String(modal.target?.id ?? ''),
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey('void-consumption')
+          );
+          onMessage('Consumo anulado y existencias restauradas.');
+          break;
+
         case 'adjustment':
+          const adjustmentUser = adjScope === 'user'
+            ? activeUsers.find((user) => user.id === String(form.get('userId') ?? adjUserId))
+            : undefined;
           await adminApi.createBalanceAdjustment({
-            accountId: String(form.get('accountId')),
+            accountId: adjScope === 'user'
+              ? adjustmentUser?.accountId
+              : String(form.get('accountId') ?? adjAccount),
             scope: adjScope === 'user' ? 'user' : 'account',
-            userId: adjScope === 'user' ? String(form.get('userId')) : undefined,
+            userId: adjScope === 'user' ? adjustmentUser?.id : undefined,
             amount: Number(form.get('amount')),
             note: String(form.get('note') ?? '')
-          }, adminSession);
+          }, adminSession, requestKey('adjustment'));
           onMessage('Ajuste registrado.');
           break;
 
         case 'independize':
+          const independentUserId = String(form.get('userId'));
+          const independentUser = data.users.find((entry) => entry.id === independentUserId);
           await adminApi.independizeUser(
-            String(form.get('userId')),
+            independentUserId,
             String(form.get('newAccountName') ?? ''),
-            adminSession
+            adminSession,
+            requestKey('independize'),
+            independentUser?.version
           );
           onMessage('Usuario independizado.');
           break;
@@ -1564,7 +1779,8 @@ function AdminModalContainer({
           await adminApi.mergeAccounts(
             String(form.get('sourceAccountId')),
             String(form.get('targetAccountId')),
-            adminSession
+            adminSession,
+            requestKey('merge')
           );
           onMessage('Cuentas unidas.');
           break;
@@ -1577,7 +1793,7 @@ function AdminModalContainer({
             stockMin: 0,
             lastCost: 0,
             imageUrl: String(form.get('imageUrl') ?? '')
-          }, adminSession);
+          }, adminSession, requestKey('create-product'));
           onMessage('Producto creado.');
           break;
 
@@ -1587,7 +1803,7 @@ function AdminModalContainer({
             quantity: toNumber(form.get('quantity')),
             unitCost: toNumber(form.get('unitCost')),
             note: String(form.get('note') ?? '')
-          }, adminSession);
+          }, adminSession, requestKey('purchase'));
           onMessage('Compra registrada.');
           break;
 
@@ -1596,20 +1812,26 @@ function AdminModalContainer({
             productId: String(form.get('productId')),
             quantityDelta: Number(form.get('quantityDelta')),
             note: String(form.get('note') ?? '')
-          }, adminSession);
+          }, adminSession, requestKey('stock-adjustment'));
           onMessage('Stock ajustado.');
           break;
 
-        case 'export':
-          const sheetId = String(form.get('sheetId') ?? '');
-          const dateFrom = `${String(form.get('dateFrom'))}T00:00:00.000Z`;
-          const dateTo = `${String(form.get('dateTo'))}T23:59:59.999Z`;
-          const result = await exportToGoogleSheets({ sheetId, dateFrom, dateTo });
-          onMessage(result.message);
+        case 'reverse-inventory':
+          await adminApi.reverseInventoryMovement(
+            String(modal.target?.id ?? ''),
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey(`reverse-inventory-${String(modal.target?.id ?? '')}`)
+          );
+          onMessage('Movimiento de inventario reversado.');
           break;
 
         case 'edit-account':
-          await adminApi.updateAccount({ ...modal.target, name: String(form.get('name') ?? '') }, adminSession);
+          await adminApi.updateAccount(
+            { ...modal.target, name: String(form.get('name') ?? '') },
+            adminSession,
+            requestKey('edit-account')
+          );
           onMessage('Cuenta actualizada.');
           break;
 
@@ -1618,11 +1840,14 @@ function AdminModalContainer({
           await adminApi.updateUser(
             {
               ...modal.target,
+              name: String(form.get('name') ?? modal.target.name),
+              username: String(form.get('username') ?? modal.target.username).trim() || modal.target.username,
               newPin: newPin || undefined
             },
-            adminSession
+            adminSession,
+            requestKey('edit-user')
           );
-          onMessage('PIN actualizado.');
+          onMessage('Usuario actualizado.');
           break;
 
         case 'edit-product':
@@ -1635,66 +1860,61 @@ function AdminModalContainer({
               stockMin: toNumber(form.get('stockMin')),
               imageUrl: String(form.get('imageUrl') ?? '')
             },
-            adminSession
+            adminSession,
+            requestKey('edit-product')
           );
           onMessage('Producto actualizado.');
           break;
 
         case 'toggle-product-status':
-          await adminApi.updateProduct(
-            {
-              ...modal.target,
-              status: modal.target.status === 'active' ? 'inactive' : 'active'
-            },
-            adminSession
+          await adminApi.setProductStatus(
+            String(modal.target.id),
+            modal.target.status === 'active' ? 'inactive' : 'active',
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey('toggle-product-status')
           );
           onMessage(modal.target.status === 'active' ? 'Producto desactivado.' : 'Producto activado.');
           break;
 
         case 'toggle-user-status':
-          await adminApi.updateUser(
-            {
-              ...modal.target,
-              status: modal.target.status === 'active' ? 'inactive' : 'active'
-            },
-            adminSession
+          await adminApi.setUserStatus(
+            String(modal.target.id),
+            modal.target.status === 'active' ? 'inactive' : 'active',
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey('toggle-user-status')
           );
           onMessage(modal.target.status === 'active' ? 'Usuario desactivado.' : 'Usuario activado.');
           break;
 
         case 'toggle-account-status':
-          await adminApi.updateAccount(
-            {
-              ...modal.target,
-              status: modal.target.status === 'active' ? 'inactive' : 'active'
-            },
-            adminSession
+          await adminApi.setAccountStatus(
+            String(modal.target.id),
+            modal.target.status === 'active' ? 'inactive' : 'active',
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey('toggle-account-status')
           );
           onMessage(modal.target.status === 'active' ? 'Cuenta desactivada.' : 'Cuenta activada.');
           break;
 
         case 'bulk-products':
+          const bulkItems: Array<Record<string, unknown>> = [];
           if (bulkMode === 'purchase') {
-            let count = 0;
             for (const product of bulkProducts) {
               const quantity = toNumber(form.get(`quantity-${product.id}`));
               if (quantity <= 0) continue;
-              await adminApi.createPurchase(
-                {
-                  productId: product.id,
-                  quantity,
-                  unitCost: toNumber(form.get(`unitCost-${product.id}`)),
-                  note: String(form.get(`note-${product.id}`) ?? '')
-                },
-                adminSession
-              );
-              count += 1;
+              bulkItems.push({
+                productId: product.id,
+                quantity,
+                unitCost: toNumber(form.get(`unitCost-${product.id}`)),
+                note: String(form.get(`note-${product.id}`) ?? '')
+              });
             }
-            onMessage(`${count} compra${count === 1 ? '' : 's'} registrada${count === 1 ? '' : 's'}.`);
           }
 
           if (bulkMode === 'inventory') {
-            let count = 0;
             for (const product of bulkProducts) {
               const stockCountInput = form.get(`stockCount-${product.id}`);
               const stockCountText = typeof stockCountInput === 'string' ? stockCountInput.trim() : '';
@@ -1708,49 +1928,58 @@ function AdminModalContainer({
               const currentStock = productStock(data, product.id);
               const quantityDelta = countedStock - currentStock;
               if (!Number.isFinite(quantityDelta) || quantityDelta === 0) continue;
-              await adminApi.adjustInventory(
-                {
-                  productId: product.id,
-                  quantityDelta,
-                  note: String(
-                    form.get(`note-${product.id}`) ??
-                      `Cuadre de inventario: conteo ${countedStock}, sistema ${currentStock}`
-                  )
-                },
-                adminSession
-              );
-              count += 1;
+              bulkItems.push({
+                productId: product.id,
+                quantityDelta,
+                note: String(
+                  form.get(`note-${product.id}`) ??
+                    `Cuadre de inventario: conteo ${countedStock}, sistema ${currentStock}`
+                )
+              });
             }
-            onMessage(`${count} ajuste${count === 1 ? '' : 's'} de inventario aplicado${count === 1 ? '' : 's'}.`);
           }
 
           if (bulkMode === 'prices') {
-            let count = 0;
             for (const product of bulkProducts) {
-              await adminApi.updateProduct(
-                {
-                  ...product,
-                  price: toNumber(form.get(`price-${product.id}`))
-                },
-                adminSession
-              );
-              count += 1;
+              bulkItems.push({
+                productId: product.id,
+                price: toNumber(form.get(`price-${product.id}`)),
+                version: product.version
+              });
             }
-            onMessage(`${count} precio${count === 1 ? '' : 's'} actualizado${count === 1 ? '' : 's'}.`);
           }
+
+          if (!bulkMode) throw new Error('Selecciona una operación masiva válida.');
+          const bulkResult = await adminApi.applyBulkProductOperation(
+            bulkMode,
+            bulkItems,
+            adminSession,
+            requestKey('bulk-products')
+          );
+          onMessage(
+            `${bulkResult.count} cambio${bulkResult.count === 1 ? '' : 's'} aplicado${bulkResult.count === 1 ? '' : 's'} en una sola transacción.`
+          );
 
           onBulkComplete?.();
           break;
       }
+      if (onDataChanged) {
+        try {
+          await onDataChanged();
+        } catch (refreshError) {
+          onMessage(
+            refreshError instanceof Error
+              ? `La operación se guardó, pero la vista no pudo actualizarse: ${refreshError.message}`
+              : 'La operación se guardó, pero la vista no pudo actualizarse.'
+          );
+        }
+      }
       onClose();
     } catch (error) {
       onMessage(error instanceof Error ? error.message : 'Error en la operación.');
+    } finally {
+      setSubmitting(false);
     }
-  }
-
-  async function handlePreview() {
-    const rows = await buildExportRows(`${firstDay}T00:00:00.000Z`, `${today}T23:59:59.999Z`);
-    onMessage(`Export incluye ${Object.keys(rows).length} pestañas: ${Object.keys(rows).join(', ')}.`);
   }
 
   function handleProductImageUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -1775,7 +2004,9 @@ function AdminModalContainer({
   const detailBalance = detailAccount
     ? data.accountBalances.find((entry) => entry.accountId === detailAccount.id)
     : undefined;
-  const detailUsers = detailAccount ? data.users.filter((user) => user.accountId === detailAccount.id) : [];
+  const detailUsers = detailAccount
+    ? data.users.filter((user) => user.role === 'user' && user.accountId === detailAccount.id)
+    : [];
   const detailUserIds = new Set(detailUsers.map((user) => user.id));
   const effectiveDetailAccountFilter =
     detailAccountFilter === 'all' || detailUserIds.has(detailAccountFilter) ? detailAccountFilter : 'all';
@@ -1803,10 +2034,21 @@ function AdminModalContainer({
     : [];
   const groupedDetailConsumptions = groupByDay(detailConsumptions);
   const groupedDetailPayments = groupByDay(detailPayments);
+  const reversedInventoryMovementIds = new Set(
+    data.movements
+      .map((movement) => movement.reversedMovementId)
+      .filter((id): id is string => Boolean(id))
+  );
+  const inventoryHistory = [...data.movements]
+    .filter((movement) => ['purchase', 'adjustment', 'adjustment_reversal'].includes(movement.movementType))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
   return (
     <div className="modal-backdrop">
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Operación administrativa"
         className={
           modal.type === 'account-detail'
             ? 'modal account-modal admin-account-detail-modal'
@@ -1816,9 +2058,14 @@ function AdminModalContainer({
         {modal.type !== 'account-detail' ? (
           <div className="admin-modal-title-row">
             <h2>
+              {modal.type === 'change-pin' && 'Cambiar mi PIN'}
               {modal.type === 'create-account' && 'Crear Nueva Cuenta'}
               {modal.type === 'create-user' && 'Crear Nuevo Usuario'}
               {modal.type === 'payment' && 'Registrar Cobro'}
+              {modal.type === 'reverse-payment' && 'Reversar Pago'}
+              {modal.type === 'reverse-adjustment' && 'Reversar Ajuste'}
+              {modal.type === 'void-consumption' && 'Anular Consumo'}
+              {modal.type === 'reverse-inventory' && 'Reversar Movimiento de Inventario'}
               {modal.type === 'assign-user' && 'Agregar Usuario a Cuenta'}
               {modal.type === 'adjustment' && 'Realizar Ajuste Manual'}
               {modal.type === 'independize' && 'Independizar Usuario'}
@@ -1826,11 +2073,11 @@ function AdminModalContainer({
               {modal.type === 'create-product' && 'Agregar Producto'}
               {modal.type === 'purchase' && 'Registrar Compra / Inventario'}
               {modal.type === 'stock-adjustment' && 'Ajuste de Stock'}
-              {modal.type === 'export' && 'Exportar a Google Sheets'}
               {modal.type === 'edit-account' && 'Editar Cuenta'}
-              {modal.type === 'edit-user' && 'Cambiar PIN'}
+              {modal.type === 'edit-user' && 'Editar Usuario'}
               {modal.type === 'edit-product' && 'Editar Producto'}
               {modal.type === 'history' && 'Historial de Consumos'}
+              {modal.type === 'inventory-history' && 'Movimientos de Inventario'}
               {modal.type === 'toggle-account-status' &&
                 (modal.target.status === 'active' ? 'Desactivar Cuenta' : 'Activar Cuenta')}
               {modal.type === 'toggle-product-status' &&
@@ -1838,6 +2085,7 @@ function AdminModalContainer({
               {modal.type === 'toggle-user-status' &&
                 (modal.target.status === 'active' ? 'Desactivar Usuario' : 'Activar Usuario')}
               {modal.type === 'remove-user-account' && 'Quitar Usuario de Cuenta'}
+              {modal.type === 'move-user' && 'Mover Usuario'}
               {modal.type === 'bulk-products' && bulkMode === 'purchase' && 'Compra de Productos'}
               {modal.type === 'bulk-products' && bulkMode === 'inventory' && 'Cuadre de Inventario'}
               {modal.type === 'bulk-products' && bulkMode === 'prices' && 'Actualizar Precios'}
@@ -2055,7 +2303,7 @@ function AdminModalContainer({
         ) : modal.type === 'history' ? (
           <div className="admin-history-modal-body">
             <div className="table-list">
-              {data.consumptions.slice(0, 60).map((consumption) => {
+              {data.consumptions.map((consumption) => {
                 const account = data.accounts.find((entry) => entry.id === consumption.accountId);
                 const user = data.users.find((entry) => entry.id === consumption.userId);
                 const consumptionItems = data.items.filter((item) => item.consumptionId === consumption.id);
@@ -2077,13 +2325,7 @@ function AdminModalContainer({
                       <button
                         type="button"
                         className="ghost small danger"
-                        onClick={async () => {
-                          const reason = window.prompt('Motivo de anulación', 'Error de registro');
-                          if (!reason) return;
-                          await adminApi.voidConsumption(consumption.id, reason, adminSession);
-                          onMessage('Consumo anulado.');
-                          onClose();
-                        }}
+                        onClick={() => onSwitchModal?.({ type: 'void-consumption', target: consumption })}
                       >
                         Anular
                       </button>
@@ -2093,8 +2335,84 @@ function AdminModalContainer({
               })}
             </div>
           </div>
+        ) : modal.type === 'inventory-history' ? (
+          <div className="admin-history-modal-body">
+            <div className="table-list">
+              {inventoryHistory.map((movement) => {
+                const product = data.products.find((entry) => entry.id === movement.productId);
+                const reversed = reversedInventoryMovementIds.has(movement.id);
+                const isReversal = Boolean(movement.reversedMovementId);
+                return (
+                  <div className="history-row" key={movement.id}>
+                    <div>
+                      <strong>{product?.name ?? 'Producto'}</strong>
+                      <p>
+                        {movement.movementType} · {movement.quantityDelta > 0 ? '+' : ''}{movement.quantityDelta} unidades
+                        {movement.unitCost !== undefined ? ` · ${formatMoney(movement.unitCost)} c/u` : ''}
+                      </p>
+                      <small>{new Date(movement.createdAt).toLocaleString('es-CO')} · {movement.note ?? 'Sin nota'}</small>
+                    </div>
+                    <span className={reversed || isReversal ? 'status-pill muted' : 'status-pill ok'}>
+                      {isReversal ? 'Reverso' : reversed ? 'Reversado' : 'Vigente'}
+                    </span>
+                    {!reversed && !isReversal && (movement.movementType === 'purchase' || movement.movementType === 'adjustment') ? (
+                      <button
+                        type="button"
+                        className="ghost small danger"
+                        onClick={() => onSwitchModal?.({ type: 'reverse-inventory', target: movement })}
+                      >
+                        Reversar
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {inventoryHistory.length === 0 ? (
+                <p className="admin-empty-state">No hay movimientos de inventario.</p>
+              ) : null}
+            </div>
+          </div>
         ) : (
           <form className="admin-modal-form form-grid" onSubmit={handleSubmit}>
+            {modal.type === 'change-pin' && (
+              <>
+                <label htmlFor="admin-current-pin">PIN actual</label>
+                <input
+                  id="admin-current-pin"
+                  name="currentPin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="current-password"
+                  minLength={4}
+                  maxLength={8}
+                  required
+                  autoFocus
+                />
+                <label htmlFor="admin-new-pin">Nuevo PIN</label>
+                <input
+                  id="admin-new-pin"
+                  name="newPin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  minLength={4}
+                  maxLength={8}
+                  required
+                />
+                <label htmlFor="admin-confirm-pin">Confirmar nuevo PIN</label>
+                <input
+                  id="admin-confirm-pin"
+                  name="confirmPin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  minLength={4}
+                  maxLength={8}
+                  required
+                />
+                <p className="muted">Usa un PIN distinto al valor temporal del seed y no lo compartas.</p>
+              </>
+            )}
             {(modal.type === 'create-product' || modal.type === 'edit-product') && (
               <div className="product-photo-picker">
                 <span className="product-photo-preview">
@@ -2148,8 +2466,20 @@ function AdminModalContainer({
               <>
                 <label>Nombre del usuario</label>
                 <input name="name" placeholder="Nombre completo" required />
+                <label>Usuario para iniciar sesión</label>
+                <input name="username" placeholder="Ej. samuel" autoComplete="off" />
                 <label>PIN de acceso</label>
-                <input name="pin" placeholder="PIN de 4 dígitos" inputMode="numeric" defaultValue="1234" required />
+                <input
+                  name="pin"
+                  type="password"
+                  placeholder="Entre 4 y 8 dígitos"
+                  inputMode="numeric"
+                  pattern="[0-9]{4,8}"
+                  minLength={4}
+                  maxLength={8}
+                  autoComplete="new-password"
+                  required
+                />
               </>
             )}
 
@@ -2304,17 +2634,20 @@ function AdminModalContainer({
                       <strong>{formatMoney(fixedPaymentBalance)}</strong>
                     </div>
                     <div className="payment-checkout-list">
-                      {paymentOpenItems.map((item) => {
-                        const product = data.products.find((entry) => entry.id === item.productId);
-                        const imageUrl = product?.imageUrl && !bulkFailedImages[item.productId] ? product.imageUrl : undefined;
+                      {paymentOpenConsumptions.map((consumption) => {
+                        const consumptionItems = data.items.filter((item) => item.consumptionId === consumption.id);
+                        const firstItem = consumptionItems[0];
+                        const product = data.products.find((entry) => entry.id === firstItem?.productId);
+                        const productId = firstItem?.productId ?? consumption.id;
+                        const imageUrl = product?.imageUrl && !bulkFailedImages[productId] ? product.imageUrl : undefined;
                         return (
-                          <div className="payment-checkout-row" key={item.id}>
+                          <div className="payment-checkout-row" key={consumption.id}>
                             <span className="payment-checkout-thumbnail">
                               {imageUrl ? (
                                 <img
                                   src={imageUrl}
                                   alt=""
-                                  onError={() => setBulkFailedImages((current) => ({ ...current, [item.productId]: true }))}
+                                  onError={() => setBulkFailedImages((current) => ({ ...current, [productId]: true }))}
                                 />
                               ) : (
                                 <span className="payment-checkout-placeholder">
@@ -2323,11 +2656,11 @@ function AdminModalContainer({
                               )}
                             </span>
                             <span className="payment-checkout-item-copy">
-                              <strong>{item.productName}</strong>
-                              <small>{formatMoney(item.unitPrice)} c/u</small>
+                              <strong>{consumptionItems.map((item) => item.productName).join(', ') || 'Compra'}</strong>
+                              <small>{new Date(consumption.createdAt).toLocaleDateString('es-CO')}</small>
                             </span>
-                            <span className="payment-checkout-qty">x{item.quantity}</span>
-                            <strong>{formatMoney(item.openAmount)}</strong>
+                            <span className="payment-checkout-qty">{consumptionItems.length} item{consumptionItems.length === 1 ? '' : 's'}</span>
+                            <strong>{formatMoney(consumption.openAmount)}</strong>
                           </div>
                         );
                       })}
@@ -2366,33 +2699,111 @@ function AdminModalContainer({
               </>
             )}
 
+            {modal.type === 'reverse-payment' && (
+              <>
+                <div className="payment-amount-panel">
+                  <span>Pago original</span>
+                  <strong>{formatMoney(Number(modal.target?.amount) || 0)}</strong>
+                </div>
+                <label htmlFor="reverse-payment-reason">Motivo del reverso</label>
+                <textarea
+                  id="reverse-payment-reason"
+                  name="reason"
+                  placeholder="Ej. pago registrado por error"
+                  minLength={3}
+                  required
+                  autoFocus
+                />
+                <p className="muted">Se conservará el pago original y se crearán movimientos inversos auditables.</p>
+              </>
+            )}
+
+            {modal.type === 'reverse-adjustment' && (
+              <>
+                <div className="payment-amount-panel">
+                  <span>Ajuste original</span>
+                  <strong>{formatMoney(Number(modal.target?.amount) || 0)}</strong>
+                </div>
+                <label htmlFor="reverse-adjustment-reason">Motivo del reverso</label>
+                <textarea
+                  id="reverse-adjustment-reason"
+                  name="reason"
+                  placeholder="Ej. ajuste registrado por error"
+                  minLength={3}
+                  required
+                  autoFocus
+                />
+                <p className="muted">El ajuste original se conserva y se crea un movimiento inverso enlazado.</p>
+              </>
+            )}
+
+            {modal.type === 'void-consumption' && (
+              <>
+                <p className="muted">
+                  Se conservará el consumo y se crearán los movimientos inversos de inventario con sus capas FIFO originales.
+                </p>
+                <label htmlFor="void-consumption-reason">Motivo de la anulación</label>
+                <textarea
+                  id="void-consumption-reason"
+                  name="reason"
+                  placeholder="Ej. compra registrada por error"
+                  required
+                  autoFocus
+                />
+              </>
+            )}
+
+            {modal.type === 'reverse-inventory' && (
+              <>
+                <p className="muted">
+                  Se conservará el movimiento original y se registrará su inverso sin recalcular el historial previo.
+                </p>
+                <label htmlFor="reverse-inventory-reason">Motivo del reverso</label>
+                <textarea
+                  id="reverse-inventory-reason"
+                  name="reason"
+                  placeholder="Ej. compra de inventario registrada por error"
+                  minLength={3}
+                  required
+                  autoFocus
+                />
+              </>
+            )}
+
             {modal.type === 'adjustment' && (
               <>
-                <label>Cuenta de origen</label>
-                <select
-                  name="accountId"
-                  value={adjAccount}
-                  onChange={(e) => setAdjAccount(e.target.value)}
-                  required
-                >
-                  {activeAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
                 <label>Alcance</label>
                 <select value={adjScope} onChange={(e) => setAdjScope(e.target.value)}>
                   <option value="account">Ajuste global de cuenta</option>
                   <option value="user">Ajuste a usuario específico</option>
                 </select>
+                {adjScope === 'account' && (
+                  <>
+                    <label>Cuenta</label>
+                    <select
+                      name="accountId"
+                      value={adjAccount}
+                      onChange={(event) => setAdjAccount(event.target.value)}
+                      required
+                    >
+                      {activeAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>{account.name}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 {adjScope === 'user' && (
                   <>
                     <label>Usuario</label>
-                    <select name="userId" required>
+                    <select
+                      name="userId"
+                      value={adjUserId}
+                      onChange={(event) => setAdjUserId(event.target.value)}
+                      required
+                    >
                       {adjUsers.map((u) => (
                         <option key={u.id} value={u.id}>
-                          {u.name}
+                          {u.name}{u.accountId ? ` · ${data.accounts.find((account) => account.id === u.accountId)?.name ?? 'Cuenta'}` : ' · Independiente'}
                         </option>
                       ))}
                     </select>
@@ -2489,20 +2900,6 @@ function AdminModalContainer({
               </>
             )}
 
-            {modal.type === 'export' && (
-              <>
-                <label>Google Sheet ID</label>
-                <input name="sheetId" placeholder="ID de la hoja" defaultValue={sheetSetting} required />
-                <label>Desde</label>
-                <input name="dateFrom" type="date" defaultValue={firstDay} required />
-                <label>Hasta</label>
-                <input name="dateTo" type="date" defaultValue={today} required />
-                <button type="button" className="ghost" onClick={handlePreview}>
-                  Previsualizar
-                </button>
-              </>
-            )}
-
             {modal.type === 'edit-account' && (
               <>
                 <label>Nombre de cuenta</label>
@@ -2512,8 +2909,21 @@ function AdminModalContainer({
 
             {modal.type === 'edit-user' && (
               <>
-                <label>Nuevo PIN de {modal.target.name}</label>
-                <input name="pin" type="password" inputMode="numeric" placeholder="Nuevo PIN" required autoFocus />
+                <label>Nombre</label>
+                <input name="name" defaultValue={modal.target.name} required autoFocus />
+                <label>Usuario para iniciar sesión</label>
+                <input name="username" defaultValue={modal.target.username ?? ''} autoComplete="off" />
+                <label>Nuevo PIN (opcional)</label>
+                <input
+                  name="pin"
+                  type="password"
+                  inputMode="numeric"
+                  placeholder="Dejar vacío para conservarlo"
+                  pattern="[0-9]{4,8}"
+                  minLength={4}
+                  maxLength={8}
+                  autoComplete="new-password"
+                />
               </>
             )}
 
@@ -2650,6 +3060,43 @@ function AdminModalContainer({
               </p>
             )}
 
+            {['toggle-product-status', 'toggle-account-status', 'toggle-user-status'].includes(modal.type) ? (
+              <>
+                <label htmlFor="status-change-reason">Motivo</label>
+                <textarea
+                  id="status-change-reason"
+                  name="reason"
+                  placeholder={modal.target.status === 'active' ? 'Motivo para archivar' : 'Motivo para restaurar'}
+                  minLength={3}
+                  required
+                />
+              </>
+            ) : null}
+
+            {modal.type === 'move-user' && (
+              <>
+                <label>Usuario</label>
+                <select name="userId" required>
+                  <option value="">Selecciona un usuario</option>
+                  {data.users
+                    .filter((entry) => entry.role === 'user' && entry.status === 'active')
+                    .map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.name} · {data.accounts.find((account) => account.id === entry.accountId)?.name ?? 'Sin cuenta'}
+                      </option>
+                    ))}
+                </select>
+                <label>Cuenta destino</label>
+                <select name="accountId">
+                  <option value="">Dejar sin cuenta</option>
+                  {activeAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>{account.name}</option>
+                  ))}
+                </select>
+                <p className="muted">El saldo permanece asociado al usuario y el cambio quedará auditado.</p>
+              </>
+            )}
+
             {modal.type === 'remove-user-account' && (
               <p className="admin-confirm-copy">
                 {`"${modal.target.name}" quedara sin cuenta. Su saldo se mantiene con el usuario.`}
@@ -2657,8 +3104,10 @@ function AdminModalContainer({
             )}
 
             <div className="modal-actions">
-              <button type="submit" className="primary">
-                {modal.type === 'toggle-product-status' ||
+              <button type="submit" className="primary" disabled={submitting}>
+                {submitting
+                  ? 'Guardando...'
+                  : modal.type === 'toggle-product-status' ||
                 modal.type === 'toggle-account-status' ||
                 modal.type === 'toggle-user-status' ||
                 modal.type === 'remove-user-account' ||
