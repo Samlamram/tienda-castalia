@@ -7891,13 +7891,6 @@ select:focus {
   }
 }
 
-.admin-global-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  margin: 0.75rem 0 1rem;
-}
-
 .pending-review-banner {
   display: grid;
   gap: 0.75rem;
@@ -7935,10 +7928,4 @@ select:focus {
 
 .pending-review-list small {
   opacity: 0.75;
-}
-
-.admin-global-actions button {
-  align-items: center;
-  display: inline-flex;
-  gap: 0.4rem;
 }

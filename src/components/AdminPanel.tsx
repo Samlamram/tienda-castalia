@@ -736,18 +736,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
           </div>
         </div>
 
-        <div className="admin-global-actions" aria-label="Operaciones administrativas">
-          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'adjustment' })}>
-            <DollarSign size={16} /> Ajustar saldo
-          </button>
-          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'history' })}>
-            <History size={16} /> Consumos
-          </button>
-          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'inventory-history' })}>
-            <Boxes size={16} /> Inventario
-          </button>
-        </div>
-
         <div className="admin-workspace">
           <div className="admin-shortcuts-grid admin-section-switcher" role="tablist" aria-label="Secciones admin">
             <button
