@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateAccountBalance,
   calculateConsumptionCosts,
+  calculateInventoryMovementCostImpact,
   calculateConsumptionPaymentStatuses
 } from '../domain/ledger';
 import type {
@@ -10,6 +11,7 @@ import type {
   ConsumptionItem,
   FifoCostAllocation,
   FinancialMovement,
+  InventoryMovement,
   PaymentApplication
 } from '../domain/types';
 
@@ -247,5 +249,122 @@ describe('ledger puro del modelo auditable', () => {
 
     expect(pending).toMatchObject({ costTotal: 1000, pendingCostQuantity: 5, costStatus: 'pending_inventory' });
     expect(completed).toMatchObject({ costTotal: 1600, pendingCostQuantity: 0, costStatus: 'final' });
+  });
+
+  it('calcula la perdida de un cuadre negativo con varias capas FIFO', () => {
+    const movement: InventoryMovement = {
+      id: 'adjustment-negative',
+      productId: 'product-fifo',
+      movementType: 'adjustment',
+      quantityDelta: -15,
+      requestId: 'request-negative',
+      createdAt
+    };
+    const allocations: FifoCostAllocation[] = [
+      {
+        id: 'allocation-1',
+        productId: movement.productId,
+        targetMovementId: movement.id,
+        sourceMovementId: 'purchase-1',
+        quantity: 10,
+        unitCost: 100,
+        totalCost: 1000,
+        createdAt
+      },
+      {
+        id: 'allocation-2',
+        productId: movement.productId,
+        targetMovementId: movement.id,
+        sourceMovementId: 'purchase-2',
+        quantity: 5,
+        unitCost: 120,
+        totalCost: 600,
+        createdAt
+      }
+    ];
+
+    expect(calculateInventoryMovementCostImpact({ movement, allocations })).toEqual({
+      amount: -1600,
+      allocatedQuantity: 15,
+      pendingQuantity: 0
+    });
+  });
+
+  it('valora un sobrante con el costo guardado en el ajuste', () => {
+    const movement: InventoryMovement = {
+      id: 'adjustment-positive',
+      productId: 'product-positive',
+      movementType: 'adjustment',
+      quantityDelta: 5,
+      unitCost: 120,
+      requestId: 'request-positive',
+      createdAt
+    };
+
+    expect(calculateInventoryMovementCostImpact({ movement, allocations: [] })).toEqual({
+      amount: 600,
+      allocatedQuantity: 5,
+      pendingQuantity: 0
+    });
+  });
+
+  it('restaura el valor cuando se reversa un faltante', () => {
+    const movement: InventoryMovement = {
+      id: 'adjustment-reversal',
+      productId: 'product-reversal',
+      movementType: 'adjustment_reversal',
+      quantityDelta: 15,
+      requestId: 'request-reversal',
+      reversedMovementId: 'adjustment-negative',
+      createdAt
+    };
+    const allocations: FifoCostAllocation[] = [
+      {
+        id: 'reversal-allocation',
+        productId: movement.productId,
+        targetMovementId: movement.id,
+        sourceMovementId: 'purchase-1',
+        quantity: -15,
+        unitCost: 100,
+        totalCost: -1500,
+        reversedAllocationId: 'allocation-original',
+        createdAt
+      }
+    ];
+
+    expect(calculateInventoryMovementCostImpact({ movement, allocations })).toEqual({
+      amount: 1500,
+      allocatedQuantity: 15,
+      pendingQuantity: 0
+    });
+  });
+
+  it('marca como pendiente la parte de un faltante que FIFO no pudo costear', () => {
+    const movement: InventoryMovement = {
+      id: 'adjustment-pending',
+      productId: 'product-pending',
+      movementType: 'adjustment',
+      quantityDelta: -15,
+      requestId: 'request-pending',
+      createdAt
+    };
+    const allocations: FifoCostAllocation[] = [
+      {
+        id: 'partial-allocation',
+        productId: movement.productId,
+        targetMovementId: movement.id,
+        sourceMovementId: 'purchase-partial',
+        quantity: 10,
+        unitCost: 100,
+        totalCost: 1000,
+        createdAt
+      }
+    ];
+
+    expect(calculateInventoryMovementCostImpact({ movement, allocations })).toEqual({
+      amount: -1000,
+      allocatedQuantity: 10,
+      pendingQuantity: 5
+    });
   });
 });

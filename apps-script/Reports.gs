@@ -1,4 +1,5 @@
 const REPORT_TIME_ZONE = 'America/Bogota';
+const REFRESH_BUTTON_BASE64 = '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';
 const REPORT_SHEETS = ['Resumen', 'Ventas', 'Cobros', 'Compras_Gastos', 'Finanzas', 'Inventario'];
 const RAW_SHEETS = [
   EVENT_SHEET,
@@ -6,6 +7,7 @@ const RAW_SHEETS = [
   'app_users',
   'app_sessions',
   'products',
+  'product_price_history',
   'consumptions',
   'consumption_items',
   'financial_movements',
@@ -19,6 +21,10 @@ const RAW_SHEETS = [
 
 function onOpen() {
   SpreadsheetApp.getUi()
+    .createMenu('🔄 Actualizar')
+    .addItem('Actualizar reporte ahora', 'refreshReportsFromButton')
+    .addToUi();
+  SpreadsheetApp.getUi()
     .createMenu('Tienda')
     .addItem('Actualizar reporte', 'refreshReports')
     .addItem('Mostrar datos técnicos', 'showRawSheets')
@@ -26,33 +32,12 @@ function onOpen() {
     .addToUi();
 }
 
-function onEdit(e) {
-  if (!e || !e.range) return;
-  if (e.range.getSheet().getName() !== 'Resumen') return;
-  const cell = e.range.getA1Notation();
-  if (cell === 'H5' && e.value === 'TRUE') refreshDashboard();
-}
-
-function refreshDashboard() {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    const spreadsheet = SpreadsheetApp.openById(getConfig_().spreadsheetId);
-    const source = loadReportSource_(spreadsheet);
-    writeSummary_(
-      spreadsheet,
-      source,
-      buildSalesRows_(source),
-      buildCollectionRows_(source),
-      buildPurchaseRows_(source),
-      buildFinanceRows_(source),
-      buildInventoryRows_(source)
-    );
-    hideRawSheets();
-    SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
+function refreshReportsFromButton() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  spreadsheet.toast('Actualizando datos y análisis…', 'App Tienda', 30);
+  const result = refreshReports();
+  spreadsheet.toast('Reporte actualizado.', 'App Tienda', 5);
+  return result;
 }
 
 function refreshReports() {
@@ -296,6 +281,273 @@ function buildInventoryRows_(source) {
 
 function writeSummary_(spreadsheet, source, sales, collections, purchases, finance, inventory) {
   const sheet = getReportSheet_(spreadsheet, 'Resumen');
+  const previousMonth = String(
+    sheet.getRange('B4').getDisplayValue() || sheet.getRange('B5').getDisplayValue() || ''
+  );
+  const monthly = buildMonthlyAnalysis_(source, sales, purchases, finance);
+  const months = monthly.map(function (entry) { return entry.month; });
+  const selectedMonth = months.includes(previousMonth)
+    ? previousMonth
+    : (months[months.length - 1] || monthKey_(new Date()));
+  const selected = monthly.find(function (entry) { return entry.month === selectedMonth; }) || {
+    month: selectedMonth, sales: 0, cost: 0, grossProfit: 0, grossMargin: 0,
+    expenses: 0, netProfit: 0, netMargin: 0, collections: 0, contributions: 0,
+    purchases: 0, withdrawals: 0, cashFlow: 0
+  };
+  const periodSales = sales.filter(function (row) {
+    return row[1] === selectedMonth && row[15] === 'CONFIRMADO';
+  });
+  const pending = sumColumn_(periodSales, 14);
+  const inventoryValue = sumColumn_(inventory, 6);
+  const allContributions = sumFinanceRows_(finance, 'INVERSIÓN');
+  const allExpenses = -sumFinanceRows_(finance, 'GASTO');
+  const allWithdrawals = -sumFinanceRows_(finance, 'RETIRO');
+  const allCollections = source.movements
+    .filter(function (movement) {
+      return ['payment', 'payment_reversal'].includes(String(movement.movement_type));
+    })
+    .reduce(function (total, movement) { return total + number_(movement.amount); }, 0);
+  const allPurchases = calculatePurchaseCash_(source.inventoryMovements);
+  const cashAvailable = allCollections + allContributions - allPurchases - allExpenses - allWithdrawals;
+  const totalReceivable = sumColumn_(sales.filter(function (row) { return row[15] === 'CONFIRMADO'; }), 14);
+  const storeValue = cashAvailable + inventoryValue + totalReceivable;
+
+  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).breakApart();
+  sheet.getCharts().forEach(function (chart) { sheet.removeChart(chart); });
+  sheet.clear();
+  sheet.setConditionalFormatRules([]);
+  sheet.setHiddenGridlines(true);
+
+  sheet.getRange('A1:I1').merge().setValue('Estado financiero · App Tienda');
+  sheet.getRange('A2:I2').merge().setValue(
+    'Resultados del mes, evolución histórica, caja y análisis comercial'
+  );
+  sheet.getRange('A4').setValue('Mes analizado');
+  sheet.getRange('B4').setValue(selectedMonth);
+  if (months.length) {
+    sheet.getRange('B4').setDataValidation(
+      SpreadsheetApp.newDataValidation().requireValueInList(months.slice().reverse(), true).build()
+    );
+  }
+  sheet.getRange('C4:F4').merge().setValue('La tabla histórica muestra todos los meses disponibles');
+  sheet.getRange('G4:H4').merge().setValue('Última actualización');
+  sheet.getRange('I4:J4').merge().setValue(new Date()).setNumberFormat('dd/mm/yyyy hh:mm');
+
+  writeKpiCard_(sheet, 6, 1, 'Ventas del mes', selected.sales, '#1a73e8', '$#,##0', 3);
+  writeKpiCard_(sheet, 6, 4, 'Utilidad bruta del mes', selected.grossProfit, '#188038', '$#,##0', 3);
+  writeKpiCard_(sheet, 6, 7, 'Utilidad neta del mes', selected.netProfit, selected.netProfit >= 0 ? '#188038' : '#d93025', '$#,##0', 3);
+  writeKpiCard_(sheet, 6, 10, 'Margen neto', selected.netMargin, selected.netMargin >= 0 ? '#188038' : '#d93025', '0.0%', 3);
+
+  writeFinancialBlock_(sheet, 10, 1, 6, 'Estado de resultados · ' + selectedMonth, [
+    ['Ventas netas', selected.sales, 'money'],
+    ['(−) Costo de ventas FIFO', -selected.cost, 'money'],
+    ['= Utilidad bruta', selected.grossProfit, 'money', true],
+    ['Margen bruto', selected.grossMargin, 'percent'],
+    ['(−) Gastos operativos', -selected.expenses, 'money'],
+    ['= Utilidad neta', selected.netProfit, 'money', true],
+    ['Margen neto', selected.netMargin, 'percent', true]
+  ]);
+  writeFinancialBlock_(sheet, 10, 7, 6, 'Caja y posición financiera', [
+    ['Cobros del mes', selected.collections, 'money'],
+    ['(+) Inversión', selected.contributions, 'money'],
+    ['(−) Compras de inventario', -selected.purchases, 'money'],
+    ['(−) Gastos', -selected.expenses, 'money'],
+    ['(−) Retiros', -selected.withdrawals, 'money'],
+    ['= Flujo neto del mes', selected.cashFlow, 'money', true],
+    ['Caja estimada acumulada', cashAvailable, 'money'],
+    ['Inventario al costo', inventoryValue, 'money'],
+    ['Cuentas por cobrar', totalReceivable, 'money'],
+    ['Valor estimado de la tienda', storeValue, 'money', true]
+  ]);
+
+  const trendRows = monthly.map(function (entry) {
+    return [entry.month, entry.sales, entry.grossProfit, entry.netProfit];
+  });
+  if (!trendRows.length) trendRows.push([selectedMonth, 0, 0, 0]);
+  const productProfit = aggregateRanking_(periodSales, 5, 11);
+  const dashboardData = writeDashboardData_(spreadsheet, trendRows, [
+    ['Cobros', selected.collections],
+    ['Inversión', selected.contributions],
+    ['Compras', -selected.purchases],
+    ['Gastos', -selected.expenses],
+    ['Retiros', -selected.withdrawals]
+  ], productProfit);
+  createDashboardCharts_(sheet, dashboardData);
+
+  const historyRow = 42;
+  sheet.getRange(historyRow, 1, 1, 12).merge().setValue('Evolución mensual')
+    .setFontWeight('bold').setFontSize(13).setBackground('#f1f3f4');
+  const historyHeaders = [
+    'Mes', 'Ventas', 'Costo FIFO', 'Utilidad bruta', 'Gastos',
+    'Utilidad neta', 'Margen neto', 'Cobros', 'Flujo de caja'
+  ];
+  sheet.getRange(historyRow + 1, 1, 1, historyHeaders.length).setValues([historyHeaders])
+    .setFontWeight('bold').setBackground('#fafafa');
+  const historyRows = monthly.map(function (entry) {
+    return [
+      entry.month, entry.sales, entry.cost, entry.grossProfit, entry.expenses,
+      entry.netProfit, entry.netMargin, entry.collections, entry.cashFlow
+    ];
+  });
+  const visibleHistory = historyRows.length ? historyRows : [[selectedMonth, 0, 0, 0, 0, 0, 0, 0, 0]];
+  sheet.getRange(historyRow + 2, 1, visibleHistory.length, historyHeaders.length).setValues(visibleHistory);
+  sheet.getRange(historyRow + 2, 2, visibleHistory.length, 5).setNumberFormat('$#,##0');
+  sheet.getRange(historyRow + 2, 7, visibleHistory.length, 1).setNumberFormat('0.0%');
+  sheet.getRange(historyRow + 2, 8, visibleHistory.length, 2).setNumberFormat('$#,##0');
+  sheet.getRange(historyRow, 1, visibleHistory.length + 2, historyHeaders.length)
+    .setBorder(true, true, true, true, false, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+
+  const rankingRow = historyRow + visibleHistory.length + 4;
+  const productRanking = aggregateBusinessRanking_(periodSales, 5).slice(0, 10)
+    .map(function (row) { return [row[0], row[1], row[2], row[1] > 0 ? row[2] / row[1] : 0]; });
+  const accountRanking = aggregateBusinessRanking_(periodSales, 3).slice(0, 10)
+    .map(function (row) { return [row[0], row[1], row[3], row[2]]; });
+  const userRanking = aggregateBusinessRanking_(periodSales, 4).slice(0, 10)
+    .map(function (row) { return [row[0], row[1], row[2], row[1] > 0 ? row[2] / row[1] : 0]; });
+  writeDashboardTable_(sheet, rankingRow, 1, 'Top productos · ' + selectedMonth, ['Producto', 'Ventas', 'Utilidad', 'Margen'], productRanking, 4);
+  writeDashboardTable_(sheet, rankingRow, 5, 'Top cuentas · ' + selectedMonth, ['Cuenta', 'Ventas', 'Por cobrar', 'Utilidad'], accountRanking, 4);
+  writeDashboardTable_(sheet, rankingRow, 9, 'Top usuarios · ' + selectedMonth, ['Usuario', 'Ventas', 'Utilidad', 'Margen'], userRanking, 4);
+
+  const alertRow = rankingRow + 14;
+  const lowStock = inventory.filter(function (row) { return row[11] === 'SÍ' && row[2] === 'ACTIVO'; })
+    .sort(function (left, right) { return number_(left[3]) - number_(right[3]); }).slice(0, 10)
+    .map(function (row) { return [row[0], row[3], row[4], row[11]]; });
+  const accountDebt = aggregateRanking_(periodSales, 3, 14).filter(function (row) { return row[1] > 0; });
+  const recentFinance = finance.filter(function (row) { return row[1] === selectedMonth; }).slice(0, 10)
+    .map(function (row) { return [row[0], row[3], row[7], row[4]]; });
+  writeDashboardTable_(sheet, alertRow, 1, 'Inventario por reponer', ['Producto', 'Stock', 'Mínimo', 'Alerta'], lowStock, 4);
+  writeDashboardTable_(sheet, alertRow, 5, 'Cuentas por cobrar · ' + selectedMonth, ['Cuenta', 'Saldo'], accountDebt.slice(0, 10), 4);
+  writeDashboardTable_(sheet, alertRow, 9, 'Movimientos financieros · ' + selectedMonth, ['Fecha', 'Tipo', 'Concepto', 'Caja'], recentFinance, 4);
+
+  sheet.getRange('A1:I1').setFontWeight('bold').setFontSize(18).setFontColor('#202124');
+  sheet.getRange('A2:I2').setFontColor('#5f6368');
+  sheet.getRange('A4:J4').setBackground('#f8f9fa').setVerticalAlignment('middle');
+  sheet.getRange('A4').setFontWeight('bold');
+  sheet.setColumnWidths(1, 12, 95);
+  sheet.setFrozenRows(4);
+  sheet.setRowHeight(1, 32);
+  sheet.setRowHeight(4, 30);
+  sheet.setTabColor('#1a73e8');
+  ensureRefreshButton_(spreadsheet, sheet);
+  sheet.activate();
+}
+
+function buildMonthlyAnalysis_(source, sales, purchases, finance) {
+  const monthSet = new Set(
+    sales.concat(purchases, finance).map(function (row) { return row[1]; }).filter(Boolean)
+  );
+  source.movements.forEach(function (movement) {
+    const month = monthKey_(movement.created_at);
+    if (month) monthSet.add(month);
+  });
+  if (!monthSet.size) monthSet.add(monthKey_(new Date()));
+  return Array.from(monthSet).sort().map(function (month) {
+    const monthSales = sales.filter(function (row) {
+      return row[1] === month && row[15] === 'CONFIRMADO';
+    });
+    const monthFinance = finance.filter(function (row) { return row[1] === month; });
+    const netSales = sumColumn_(monthSales, 9);
+    const cost = sumColumn_(monthSales, 10);
+    const grossProfit = netSales - cost;
+    const expenses = -sumFinanceRows_(monthFinance, 'GASTO');
+    const contributions = sumFinanceRows_(monthFinance, 'INVERSIÓN');
+    const withdrawals = -sumFinanceRows_(monthFinance, 'RETIRO');
+    const collections = source.movements.filter(function (movement) {
+      return monthKey_(movement.created_at) === month &&
+        ['payment', 'payment_reversal'].includes(String(movement.movement_type));
+    }).reduce(function (total, movement) { return total + number_(movement.amount); }, 0);
+    const inventoryPurchases = calculatePurchaseCashForMonth_(source.inventoryMovements, month);
+    const netProfit = grossProfit - expenses;
+    return {
+      month: month,
+      sales: roundMoney_(netSales),
+      cost: roundMoney_(cost),
+      grossProfit: roundMoney_(grossProfit),
+      grossMargin: netSales > 0 ? grossProfit / netSales : 0,
+      expenses: roundMoney_(expenses),
+      netProfit: roundMoney_(netProfit),
+      netMargin: netSales > 0 ? netProfit / netSales : 0,
+      collections: roundMoney_(collections),
+      contributions: roundMoney_(contributions),
+      purchases: roundMoney_(inventoryPurchases),
+      withdrawals: roundMoney_(withdrawals),
+      cashFlow: roundMoney_(collections + contributions - inventoryPurchases - expenses - withdrawals)
+    };
+  });
+}
+
+function calculatePurchaseCashForMonth_(movements, month) {
+  const byId = indexBy_(movements, 'id');
+  return movements.filter(function (movement) {
+    return monthKey_(movement.created_at) === month;
+  }).reduce(function (total, movement) {
+    const type = String(movement.movement_type || '');
+    if (type === 'purchase') {
+      return total + number_(movement.quantity_delta) * number_(movement.unit_cost);
+    }
+    const original = byId[String(movement.reversed_movement_id || '')] || {};
+    if (type === 'adjustment_reversal' && original.movement_type === 'purchase') {
+      return total + number_(movement.quantity_delta) * number_(original.unit_cost);
+    }
+    return total;
+  }, 0);
+}
+
+function writeFinancialBlock_(sheet, row, column, width, title, rows) {
+  sheet.getRange(row, column, 1, width).merge().setValue(title)
+    .setFontWeight('bold').setFontSize(13).setBackground('#f1f3f4');
+  rows.forEach(function (entry, index) {
+    const targetRow = row + index + 1;
+    const label = sheet.getRange(targetRow, column, 1, width - 2).merge().setValue(entry[0]);
+    const value = sheet.getRange(targetRow, column + width - 2, 1, 2).merge().setValue(entry[1]);
+    value.setNumberFormat(entry[2] === 'percent' ? '0.0%' : '$#,##0');
+    if (entry[3]) {
+      label.setFontWeight('bold');
+      value.setFontWeight('bold').setBackground('#f8f9fa');
+    }
+  });
+  sheet.getRange(row, column, rows.length + 1, width)
+    .setBorder(true, true, true, true, false, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+}
+
+function ensureRefreshButton_(spreadsheet, sheet) {
+  SpreadsheetApp.flush();
+  const images = spreadsheet.getImages().filter(function (image) {
+    return image.getAltTextTitle() === 'Actualizar reporte';
+  });
+  let button = images.shift();
+  images.forEach(function (image) { image.remove(); });
+  if (!button) {
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(REFRESH_BUTTON_BASE64),
+      'image/png',
+      'actualizar-reporte.png'
+    );
+    button = sheet.insertImage(blob, 10, 2);
+  }
+  button
+    .setAnchorCell(sheet.getRange('J2'))
+    .setAnchorCellXOffset(8)
+    .setAnchorCellYOffset(2)
+    .setWidth(245)
+    .setHeight(42)
+    .setAltTextTitle('Actualizar reporte')
+    .setAltTextDescription('Actualiza los datos, el estado de resultados y todos los análisis.')
+    .assignScript('refreshReportsFromButton');
+  SpreadsheetApp.flush();
+}
+
+function getDashboardStatus() {
+  const spreadsheet = SpreadsheetApp.openById(getConfig_().spreadsheetId);
+  const sheet = spreadsheet.getSheetByName('Resumen');
+  const buttonCount = spreadsheet.getImages().filter(function (image) {
+    return image.getAltTextTitle() === 'Actualizar reporte';
+  }).length;
+  return { ok: true, buttons: buttonCount, charts: sheet ? sheet.getCharts().length : 0 };
+}
+
+function writeSummaryLegacy_(spreadsheet, source, sales, collections, purchases, finance, inventory) {
+  const sheet = getReportSheet_(spreadsheet, 'Resumen');
   const previousMonth = String(sheet.getRange('B5').getDisplayValue() || '');
   const previousAccount = String(sheet.getRange('D5').getDisplayValue() || 'TODAS');
   const previousUser = String(sheet.getRange('F5').getDisplayValue() || 'TODOS');
@@ -473,10 +725,11 @@ function writeSummary_(spreadsheet, source, sales, collections, purchases, finan
   sheet.activate();
 }
 
-function writeKpiCard_(sheet, row, column, title, value, accent, numberFormat) {
-  const titleRange = sheet.getRange(row, column, 1, 2).merge();
-  const valueRange = sheet.getRange(row + 1, column, 2, 2).merge();
-  const fullRange = sheet.getRange(row, column, 3, 2);
+function writeKpiCard_(sheet, row, column, title, value, accent, numberFormat, width) {
+  const cardWidth = width || 2;
+  const titleRange = sheet.getRange(row, column, 1, cardWidth).merge();
+  const valueRange = sheet.getRange(row + 1, column, 2, cardWidth).merge();
+  const fullRange = sheet.getRange(row, column, 3, cardWidth);
   titleRange.setValue(title).setFontSize(9).setFontWeight('bold').setFontColor('#5f6368');
   valueRange.setValue(roundMoney_(value)).setNumberFormat(numberFormat)
     .setFontSize(17).setFontWeight('bold').setFontColor(accent).setVerticalAlignment('middle');
@@ -486,8 +739,8 @@ function writeKpiCard_(sheet, row, column, title, value, accent, numberFormat) {
 function writeDashboardData_(spreadsheet, trendRows, cashRows, productProfit) {
   const sheet = spreadsheet.getSheetByName('_dashboard_data') || spreadsheet.insertSheet('_dashboard_data');
   sheet.clear();
-  sheet.getRange(1, 1, 1, 3).setValues([['Mes', 'Ventas', 'Utilidad bruta']]);
-  sheet.getRange(2, 1, trendRows.length, 3).setValues(trendRows);
+  sheet.getRange(1, 1, 1, 4).setValues([['Mes', 'Ventas', 'Utilidad bruta', 'Utilidad neta']]);
+  sheet.getRange(2, 1, trendRows.length, 4).setValues(trendRows);
   sheet.getRange(1, 5, 1, 2).setValues([['Concepto', 'Valor']]);
   sheet.getRange(2, 5, cashRows.length, 2).setValues(cashRows);
   const productRows = productProfit.length ? productProfit.slice(0, 8) : [['Sin ventas', 0]];
@@ -504,12 +757,12 @@ function writeDashboardData_(spreadsheet, trendRows, cashRows, productProfit) {
 function createDashboardCharts_(sheet, data) {
   const trendChart = sheet.newChart()
     .setChartType(Charts.ChartType.LINE)
-    .addRange(data.sheet.getRange(1, 1, data.trendCount + 1, 3))
+    .addRange(data.sheet.getRange(1, 1, data.trendCount + 1, 4))
     .setNumHeaders(1)
-    .setPosition(17, 1, 0, 0)
-    .setOption('title', 'Ventas y utilidad bruta por mes')
+    .setPosition(23, 1, 0, 0)
+    .setOption('title', 'Ventas y utilidad por mes')
     .setOption('legend', { position: 'bottom' })
-    .setOption('colors', ['#1a73e8', '#188038'])
+    .setOption('colors', ['#1a73e8', '#5f6368', '#188038'])
     .setOption('backgroundColor', '#ffffff')
     .setOption('width', 555)
     .setOption('height', 300)
@@ -520,7 +773,7 @@ function createDashboardCharts_(sheet, data) {
     .setChartType(Charts.ChartType.WATERFALL)
     .addRange(data.sheet.getRange(1, 5, data.cashCount + 1, 2))
     .setNumHeaders(1)
-    .setPosition(17, 7, 0, 0)
+    .setPosition(23, 7, 0, 0)
     .setOption('title', 'Waterfall · cómo se forma el flujo neto del mes')
     .setOption('legend', { position: 'none' })
     .setOption('colors', ['#1a73e8'])
@@ -544,18 +797,18 @@ function writeDashboardTable_(sheet, row, column, title, headers, rows, width) {
   sheet.getRange(row + 2, column, paddedRows.length, width).setValues(paddedRows);
   sheet.getRange(row, column, paddedRows.length + 2, width)
     .setBorder(true, true, true, true, false, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
-  if (title === 'Cuentas con saldo pendiente' && paddedRows.length) {
+  if ((title === 'Cuentas con saldo pendiente' || title.indexOf('Cuentas por cobrar') === 0) && paddedRows.length) {
     sheet.getRange(row + 2, column + 1, paddedRows.length, 1).setNumberFormat('$#,##0');
   }
-  if (title === 'Movimientos financieros recientes' && paddedRows.length) {
+  if (title.indexOf('Movimientos financieros') === 0 && paddedRows.length) {
     sheet.getRange(row + 2, column, paddedRows.length, 1).setNumberFormat('dd/mm/yyyy');
     sheet.getRange(row + 2, column + 3, paddedRows.length, 1).setNumberFormat('$#,##0');
   }
-  if (title === 'Top productos' || title === 'Top usuarios') {
+  if (title.indexOf('Top productos') === 0 || title.indexOf('Top usuarios') === 0) {
     sheet.getRange(row + 2, column + 1, paddedRows.length, 2).setNumberFormat('$#,##0');
     sheet.getRange(row + 2, column + 3, paddedRows.length, 1).setNumberFormat('0.0%');
   }
-  if (title === 'Top cuentas') {
+  if (title.indexOf('Top cuentas') === 0) {
     sheet.getRange(row + 2, column + 1, paddedRows.length, 3).setNumberFormat('$#,##0');
   }
 }

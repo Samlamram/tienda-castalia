@@ -22,6 +22,7 @@ const ALLOWED_TABLES = new Set([
   'app_users',
   'app_sessions',
   'products',
+  'product_price_history',
   'consumptions',
   'consumption_items',
   'financial_movements',
@@ -47,6 +48,9 @@ function doPost(e) {
   if (!rawBody) throw new Error('El webhook no contiene un cuerpo JSON.');
 
   const payload = JSON.parse(rawBody);
+  if (payload.type === 'DASHBOARD_STATUS') {
+    return jsonResponse_(getDashboardStatus());
+  }
   if (payload.type === 'REFRESH_REPORTS') {
     return jsonResponse_(refreshReports());
   }

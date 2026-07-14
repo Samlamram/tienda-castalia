@@ -29,6 +29,57 @@ export function roundQuantity(value: number): number {
   return round(value, QUANTITY_FACTOR);
 }
 
+export interface InventoryMovementCostImpact {
+  amount: number;
+  allocatedQuantity: number;
+  pendingQuantity: number;
+}
+
+/**
+ * Monetary inventory impact of a stock adjustment. Negative movements are
+ * valued from their FIFO allocations; positive entries use their stored cost.
+ * Reversal allocations are signed, so the same calculation restores the value.
+ */
+export function calculateInventoryMovementCostImpact(input: {
+  movement: InventoryMovement;
+  allocations: FifoCostAllocation[];
+}): InventoryMovementCostImpact {
+  const targetAllocations = input.allocations.filter(
+    (allocation) => allocation.targetMovementId === input.movement.id
+  );
+  const movementQuantity = Math.abs(input.movement.quantityDelta);
+
+  if (targetAllocations.length > 0) {
+    const allocatedQuantity = Math.abs(
+      targetAllocations.reduce((sum, allocation) => sum + allocation.quantity, 0)
+    );
+    const fifoCost = targetAllocations.reduce(
+      (sum, allocation) => sum + allocation.totalCost,
+      0
+    );
+
+    return {
+      amount: roundMoney(-fifoCost),
+      allocatedQuantity: roundQuantity(allocatedQuantity),
+      pendingQuantity: roundQuantity(Math.max(0, movementQuantity - allocatedQuantity))
+    };
+  }
+
+  if (input.movement.quantityDelta > 0) {
+    return {
+      amount: roundMoney(input.movement.quantityDelta * (input.movement.unitCost ?? 0)),
+      allocatedQuantity: roundQuantity(movementQuantity),
+      pendingQuantity: 0
+    };
+  }
+
+  return {
+    amount: 0,
+    allocatedQuantity: 0,
+    pendingQuantity: roundQuantity(movementQuantity)
+  };
+}
+
 function applicationsForMovement(
   movementId: string,
   applications: PaymentApplication[]

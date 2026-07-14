@@ -11,6 +11,10 @@ const financeMigration = readFileSync(
   join(process.cwd(), 'supabase', 'migrations', '202607140002_finance_module.sql'),
   'utf8'
 );
+const priceHistoryMigration = readFileSync(
+  join(process.cwd(), 'supabase', 'migrations', '202607140003_product_price_history.sql'),
+  'utf8'
+);
 const sheetsWebhooks = readFileSync(
   join(process.cwd(), 'supabase', 'apps-script-webhooks.sql'),
   'utf8'
@@ -23,7 +27,7 @@ function capturedNames(pattern: RegExp): string[] {
 }
 
 describe('contrato del esquema oficial', () => {
-  it('mantiene exactamente las 12 tablas y las 5 vistas aprobadas', () => {
+  it('mantiene exactamente las 13 tablas y las 5 vistas aprobadas', () => {
     expect(capturedNames(/create table public\.([a-z_]+)/gi)).toEqual([
       'accounts',
       'app_sessions',
@@ -35,6 +39,7 @@ describe('contrato del esquema oficial', () => {
       'financial_movements',
       'inventory_movements',
       'payment_applications',
+      'product_price_history',
       'products',
       'store_finance_events'
     ]);
@@ -68,7 +73,8 @@ describe('contrato del esquema oficial', () => {
       'admin_command',
       'admin_get_audit_log',
       'admin_get_finance_events',
-      'admin_finance_command'
+      'admin_finance_command',
+      'admin_get_product_price_history'
     ]) {
       expect(schema).toMatch(new RegExp(`grant execute on function public\\.${rpc}\\(`, 'i'));
     }
@@ -107,7 +113,10 @@ describe('contrato del esquema oficial', () => {
     expect(reportsScript).toMatch(/'Top productos'/);
     expect(reportsScript).toMatch(/'Top cuentas'/);
     expect(reportsScript).toMatch(/'Top usuarios'/);
-    expect(reportsScript).toMatch(/cell === 'H5'/);
+    expect(reportsScript).toMatch(/function refreshReportsFromButton\(\)/);
+    expect(reportsScript).toMatch(/assignScript\('refreshReportsFromButton'\)/);
+    expect(reportsScript).toMatch(/'Estado de resultados · '/);
+    expect(reportsScript).toMatch(/'Evolución mensual'/);
   });
 
   it('conserva idempotencia offline y elimina secretos de la auditoria', () => {
@@ -120,6 +129,8 @@ describe('contrato del esquema oficial', () => {
   });
 
   it('mantiene la migracion reproducible sincronizada con schema.sql', () => {
-    expect(schema.trim()).toBe(`${migration.trim()}\n\n${financeMigration.trim()}`);
+    expect(schema.trim()).toBe(
+      `${migration.trim()}\n\n${financeMigration.trim()}\n\n${priceHistoryMigration.trim()}`
+    );
   });
 });

@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import type { Account, AppSession, Product, TiendaViewData } from '../domain/types';
 import { BrandLogo } from './BrandLogo';
-import { calculateOpenConsumptions, roundMoney } from '../domain/ledger';
+import { calculateInventoryMovementCostImpact, calculateOpenConsumptions, roundMoney } from '../domain/ledger';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import * as adminApi from '../services/adminApi';
 import { formatMoney, toNumber } from '../utils/money';
@@ -759,15 +759,49 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
       adjustmentGroups.set(movement.requestId, group);
     });
     adjustmentGroups.forEach((movements, requestId) => {
+      const movementImpacts = movements.map((movement) => ({
+        movement,
+        impact: calculateInventoryMovementCostImpact({
+          movement,
+          allocations: data.fifoCostAllocations
+        })
+      }));
+      const totalImpact = movementImpacts.reduce((sum, entry) => sum + entry.impact.amount, 0);
+      const hasPendingCost = movementImpacts.some((entry) => entry.impact.pendingQuantity > 0);
       entries.push({
         id: `count-${requestId}`,
         kind: 'Cuadre',
         title: 'Cuadre de inventario',
-        subtitle: `${movements.length} producto${movements.length === 1 ? '' : 's'}`,
+        subtitle: `${movements.length} producto${movements.length === 1 ? '' : 's'}${hasPendingCost ? ' · costo pendiente' : ''}`,
+        amount: totalImpact,
         createdAt: movements[0].createdAt,
-        details: movements.map((movement) => {
+        details: movementImpacts.map(({ movement, impact }) => {
           const product = data.products.find((entry) => entry.id === movement.productId);
-          return `${product?.name ?? 'Producto'}: ${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta} unidades · ${movement.note ?? 'Sin nota'}`;
+          const targetAllocations = data.fifoCostAllocations.filter(
+            (allocation) => allocation.targetMovementId === movement.id
+          );
+          const fifoBreakdown = targetAllocations.length > 0
+            ? targetAllocations
+                .map((allocation) => `${Math.abs(allocation.quantity)} × ${formatMoney(allocation.unitCost)}`)
+                .join(' + ')
+            : movement.quantityDelta > 0
+              ? `${movement.quantityDelta} × ${formatMoney(movement.unitCost ?? 0)}`
+              : '';
+          const impactLabel = impact.amount < 0
+            ? `Pérdida al costo FIFO: ${formatMoney(Math.abs(impact.amount))}`
+            : impact.amount > 0
+              ? `Aumento del inventario al costo: ${formatMoney(impact.amount)}`
+              : 'Impacto al costo: $ 0';
+          const pendingLabel = impact.pendingQuantity > 0
+            ? `Costo pendiente para ${impact.pendingQuantity} unidad${impact.pendingQuantity === 1 ? '' : 'es'}`
+            : '';
+          return [
+            `${product?.name ?? 'Producto'}: ${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta} unidades`,
+            impactLabel,
+            fifoBreakdown ? `Cálculo: ${fifoBreakdown}` : '',
+            pendingLabel,
+            movement.note ?? 'Sin nota'
+          ].filter(Boolean).join(' · ');
         })
       });
     });
@@ -1381,7 +1415,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 <div>
                   <span className="finance-eyebrow">Finanzas</span>
                   <h2>Estado de la tienda</h2>
-                  <p>Una vista simple de la caja, lo que tienes y lo que falta por cobrar.</p>
+                  <p>Lo que tienes, lo que se movió y lo que has ganado.</p>
                 </div>
                 <div className="finance-actions">
                   <button type="button" className="primary small" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'capital_contribution' } })}>
@@ -1409,76 +1443,66 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 </div>
               ) : null}
 
-              <section className="finance-status-grid" aria-label="Estado financiero actual">
-                <article className={`finance-cash-card ${financeSummary.cash < 0 ? 'is-negative' : ''}`}>
-                  <div className="finance-card-label">
-                    <span>Caja calculada</span>
-                    <small>Según el sistema</small>
-                  </div>
-                  <strong>{formatMoney(financeSummary.cash)}</strong>
-                  <p>Lo que debería haber disponible después de todos los movimientos.</p>
-                  <div className="finance-cash-formula">
-                    <span>Entró <b>{formatMoney(financeSummary.totalIn)}</b></span>
-                    <span>Salió <b>{formatMoney(financeSummary.totalOut)}</b></span>
-                  </div>
-                </article>
-
-                <article className="finance-summary-card store-value">
-                  <span>Valor de la tienda</span>
-                  <strong>{formatMoney(financeSummary.storeValue)}</strong>
-                  <small>Caja + inventario + por cobrar</small>
-                </article>
-
-                <article className={`finance-summary-card profit ${financeSummary.profit < 0 ? 'is-negative' : ''}`}>
-                  <span>Utilidad acumulada</span>
-                  <strong>{formatMoney(financeSummary.profit)}</strong>
-                  <small>Incluye lo retirado por los dueños</small>
-                </article>
-              </section>
-
-              <section className="finance-breakdown-card" aria-labelledby="finance-assets-title">
+              <section className="finance-overview-card" aria-labelledby="finance-assets-title">
                 <div className="finance-section-title">
                   <div>
-                    <span className="finance-eyebrow">Lo que tienes</span>
-                    <h3 id="finance-assets-title">Dónde está el valor</h3>
+                    <span className="finance-eyebrow">1 · Estado actual</span>
+                    <h3 id="finance-assets-title">Lo que tiene la tienda hoy</h3>
                   </div>
-                  <small>Valores actuales</small>
+                  <div className="finance-overview-total">
+                    <span>Valor de la tienda</span>
+                    <strong>{formatMoney(financeSummary.storeValue)}</strong>
+                  </div>
                 </div>
-                <div className="finance-assets-grid">
-                  <div>
-                    <span>En caja</span>
+                <div className="finance-value-equation">
+                  <div className={`finance-value-part cash ${financeSummary.cash < 0 ? 'is-negative' : ''}`}>
+                    <span>Caja calculada</span>
                     <strong>{formatMoney(financeSummary.cash)}</strong>
+                    <small>Dinero disponible según el sistema</small>
                   </div>
-                  <div>
-                    <span>En inventario</span>
-                    <strong>{formatMoney(financeSummary.inventoryCost)}</strong>
-                    <small>Al costo</small>
-                  </div>
-                  <div>
+                  <span className="finance-equation-sign" aria-hidden="true">+</span>
+                  <div className="finance-value-part receivable">
                     <span>Por cobrar</span>
                     <strong>{formatMoney(financeSummary.receivable)}</strong>
-                    <small>{financeSummary.customerCredit > 0 ? `${formatMoney(financeSummary.customerCredit)} en saldos a favor` : 'Pendiente de clientes'}</small>
+                    <small>Dinero pendiente de clientes</small>
                   </div>
+                  <span className="finance-equation-sign" aria-hidden="true">+</span>
+                  <div className="finance-value-part inventory">
+                    <span>Mercancía</span>
+                    <strong>{formatMoney(financeSummary.inventoryCost)}</strong>
+                    <small>Valorada al costo</small>
+                  </div>
+                  {financeSummary.customerCredit > 0 ? (
+                    <>
+                      <span className="finance-equation-sign" aria-hidden="true">−</span>
+                      <div className="finance-value-part credit">
+                        <span>Saldos a favor</span>
+                        <strong>{formatMoney(financeSummary.customerCredit)}</strong>
+                        <small>Dinero a favor de clientes</small>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               </section>
 
               <section className="finance-flow-section" aria-labelledby="finance-flow-title">
                 <div className="finance-section-title">
                   <div>
-                    <span className="finance-eyebrow">Movimientos</span>
-                    <h3 id="finance-flow-title">Entradas y salidas</h3>
+                    <span className="finance-eyebrow">2 · Caja</span>
+                    <h3 id="finance-flow-title">Movimientos de caja</h3>
                   </div>
+                  <small>Solo dinero recibido o pagado</small>
                 </div>
                 <div className="finance-flow-grid">
                   <article className="finance-flow-card incoming">
-                    <header><span>Entradas</span><strong>{formatMoney(financeSummary.totalIn)}</strong></header>
+                    <header><span>Dinero recibido</span><strong>{formatMoney(financeSummary.totalIn)}</strong></header>
                     <dl>
                       <div><dt>Inversión</dt><dd>{formatMoney(financeSummary.contribution)}</dd></div>
                       <div><dt>Cobros</dt><dd>{formatMoney(financeSummary.collected)}</dd></div>
                     </dl>
                   </article>
                   <article className="finance-flow-card outgoing">
-                    <header><span>Salidas</span><strong>{formatMoney(financeSummary.totalOut)}</strong></header>
+                    <header><span>Dinero pagado</span><strong>{formatMoney(financeSummary.totalOut)}</strong></header>
                     <dl>
                       <div><dt>Compras</dt><dd>{formatMoney(financeSummary.purchases)}</dd></div>
                       <div><dt>Gastos</dt><dd>{formatMoney(financeSummary.expenses)}</dd></div>
@@ -1486,19 +1510,51 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                     </dl>
                   </article>
                 </div>
+                <p className="finance-helper-note">Las cuentas por cobrar aparecen aquí únicamente cuando el cliente paga.</p>
               </section>
 
-              <section className="finance-projection" aria-label="Proyección del inventario">
-                <div><span>Inventario al costo</span><strong>{formatMoney(financeSummary.inventoryCost)}</strong></div>
-                <div><span>Si se vende al precio actual</span><strong>{formatMoney(financeSummary.projectedInventory)}</strong></div>
-                <div><span>Margen potencial</span><strong>{formatMoney(financeSummary.projectedMargin)}</strong></div>
+              <section className="finance-profit-section" aria-labelledby="finance-profit-title">
+                <div className="finance-section-title">
+                  <div>
+                    <span className="finance-eyebrow">3 · Resultado</span>
+                    <h3 id="finance-profit-title">Ganancia</h3>
+                  </div>
+                </div>
+                <div className={`finance-profit-card ${financeSummary.profit < 0 ? 'is-negative' : ''}`}>
+                  <div className="finance-profit-total">
+                    <span>Ganancia generada hasta hoy</span>
+                    <strong>{formatMoney(financeSummary.profit)}</strong>
+                    <small>Lo producido por la tienda después de comparar su valor con la inversión.</small>
+                  </div>
+                  <dl>
+                    <div><dt>Inversión de los dueños</dt><dd>{formatMoney(financeSummary.contribution)}</dd></div>
+                    <div><dt>Retirado por los dueños</dt><dd>{formatMoney(financeSummary.withdrawals)}</dd></div>
+                    <div><dt>Ganancia dentro de la tienda</dt><dd>{formatMoney(financeSummary.retainedProfit)}</dd></div>
+                  </dl>
+                </div>
+              </section>
+
+              <section className="finance-projection-section" aria-labelledby="finance-projection-title">
+                <div className="finance-section-title">
+                  <div>
+                    <span className="finance-eyebrow">4 · Proyección</span>
+                    <h3 id="finance-projection-title">Qué podría dejar el inventario</h3>
+                  </div>
+                  <small>No es ganancia actual</small>
+                </div>
+                <div className="finance-projection" aria-label="Proyección del inventario">
+                  <div><span>Mercancía al costo</span><strong>{formatMoney(financeSummary.inventoryCost)}</strong></div>
+                  <div><span>Si se vende al precio actual</span><strong>{formatMoney(financeSummary.projectedInventory)}</strong></div>
+                  <div className="potential"><span>Diferencia posible al vender</span><strong>{formatMoney(financeSummary.projectedMargin)}</strong></div>
+                </div>
+                <p className="finance-helper-note">Es una posibilidad: todavía falta vender la mercancía y pueden existir gastos o pérdidas.</p>
               </section>
 
               <section className="finance-history-section">
                 <div className="finance-history-heading">
                   <div>
-                    <span className="finance-eyebrow">Historial</span>
-                    <h2>Todo lo que ha pasado</h2>
+                    <span className="finance-eyebrow">5 · Historial</span>
+                    <h3>Todo lo que ha pasado</h3>
                   </div>
                   <span>{financeHistory.length} movimientos</span>
                 </div>

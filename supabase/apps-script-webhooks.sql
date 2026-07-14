@@ -52,6 +52,10 @@ drop trigger if exists backup_products_to_sheets on public.products;
 create trigger backup_products_to_sheets after insert or update or delete on public.products
 for each row execute function public.app_backup_to_sheets();
 
+drop trigger if exists backup_product_price_history_to_sheets on public.product_price_history;
+create trigger backup_product_price_history_to_sheets after insert or update or delete on public.product_price_history
+for each row execute function public.app_backup_to_sheets();
+
 drop trigger if exists backup_consumptions_to_sheets on public.consumptions;
 create trigger backup_consumptions_to_sheets after insert or update or delete on public.consumptions
 for each row execute function public.app_backup_to_sheets();
