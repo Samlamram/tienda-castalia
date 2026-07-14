@@ -737,28 +737,8 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
         </div>
 
         <div className="admin-global-actions" aria-label="Operaciones administrativas">
-          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'purchase' })}>
-            <PackagePlus size={16} /> Comprar inventario
-          </button>
-          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'stock-adjustment' })}>
-            <Boxes size={16} /> Ajustar stock
-          </button>
           <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'adjustment' })}>
             <DollarSign size={16} /> Ajustar saldo
-          </button>
-          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'move-user' })}>
-            <User size={16} /> Mover usuario
-          </button>
-          <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'independize' })}>
-            <Split size={16} /> Independizar
-          </button>
-          <button
-            type="button"
-            className="ghost small"
-            onClick={() => setActiveModal({ type: 'merge' })}
-            disabled={data.accounts.filter((account) => account.status === 'active').length < 2}
-          >
-            <Users size={16} /> Unir cuentas
           </button>
           <button type="button" className="ghost small" onClick={() => setActiveModal({ type: 'history' })}>
             <History size={16} /> Consumos
