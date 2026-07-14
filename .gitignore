@@ -17,3 +17,7 @@ Thumbs.db
 .vite/
 .vercel/
 coverage/
+
+# Local Apps Script deployment/auth configuration
+apps-script/.clasp.json
+apps-script/Config.gs

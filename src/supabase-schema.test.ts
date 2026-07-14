@@ -7,6 +7,10 @@ const migration = readFileSync(
   join(process.cwd(), 'supabase', 'migrations', '202607140001_rebuild_professional_schema.sql'),
   'utf8'
 );
+const financeMigration = readFileSync(
+  join(process.cwd(), 'supabase', 'migrations', '202607140002_finance_module.sql'),
+  'utf8'
+);
 const sheetsWebhooks = readFileSync(
   join(process.cwd(), 'supabase', 'apps-script-webhooks.sql'),
   'utf8'
@@ -18,7 +22,7 @@ function capturedNames(pattern: RegExp): string[] {
 }
 
 describe('contrato del esquema oficial', () => {
-  it('mantiene exactamente las 11 tablas y las 5 vistas aprobadas', () => {
+  it('mantiene exactamente las 12 tablas y las 5 vistas aprobadas', () => {
     expect(capturedNames(/create table public\.([a-z_]+)/gi)).toEqual([
       'accounts',
       'app_sessions',
@@ -30,7 +34,8 @@ describe('contrato del esquema oficial', () => {
       'financial_movements',
       'inventory_movements',
       'payment_applications',
-      'products'
+      'products',
+      'store_finance_events'
     ]);
     expect(capturedNames(/create view public\.([a-z_]+)/gi)).toEqual([
       'account_balances',
@@ -60,7 +65,9 @@ describe('contrato del esquema oficial', () => {
       'create_consumption',
       'admin_get_snapshot',
       'admin_command',
-      'admin_get_audit_log'
+      'admin_get_audit_log',
+      'admin_get_finance_events',
+      'admin_finance_command'
     ]) {
       expect(schema).toMatch(new RegExp(`grant execute on function public\\.${rpc}\\(`, 'i'));
     }
@@ -95,6 +102,6 @@ describe('contrato del esquema oficial', () => {
   });
 
   it('mantiene la migracion reproducible sincronizada con schema.sql', () => {
-    expect(migration).toBe(schema);
+    expect(schema.trim()).toBe(`${migration.trim()}\n\n${financeMigration.trim()}`);
   });
 });

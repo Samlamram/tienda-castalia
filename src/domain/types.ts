@@ -36,6 +36,13 @@ export type AuditAction =
   | 'logout'
   | 'pin_changed';
 export type ConsumptionPaymentState = 'unpaid' | 'partial' | 'paid' | 'voided';
+export type StoreFinanceEventType =
+  | 'capital_contribution'
+  | 'expense'
+  | 'owner_withdrawal'
+  | 'capital_contribution_reversal'
+  | 'expense_reversal'
+  | 'owner_withdrawal_reversal';
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -164,6 +171,19 @@ export interface InventoryMovement {
   consumptionItemId?: string;
   reversedMovementId?: string;
   note?: string;
+  createdBy?: string;
+  requestId: string;
+  createdAt: string;
+}
+
+/** Immutable cash event owned by the store rather than by a customer account. */
+export interface StoreFinanceEvent {
+  id: string;
+  eventType: StoreFinanceEventType;
+  amount: number;
+  beneficiary?: string;
+  note: string;
+  reversedEventId?: string;
   createdBy?: string;
   requestId: string;
   createdAt: string;
@@ -315,6 +335,7 @@ export interface AdminSnapshot {
   financialMovements: FinancialMovement[];
   paymentApplications: PaymentApplication[];
   inventoryMovements: InventoryMovement[];
+  financeEvents: StoreFinanceEvent[];
   fifoCostAllocations: FifoCostAllocation[];
   auditLog: AuditLogEntry[];
   productStocks: ProductStock[];
@@ -375,6 +396,7 @@ export interface TiendaViewData {
   applications: PaymentApplication[];
   purchases: PurchaseView[];
   movements: InventoryMovement[];
+  financeEvents: StoreFinanceEvent[];
   adjustments: BalanceAdjustmentView[];
   fifoCostAllocations: FifoCostAllocation[];
   auditLog: AuditLogEntry[];

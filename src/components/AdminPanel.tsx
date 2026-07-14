@@ -37,7 +37,7 @@ import { formatMoney, toNumber } from '../utils/money';
 import { isSyncConfigured } from '../services/sync';
 
 type TiendaData = TiendaViewData;
-type AdminSection = null | 'catalogo' | 'cuentas' | 'cobros' | 'productos';
+type AdminSection = null | 'catalogo' | 'cuentas' | 'cobros' | 'finanzas' | 'productos';
 type ProductFilter = 'active' | 'inactive' | 'low' | 'all';
 type AccountFilter = 'debt' | 'clear' | 'inactive' | 'all';
 type AccountPanelTab = 'accounts' | 'users';
@@ -50,6 +50,18 @@ const PRODUCT_CATEGORIES = ['Bebidas', 'Comida', 'Dulces', 'Otros'] as const;
 
 interface DatedEntry {
   createdAt: string;
+}
+
+type FinanceHistoryKind = 'Cobro' | 'Compra' | 'Capital' | 'Gasto' | 'Retiro' | 'Cuadre';
+
+interface FinanceHistoryEntry extends DatedEntry {
+  id: string;
+  kind: FinanceHistoryKind;
+  title: string;
+  subtitle: string;
+  amount?: number;
+  reversed?: boolean;
+  details: string[];
 }
 
 interface AdminPanelProps {
@@ -205,7 +217,7 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession, onR
   return (
     <section className="admin-session">
       {/* ── Header branded ── */}
-      <header className="kiosk-header">
+      <header className="kiosk-header admin-kiosk-header">
         <div className="kiosk-brand-block">
           <div className="kiosk-logo" aria-hidden="true">
             <BrandLogo />
@@ -216,26 +228,28 @@ function LegacyAdminPanel({ data, onMessage, onLogout, online, adminSession, onR
           </div>
         </div>
 
-        {/* Componente compacto de Sync en el header */}
-        <div className="admin-header-widgets">
-          <HeaderSyncWidget
-            online={online}
-            pendingSync={data.pendingSync}
-            onMessage={onMessage}
-            onManualSync={
-              onRefresh
-                ? async () => {
-                    await onRefresh();
-                    return 'Datos de administrador actualizados.';
-                  }
-                : undefined
-            }
-          />
-        </div>
+        <div className="kiosk-header-actions admin-header-actions">
+          {/* Componente compacto de Sync en el header */}
+          <div className="admin-header-widgets">
+            <HeaderSyncWidget
+              online={online}
+              pendingSync={data.pendingSync}
+              onMessage={onMessage}
+              onManualSync={
+                onRefresh
+                  ? async () => {
+                      await onRefresh();
+                      return 'Datos de administrador actualizados.';
+                    }
+                  : undefined
+              }
+            />
+          </div>
 
-        <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir">
-          <LogOut size={20} />
-        </button>
+          <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir" title="Salir">
+            <LogOut size={20} />
+          </button>
+        </div>
       </header>
 
       {/* ── Landing con los dos botones principales ── */}
@@ -662,9 +676,169 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
     [data]
   );
 
+  const financeSummary = useMemo(() => {
+    const contribution = data.financeEvents.reduce((sum, event) => {
+      if (event.eventType === 'capital_contribution') return sum + event.amount;
+      if (event.eventType === 'capital_contribution_reversal') return sum - event.amount;
+      return sum;
+    }, 0);
+    const expenses = data.financeEvents.reduce((sum, event) => {
+      if (event.eventType === 'expense') return sum + event.amount;
+      if (event.eventType === 'expense_reversal') return sum - event.amount;
+      return sum;
+    }, 0);
+    const withdrawals = data.financeEvents.reduce((sum, event) => {
+      if (event.eventType === 'owner_withdrawal') return sum + event.amount;
+      if (event.eventType === 'owner_withdrawal_reversal') return sum - event.amount;
+      return sum;
+    }, 0);
+    const collected = data.financialMovements
+      .filter((movement) => movement.movementType === 'payment' || movement.movementType === 'payment_reversal')
+      .reduce((sum, movement) => sum + movement.amount, 0);
+    const movementById = new Map(data.movements.map((movement) => [movement.id, movement]));
+    const purchases = data.movements.reduce((sum, movement) => {
+      if (movement.movementType === 'purchase') {
+        return sum + movement.quantityDelta * (movement.unitCost ?? 0);
+      }
+      const original = movement.reversedMovementId ? movementById.get(movement.reversedMovementId) : undefined;
+      if (movement.movementType === 'adjustment_reversal' && original?.movementType === 'purchase') {
+        return sum + movement.quantityDelta * (original.unitCost ?? 0);
+      }
+      return sum;
+    }, 0);
+    const financeCash = contribution - expenses - withdrawals;
+    const cash = financeCash + collected - purchases;
+    const receivable = data.accountBalances.reduce((sum, entry) => sum + Math.max(0, entry.balance), 0) +
+      data.userBalances
+        .filter((entry) => !entry.accountId)
+        .reduce((sum, entry) => sum + Math.max(0, entry.balance), 0);
+    const customerCredit = data.accountBalances.reduce((sum, entry) => sum + Math.max(0, -entry.balance), 0) +
+      data.userBalances
+        .filter((entry) => !entry.accountId)
+        .reduce((sum, entry) => sum + Math.max(0, -entry.balance), 0);
+    const inventoryCost = inventorySummary.value;
+    const projectedInventory = data.products.reduce((sum, product) => {
+      return sum + Math.max(0, productStock(data, product.id)) * product.price;
+    }, 0);
+    const storeValue = cash + inventoryCost + receivable - customerCredit;
+    const profit = storeValue + withdrawals - contribution;
+
+    return {
+      contribution,
+      expenses,
+      withdrawals,
+      collected,
+      purchases,
+      cash,
+      receivable,
+      customerCredit,
+      inventoryCost,
+      projectedInventory,
+      projectedMargin: projectedInventory - inventoryCost,
+      storeValue,
+      profit,
+      retainedProfit: profit - withdrawals
+    };
+  }, [data, inventorySummary.value]);
+
+  const financeHistory = useMemo<FinanceHistoryEntry[]>(() => {
+    const entries: FinanceHistoryEntry[] = [];
+    const inventoryById = new Map(data.movements.map((movement) => [movement.id, movement]));
+    const reversedInventoryIds = new Set(
+      data.movements.map((movement) => movement.reversedMovementId).filter((id): id is string => Boolean(id))
+    );
+
+    data.payments.forEach((payment) => {
+      const account = payment.accountId ? data.accounts.find((entry) => entry.id === payment.accountId) : undefined;
+      const user = payment.userId ? data.users.find((entry) => entry.id === payment.userId) : undefined;
+      const payer = payment.paidByUserId ? data.users.find((entry) => entry.id === payment.paidByUserId) : undefined;
+      entries.push({
+        id: `payment-${payment.id}`,
+        kind: 'Cobro',
+        title: account?.name ?? user?.name ?? 'Cobro recibido',
+        subtitle: payer ? `Pagó ${payer.name}` : 'Cobro registrado',
+        amount: payment.amount,
+        reversed: Boolean(payment.reversedMovementId),
+        createdAt: payment.createdAt,
+        details: [
+          `Valor recibido: ${formatMoney(payment.amount)}`,
+          `Aplicado a consumos: ${formatMoney(payment.amount - payment.unappliedAmount)}`,
+          `Saldo a favor: ${formatMoney(payment.unappliedAmount)}`,
+          payment.note ? `Nota: ${payment.note}` : 'Sin nota'
+        ]
+      });
+    });
+
+    const purchaseGroups = new Map<string, typeof data.movements>();
+    data.movements.filter((movement) => movement.movementType === 'purchase').forEach((movement) => {
+      const group = purchaseGroups.get(movement.requestId) ?? [];
+      group.push(movement);
+      purchaseGroups.set(movement.requestId, group);
+    });
+    purchaseGroups.forEach((movements, requestId) => {
+      const total = movements.reduce((sum, movement) => sum + movement.quantityDelta * (movement.unitCost ?? 0), 0);
+      entries.push({
+        id: `purchase-${requestId}`,
+        kind: 'Compra',
+        title: 'Compra de inventario',
+        subtitle: `${movements.length} producto${movements.length === 1 ? '' : 's'}`,
+        amount: -total,
+        reversed: movements.every((movement) => reversedInventoryIds.has(movement.id)),
+        createdAt: movements[0].createdAt,
+        details: movements.map((movement) => {
+          const product = data.products.find((entry) => entry.id === movement.productId);
+          return `${product?.name ?? 'Producto'}: ${movement.quantityDelta} × ${formatMoney(movement.unitCost ?? 0)} = ${formatMoney(movement.quantityDelta * (movement.unitCost ?? 0))}`;
+        })
+      });
+    });
+
+    const adjustmentGroups = new Map<string, typeof data.movements>();
+    data.movements.filter((movement) => {
+      if (movement.movementType !== 'adjustment' && movement.movementType !== 'adjustment_reversal') return false;
+      const original = movement.reversedMovementId ? inventoryById.get(movement.reversedMovementId) : undefined;
+      return original?.movementType !== 'purchase';
+    }).forEach((movement) => {
+      const group = adjustmentGroups.get(movement.requestId) ?? [];
+      group.push(movement);
+      adjustmentGroups.set(movement.requestId, group);
+    });
+    adjustmentGroups.forEach((movements, requestId) => {
+      entries.push({
+        id: `count-${requestId}`,
+        kind: 'Cuadre',
+        title: 'Cuadre de inventario',
+        subtitle: `${movements.length} producto${movements.length === 1 ? '' : 's'}`,
+        createdAt: movements[0].createdAt,
+        details: movements.map((movement) => {
+          const product = data.products.find((entry) => entry.id === movement.productId);
+          return `${product?.name ?? 'Producto'}: ${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta} unidades · ${movement.note ?? 'Sin nota'}`;
+        })
+      });
+    });
+
+    data.financeEvents.forEach((event) => {
+      const baseType = event.eventType.replace('_reversal', '');
+      const kind: FinanceHistoryKind = baseType === 'capital_contribution' ? 'Capital' : baseType === 'owner_withdrawal' ? 'Retiro' : 'Gasto';
+      const isReversal = event.eventType.endsWith('_reversal');
+      const sign = kind === 'Capital' ? 1 : -1;
+      entries.push({
+        id: `finance-${event.id}`,
+        kind,
+        title: kind === 'Capital' ? 'Inversión o aporte' : kind === 'Retiro' ? 'Retiro de dueño' : 'Gasto de la tienda',
+        subtitle: event.beneficiary ?? event.note,
+        amount: event.amount * sign * (isReversal ? -1 : 1),
+        reversed: isReversal,
+        createdAt: event.createdAt,
+        details: [event.note, event.beneficiary ? `Entregado a: ${event.beneficiary}` : '', `Valor: ${formatMoney(event.amount)}`].filter(Boolean)
+      });
+    });
+
+    return entries.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }, [data]);
+
   return (
     <section className={`admin-session ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}>
-      <header className="kiosk-header">
+      <header className="kiosk-header admin-kiosk-header">
         <div className="kiosk-brand-block">
           <div className="kiosk-logo" aria-hidden="true">
             <BrandLogo />
@@ -675,35 +849,37 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
           </div>
         </div>
 
-        <div className="admin-header-widgets">
-          <HeaderSyncWidget
-            online={online}
-            pendingSync={data.pendingSync}
-            onMessage={onMessage}
-            onManualSync={
-              onRefresh
-                ? async () => {
-                    await onRefresh();
-                    return 'Datos de administrador actualizados.';
-                  }
-                : undefined
-            }
-          />
-        </div>
+        <div className="kiosk-header-actions admin-header-actions">
+          <div className="admin-header-widgets">
+            <HeaderSyncWidget
+              online={online}
+              pendingSync={data.pendingSync}
+              onMessage={onMessage}
+              onManualSync={
+                onRefresh
+                  ? async () => {
+                      await onRefresh();
+                      return 'Datos de administrador actualizados.';
+                    }
+                  : undefined
+              }
+            />
+          </div>
 
-        {onChangePin ? (
-          <button
-            className="ghost icon pin-action-button"
-            onClick={() => setActiveModal({ type: 'change-pin' })}
-            aria-label="Cambiar mi PIN"
-            title="Cambiar mi PIN"
-          >
-            <KeyRound size={20} />
+          {onChangePin ? (
+            <button
+              className="ghost icon pin-action-button"
+              onClick={() => setActiveModal({ type: 'change-pin' })}
+              aria-label="Cambiar mi PIN"
+              title="Cambiar mi PIN"
+            >
+              <KeyRound size={20} />
+            </button>
+          ) : null}
+          <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir" title="Salir">
+            <LogOut size={20} />
           </button>
-        ) : null}
-        <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir">
-          <LogOut size={20} />
-        </button>
+        </div>
       </header>
 
       <div className="admin-dashboard">
@@ -786,6 +962,22 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
               </div>
             </button>
 
+            <button
+              type="button"
+              className={`admin-shortcut-card ${activeSection === 'finanzas' ? 'active' : ''}`}
+              onClick={() => switchAdminSection('finanzas')}
+              role="tab"
+              aria-selected={activeSection === 'finanzas'}
+            >
+              <div className="shortcut-icon-wrapper finance">
+                <DollarSign size={28} />
+              </div>
+              <div className="shortcut-copy">
+                <h3>Finanzas</h3>
+                <span className="shortcut-badge">Estado tienda</span>
+              </div>
+            </button>
+
           </div>
 
           {activeSection === 'catalogo' && (
@@ -832,12 +1024,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
               </div>
 
               <div className="admin-inventory-table" role="table" aria-label="Catalogo e inventario">
-                <div className="admin-inventory-head" role="row">
-                  <span>Producto</span>
-                  <span>Valores</span>
-                  <span>Acciones</span>
-                </div>
-
                 {filteredProducts.map(({ product, stock }) => {
                   const tone = productTone(product, stock);
                   const hasImage = product.imageUrl && !failedImages[product.id];
@@ -1322,6 +1508,105 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
             </div>
           )}
 
+          {activeSection === 'finanzas' && (
+            <div className="admin-section-content finance-panel">
+              <header className="finance-heading">
+                <div>
+                  <span className="finance-eyebrow">Estado actual</span>
+                  <h2>Así está la tienda</h2>
+                  <p>Los consumos se usan internamente para calcular la utilidad; aquí ves el dinero y lo pendiente.</p>
+                </div>
+                <div className="finance-actions">
+                  <button type="button" className="primary small" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'capital_contribution' } })}>
+                    <Plus size={16} /> Inversión
+                  </button>
+                  <button type="button" className="secondary small" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'expense' } })}>
+                    Registrar gasto
+                  </button>
+                  <button type="button" className="secondary small" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'owner_withdrawal' } })}>
+                    Registrar retiro
+                  </button>
+                </div>
+              </header>
+
+              <div className="finance-primary-grid">
+                <article className="finance-metric cash">
+                  <span>Dinero disponible</span>
+                  <strong>{formatMoney(financeSummary.cash)}</strong>
+                  <small>Cobros + inversión − compras − gastos − retiros</small>
+                </article>
+                <article className="finance-metric inventory">
+                  <span>Inventario al costo</span>
+                  <strong>{formatMoney(financeSummary.inventoryCost)}</strong>
+                  <small>Lo que costó la mercancía disponible</small>
+                </article>
+                <article className="finance-metric receivable">
+                  <span>Por cobrar</span>
+                  <strong>{formatMoney(financeSummary.receivable)}</strong>
+                  <small>{financeSummary.customerCredit > 0 ? `${formatMoney(financeSummary.customerCredit)} en saldos a favor` : 'Consumos todavía pendientes'}</small>
+                </article>
+                <article className="finance-metric store-value">
+                  <span>Valor actual de la tienda</span>
+                  <strong>{formatMoney(financeSummary.storeValue)}</strong>
+                  <small>Dinero + inventario + por cobrar</small>
+                </article>
+              </div>
+
+              <div className="finance-result-card">
+                <div>
+                  <span>Utilidad generada</span>
+                  <strong>{formatMoney(financeSummary.profit)}</strong>
+                  <small>Valor actual + retiros − inversión</small>
+                </div>
+                <dl>
+                  <div><dt>Inversión aportada</dt><dd>{formatMoney(financeSummary.contribution)}</dd></div>
+                  <div><dt>Retirado por dueños</dt><dd>{formatMoney(financeSummary.withdrawals)}</dd></div>
+                  <div><dt>Gastos registrados</dt><dd>{formatMoney(financeSummary.expenses)}</dd></div>
+                  <div><dt>Utilidad dentro de tienda</dt><dd>{formatMoney(financeSummary.retainedProfit)}</dd></div>
+                </dl>
+              </div>
+
+              <section className="finance-projection" aria-label="Proyección del inventario">
+                <div><span>Inventario al costo</span><strong>{formatMoney(financeSummary.inventoryCost)}</strong></div>
+                <div><span>Si se vende al precio actual</span><strong>{formatMoney(financeSummary.projectedInventory)}</strong></div>
+                <div><span>Margen potencial</span><strong>{formatMoney(financeSummary.projectedMargin)}</strong></div>
+              </section>
+
+              <section className="finance-history-section">
+                <div className="finance-history-heading">
+                  <div>
+                    <span className="finance-eyebrow">Historial</span>
+                    <h2>Todo lo que ha pasado</h2>
+                  </div>
+                  <span>{financeHistory.length} movimientos</span>
+                </div>
+                <div className="finance-history-list">
+                  {financeHistory.map((entry) => (
+                    <details className="finance-history-entry" key={entry.id}>
+                      <summary>
+                        <span className={`finance-kind kind-${entry.kind.toLowerCase()}`}>{entry.kind}</span>
+                        <span className="finance-history-main">
+                          <strong>{entry.title}</strong>
+                          <small>{entry.subtitle} · {new Date(entry.createdAt).toLocaleString('es-CO')}</small>
+                        </span>
+                        {entry.amount !== undefined ? (
+                          <strong className={entry.amount >= 0 ? 'finance-positive' : 'finance-negative'}>
+                            {entry.amount > 0 ? '+' : ''}{formatMoney(entry.amount)}
+                          </strong>
+                        ) : null}
+                        {entry.reversed ? <span className="status-pill muted">Reversado</span> : null}
+                      </summary>
+                      <div className="finance-history-detail">
+                        {entry.details.map((detail, index) => <p key={`${entry.id}-${index}`}>{detail}</p>)}
+                      </div>
+                    </details>
+                  ))}
+                  {financeHistory.length === 0 ? <p className="admin-empty-state">Todavía no hay movimientos financieros.</p> : null}
+                </div>
+              </section>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -1662,6 +1947,18 @@ function AdminModalContainer({
           }, adminSession, requestKey('payment'));
           onMessage('Cobro registrado.');
           break;
+
+        case 'finance-event': {
+          const eventType = String(modal.target?.eventType ?? 'expense') as 'capital_contribution' | 'expense' | 'owner_withdrawal';
+          await adminApi.createStoreFinanceEvent({
+            eventType,
+            amount: toNumber(form.get('amount')),
+            beneficiary: String(form.get('beneficiary') ?? ''),
+            note: String(form.get('note') ?? '')
+          }, adminSession, requestKey(`finance-${eventType}`));
+          onMessage(eventType === 'capital_contribution' ? 'Inversión registrada.' : eventType === 'owner_withdrawal' ? 'Retiro registrado.' : 'Gasto registrado.');
+          break;
+        }
 
         case 'reverse-payment':
           await adminApi.reverseFinancialMovement(
@@ -2009,6 +2306,9 @@ function AdminModalContainer({
               {modal.type === 'create-account' && 'Crear Nueva Cuenta'}
               {modal.type === 'create-user' && 'Crear Nuevo Usuario'}
               {modal.type === 'payment' && 'Registrar Cobro'}
+              {modal.type === 'finance-event' && modal.target?.eventType === 'capital_contribution' && 'Registrar Inversión'}
+              {modal.type === 'finance-event' && modal.target?.eventType === 'expense' && 'Registrar Gasto'}
+              {modal.type === 'finance-event' && modal.target?.eventType === 'owner_withdrawal' && 'Registrar Retiro'}
               {modal.type === 'reverse-payment' && 'Reversar Pago'}
               {modal.type === 'reverse-adjustment' && 'Reversar Ajuste'}
               {modal.type === 'void-consumption' && 'Anular Consumo'}
@@ -2643,6 +2943,43 @@ function AdminModalContainer({
                     />
                   </label>
                 </div>
+              </>
+            )}
+
+            {modal.type === 'finance-event' && (
+              <>
+                <div className="payment-amount-panel finance-event-amount">
+                  <span>Valor</span>
+                  <label className="payment-amount-field">
+                    <span>$</span>
+                    <input name="amount" inputMode="numeric" placeholder="0" required autoFocus />
+                  </label>
+                </div>
+                {modal.target?.eventType === 'owner_withdrawal' ? (
+                  <>
+                    <label>Entregado a</label>
+                    <input name="beneficiary" placeholder="Nombre del dueño" required />
+                  </>
+                ) : null}
+                <label>Concepto</label>
+                <input
+                  name="note"
+                  placeholder={
+                    modal.target?.eventType === 'capital_contribution'
+                      ? 'Ej. inversión inicial'
+                      : modal.target?.eventType === 'owner_withdrawal'
+                        ? 'Ej. reparto de utilidades'
+                        : 'Ej. transporte o reparación'
+                  }
+                  required
+                />
+                <p className="muted">
+                  {modal.target?.eventType === 'capital_contribution'
+                    ? 'Aumenta el dinero y la inversión acumulada.'
+                    : modal.target?.eventType === 'owner_withdrawal'
+                      ? 'Disminuye el dinero, pero conserva la utilidad histórica generada.'
+                      : 'Disminuye el dinero y la utilidad de la tienda.'}
+                </p>
               </>
             )}
 

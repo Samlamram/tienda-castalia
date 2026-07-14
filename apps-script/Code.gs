@@ -28,6 +28,7 @@ const ALLOWED_TABLES = new Set([
   'payment_applications',
   'inventory_movements',
   'fifo_cost_allocations',
+  'store_finance_events',
   'audit_log'
 ]);
 const SENSITIVE_KEY = /(pin|token|hash|salt|secret|password)/i;
@@ -46,7 +47,14 @@ function doPost(e) {
   if (!rawBody) throw new Error('El webhook no contiene un cuerpo JSON.');
 
   const payload = JSON.parse(rawBody);
-  validatePayload_(payload);
+  if (payload.type === 'REFRESH_REPORTS') {
+    return jsonResponse_(refreshReports());
+  }
+  if (payload.type === 'SNAPSHOT') {
+    validateSnapshotPayload_(payload);
+  } else {
+    validatePayload_(payload);
+  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -57,6 +65,14 @@ function doPost(e) {
 
     if (hasEvent_(events, eventId)) {
       return jsonResponse_({ ok: true, duplicate: true, eventId: eventId });
+    }
+
+    if (payload.type === 'SNAPSHOT') {
+      const snapshotRows = payload.records.map(redact_);
+      replaceSnapshot_(spreadsheet, payload.table, snapshotRows);
+      appendSnapshotEvent_(events, eventId, payload, snapshotRows.length);
+      SpreadsheetApp.flush();
+      return jsonResponse_({ ok: true, eventId: eventId, rows: snapshotRows.length });
     }
 
     const currentRecord = redact_(payload.record);
@@ -75,10 +91,22 @@ function setupBackup() {
   const config = getConfig_();
   const spreadsheet = SpreadsheetApp.openById(config.spreadsheetId);
   ensureSheet_(spreadsheet, EVENT_SHEET, EVENT_HEADERS);
+  refreshReports();
   return { ok: true, spreadsheetName: spreadsheet.getName() };
 }
 
 function getConfig_() {
+  if (
+    typeof BACKUP_SPREADSHEET_ID !== 'undefined' &&
+    typeof BACKUP_WEBHOOK_TOKEN !== 'undefined' &&
+    BACKUP_SPREADSHEET_ID &&
+    BACKUP_WEBHOOK_TOKEN
+  ) {
+    return {
+      spreadsheetId: BACKUP_SPREADSHEET_ID,
+      webhookToken: BACKUP_WEBHOOK_TOKEN
+    };
+  }
   const properties = PropertiesService.getScriptProperties();
   const spreadsheetId = properties.getProperty('SPREADSHEET_ID');
   const webhookToken = properties.getProperty('WEBHOOK_TOKEN');
@@ -102,6 +130,66 @@ function validatePayload_(payload) {
   if (!source || !source.id) {
     throw new Error('El evento no incluye el id de la fila.');
   }
+}
+
+function validateSnapshotPayload_(payload) {
+  if (!payload || payload.schema !== 'public') {
+    throw new Error('Solo se aceptan snapshots del esquema public.');
+  }
+  if (!ALLOWED_TABLES.has(payload.table)) {
+    throw new Error('Tabla no autorizada: ' + String(payload.table));
+  }
+  if (!Array.isArray(payload.records)) {
+    throw new Error('El snapshot no contiene un arreglo de registros.');
+  }
+}
+
+function replaceSnapshot_(spreadsheet, tableName, records) {
+  const dataHeaders = [];
+  const seen = new Set();
+  records.forEach(function (record) {
+    Object.keys(record || {}).forEach(function (key) {
+      if (!seen.has(key) && key !== '_backup_status' && key !== '_backup_updated_at') {
+        seen.add(key);
+        dataHeaders.push(key);
+      }
+    });
+  });
+  if (seen.has('id')) {
+    dataHeaders.splice(dataHeaders.indexOf('id'), 1);
+    dataHeaders.unshift('id');
+  }
+  const headers = ['_backup_status', '_backup_updated_at'].concat(dataHeaders);
+  const sheet = spreadsheet.getSheetByName(tableName) || spreadsheet.insertSheet(tableName);
+  if (sheet.getFilter()) sheet.getFilter().remove();
+  sheet.clear();
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  if (records.length) {
+    const receivedAt = new Date().toISOString();
+    const values = records.map(function (record) {
+      return headers.map(function (header) {
+        if (header === '_backup_status') return 'ACTIVE';
+        if (header === '_backup_updated_at') return receivedAt;
+        return safeCell_(record[header]);
+      });
+    });
+    sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  }
+}
+
+function appendSnapshotEvent_(sheet, eventId, payload, rowCount) {
+  sheet.appendRow([
+    eventId,
+    new Date().toISOString(),
+    'SNAPSHOT',
+    payload.schema,
+    payload.table,
+    '',
+    JSON.stringify({ rows: rowCount }),
+    ''
+  ]);
 }
 
 function mirrorRecord_(spreadsheet, payload, currentRecord, oldRecord) {

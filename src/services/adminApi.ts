@@ -24,6 +24,8 @@ import type {
   PersonUser,
   Product,
   ProductStock,
+  StoreFinanceEvent,
+  StoreFinanceEventType,
   UserBalance,
   AccountBalance
 } from '../domain/types';
@@ -292,6 +294,36 @@ function mapInventoryMovement(input: unknown): InventoryMovement {
   };
 }
 
+function financeEventType(input: unknown): StoreFinanceEventType {
+  const allowed: StoreFinanceEventType[] = [
+    'capital_contribution',
+    'expense',
+    'owner_withdrawal',
+    'capital_contribution_reversal',
+    'expense_reversal',
+    'owner_withdrawal_reversal'
+  ];
+  return allowed.includes(input as StoreFinanceEventType)
+    ? (input as StoreFinanceEventType)
+    : 'expense';
+}
+
+function mapStoreFinanceEvent(input: unknown): StoreFinanceEvent {
+  const item = row(input);
+  const id = textValue(item, ['id']);
+  return {
+    id,
+    eventType: financeEventType(value(item, 'eventType', 'event_type')),
+    amount: numberValue(item, ['amount']),
+    beneficiary: optionalText(item, ['beneficiary']),
+    note: textValue(item, ['note']),
+    reversedEventId: optionalText(item, ['reversedEventId', 'reversed_event_id']),
+    createdBy: optionalText(item, ['createdBy', 'created_by']),
+    requestId: textValue(item, ['requestId', 'request_id'], id),
+    createdAt: textValue(item, ['createdAt', 'created_at'])
+  };
+}
+
 function mapFifoAllocation(input: unknown): FifoCostAllocation {
   const item = row(input);
   return {
@@ -428,6 +460,7 @@ export function mapAdminSnapshot(input: unknown): AdminSnapshot {
   const financialMovements = arrayValue(payload, 'financialMovements', 'financial_movements').map(mapFinancialMovement);
   const paymentApplications = arrayValue(payload, 'paymentApplications', 'payment_applications').map(mapPaymentApplication);
   const inventoryMovements = arrayValue(payload, 'inventoryMovements', 'inventory_movements').map(mapInventoryMovement);
+  const financeEvents = arrayValue(payload, 'financeEvents', 'finance_events').map(mapStoreFinanceEvent);
   const fifoCostAllocations = arrayValue(payload, 'fifoCostAllocations', 'fifo_cost_allocations').map(mapFifoAllocation);
 
   const productStockRows = arrayValue(payload, 'productStocks', 'productStock', 'product_stock');
@@ -475,6 +508,7 @@ export function mapAdminSnapshot(input: unknown): AdminSnapshot {
     financialMovements,
     paymentApplications,
     inventoryMovements,
+    financeEvents,
     fifoCostAllocations,
     auditLog: arrayValue(payload, 'auditLog', 'audit_log').map(mapAuditLogEntry),
     productStocks,
@@ -521,9 +555,19 @@ export async function loadAdminSnapshot(session: AppSession | undefined): Promis
   const activeSession = requireAdminOnline(session);
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase no esta configurado.');
-  const { data, error } = await supabase.rpc('admin_get_snapshot', { p_session_token: activeSession.token });
+  const [{ data, error }, financeResult] = await Promise.all([
+    supabase.rpc('admin_get_snapshot', { p_session_token: activeSession.token }),
+    supabase.rpc('admin_get_finance_events', { p_session_token: activeSession.token })
+  ]);
   if (error) throw new Error(error.message);
-  return mapAdminSnapshot(data);
+  const snapshot = mapAdminSnapshot(data);
+  return {
+    ...snapshot,
+    // Keep the existing admin usable while the additive finance migration is being deployed.
+    financeEvents: financeResult.error
+      ? []
+      : arrayValue(row(financeResult.data), 'items', 'financeEvents', 'finance_events').map(mapStoreFinanceEvent)
+  };
 }
 
 export async function loadAuditLog(session: AppSession | undefined, filters: AuditLogFilters = {}): Promise<AuditLogPage> {
@@ -652,6 +696,24 @@ export async function createPayment(
   idempotencyKey?: string
 ): Promise<{ id: string }> {
   return adminCommand(session, 'create_payment', input, idempotencyKey);
+}
+
+export async function createStoreFinanceEvent(
+  input: { eventType: 'capital_contribution' | 'expense' | 'owner_withdrawal'; amount: number; beneficiary?: string; note: string },
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<{ id: string }> {
+  const activeSession = requireAdminOnline(session);
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase no esta configurado.');
+  const { data, error } = await supabase.rpc('admin_finance_command', {
+    p_session_token: activeSession.token,
+    p_idempotency_key: idempotencyKey ?? crypto.randomUUID(),
+    p_command: 'create_finance_event',
+    p_payload: { ...input, deviceId: activeSession.deviceId }
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? {}) as { id: string };
 }
 
 export async function reverseFinancialMovement(movementId: string, reason: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
