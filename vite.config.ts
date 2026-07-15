@@ -11,14 +11,18 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
-        'brand/logo.png'
+        'brand/logo.png',
+        'brand/icon-192.png',
+        'brand/icon-512.png',
+        'brand/icon-maskable-512.png',
+        'brand/apple-touch-icon.png'
       ],
       manifest: {
         name: 'Tienda Castalia',
-        short_name: 'Tienda Castalia',
+        short_name: 'Castalia',
         description: 'Consumos, cuentas compartidas e inventario con compras offline seguras.',
         theme_color: '#052319',
-        background_color: '#f7f8f3',
+        background_color: '#052319',
         display: 'standalone',
         lang: 'es',
         orientation: 'portrait',
@@ -26,10 +30,22 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: '/brand/logo.png',
-            sizes: '380x359',
+            src: '/brand/icon-192.png',
+            sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
+          },
+          {
+            src: '/brand/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/brand/icon-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       },

@@ -1,5 +1,5 @@
-import type { ChangeEvent, FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Boxes,
   BrushCleaning,
@@ -31,9 +31,11 @@ import type { Account, AppSession, Product, TiendaViewData } from '../domain/typ
 import { BrandLogo } from './BrandLogo';
 import { calculateInventoryMovementCostImpact, calculateOpenConsumptions, roundMoney } from '../domain/ledger';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useCollapsibleChrome } from '../hooks/useCollapsibleChrome';
 import * as adminApi from '../services/adminApi';
 import { formatMoney, toNumber } from '../utils/money';
 import { isSyncConfigured } from '../services/sync';
+import { SearchFilterIsland } from './SearchFilterIsland';
 
 type TiendaData = TiendaViewData;
 type AdminSection = null | 'catalogo' | 'cuentas' | 'cobros' | 'finanzas' | 'productos';
@@ -45,6 +47,23 @@ type BulkProductAction = 'purchase' | 'inventory' | 'prices';
 type AdminAccountDetailTab = 'history' | 'payments';
 type ModalState = null | { type: string; target?: any };
 const PRODUCT_CATEGORIES = ['Bebidas', 'Comida', 'Dulces', 'Otros'] as const;
+const PRODUCT_FILTER_OPTIONS = [
+  { value: 'active', label: 'Activos' },
+  { value: 'inactive', label: 'Desactivados' },
+  { value: 'low', label: 'Bajo stock' },
+  { value: 'all', label: 'Todos' }
+] as const;
+const ACCOUNT_FILTER_OPTIONS = [
+  { value: 'debt', label: 'Con deuda' },
+  { value: 'clear', label: 'Al dia' },
+  { value: 'inactive', label: 'Inactivas' },
+  { value: 'all', label: 'Todas' }
+] as const;
+const USER_FILTER_OPTIONS = [
+  { value: 'active', label: 'Activos' },
+  { value: 'inactive', label: 'Inactivos' },
+  { value: 'all', label: 'Todos' }
+] as const;
 
 interface DatedEntry {
   createdAt: string;
@@ -74,6 +93,45 @@ interface AdminPanelProps {
 
 function normalizeSearch(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function trapFocusWithin(event: ReactKeyboardEvent<HTMLElement>) {
+  if (event.key !== 'Tab') return;
+
+  const focusable = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(query).matches : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia(query);
+    const handleChange = (event: MediaQueryListEvent) => setMatches(event.matches);
+
+    setMatches(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [query]);
+
+  return matches;
 }
 
 function productStock(data: TiendaData, productId: string): number {
@@ -472,6 +530,44 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   const [accountQuery, setAccountQuery] = useState('');
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [headerSyncing, setHeaderSyncing] = useState(false);
+  const [headerFocused, setHeaderFocused] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [filterOverlayOpen, setFilterOverlayOpen] = useState(false);
+  const profileButtonRef = useRef<HTMLButtonElement | null>(null);
+  const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileChromeEnabled = useMediaQuery('(max-width: 860px)');
+  const chromePinned = Boolean(activeModal) || headerSyncing || profileOpen || headerFocused || filterOverlayOpen;
+  const { collapsed: chromeCollapsed, expand: expandChrome, rebaseline: rebaselineChrome } = useCollapsibleChrome({
+    scroller: 'window',
+    enabled: mobileChromeEnabled,
+    pinned: chromePinned,
+    resetKey: activeSection
+  });
+
+  useBodyScrollLock(profileOpen);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+
+    const focusFrame = window.requestAnimationFrame(() => profileCloseButtonRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setProfileOpen(false);
+      window.requestAnimationFrame(() => profileButtonRef.current?.focus());
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [profileOpen]);
+
+  useEffect(() => {
+    if (!mobileChromeEnabled) setProfileOpen(false);
+  }, [mobileChromeEnabled]);
 
   const activeAccountsCount = data.accounts.filter((a) => a.status === 'active').length;
   const activeProductsCount = data.products.filter((p) => p.status === 'active').length;
@@ -501,8 +597,24 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
 
   function switchAdminSection(section: AdminSection) {
     setActiveSection(section);
+    setSearchFocused(false);
+    setFilterOverlayOpen(false);
     if (section !== 'catalogo') {
       setSelectedProductIds([]);
+    }
+    expandChrome();
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
+  }
+
+  function closeAdminProfile(restoreFocus = true) {
+    setProfileOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => profileButtonRef.current?.focus());
     }
   }
 
@@ -862,8 +974,24 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   }, [data]);
 
   return (
-    <section className={`admin-session ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}>
-      <header className="kiosk-header admin-kiosk-header">
+    <section className={`admin-session ${chromeCollapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'} ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}>
+      <div
+        className={`header-slot admin-header-slot ${
+          chromeCollapsed ? 'collapsed chrome-collapsed' : 'expanded chrome-expanded'
+        }`}
+        aria-hidden={chromeCollapsed}
+        inert={chromeCollapsed ? true : undefined}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && event.propertyName === 'height') rebaselineChrome();
+        }}
+      >
+      <header
+        className="kiosk-header kiosk-header-island admin-kiosk-header"
+        onFocusCapture={() => setHeaderFocused(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeaderFocused(false);
+        }}
+      >
         <div className="kiosk-brand-block">
           <div className="kiosk-logo" aria-hidden="true">
             <BrandLogo />
@@ -880,6 +1008,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
               online={online}
               pendingSync={data.pendingSync}
               onMessage={onMessage}
+              onSyncingChange={setHeaderSyncing}
               onManualSync={
                 onRefresh
                   ? async () => {
@@ -891,21 +1020,108 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
             />
           </div>
 
-          {onChangePin ? (
+          {mobileChromeEnabled ? (
             <button
-              className="ghost icon pin-action-button"
-              onClick={() => setActiveModal({ type: 'change-pin' })}
-              aria-label="Cambiar mi PIN"
-              title="Cambiar mi PIN"
+              ref={profileButtonRef}
+              type="button"
+              className="ghost icon profile-menu-button admin-profile-trigger"
+              onClick={() => {
+                expandChrome();
+                setProfileOpen(true);
+              }}
+              aria-label="Abrir perfil del administrador"
+              aria-haspopup="dialog"
+              aria-expanded={profileOpen}
+              aria-controls="admin-profile-sheet"
             >
-              <KeyRound size={20} />
+              <User size={20} />
             </button>
-          ) : null}
-          <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir" title="Salir">
-            <LogOut size={20} />
-          </button>
+          ) : (
+            <>
+              {onChangePin ? (
+                <button
+                  className="ghost icon pin-action-button"
+                  onClick={() => setActiveModal({ type: 'change-pin' })}
+                  aria-label="Cambiar mi PIN"
+                  title="Cambiar mi PIN"
+                >
+                  <KeyRound size={20} />
+                </button>
+              ) : null}
+              <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir" title="Salir">
+                <LogOut size={20} />
+              </button>
+            </>
+          )}
         </div>
       </header>
+      </div>
+
+      {profileOpen ? (
+        <div
+          className="profile-sheet-backdrop admin-profile-sheet-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeAdminProfile();
+          }}
+        >
+          <section
+            id="admin-profile-sheet"
+            className="profile-sheet admin-profile-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-profile-sheet-title"
+            onKeyDown={trapFocusWithin}
+          >
+            <header className="profile-sheet-header">
+              <div>
+                <span>Cuenta activa</span>
+                <h2 id="admin-profile-sheet-title">Administrador</h2>
+              </div>
+              <button
+                ref={profileCloseButtonRef}
+                type="button"
+                className="ghost icon"
+                onClick={() => closeAdminProfile()}
+                aria-label="Cerrar perfil"
+              >
+                <X size={20} />
+              </button>
+            </header>
+            <div className="profile-sheet-summary">
+              <span className={`sync-status-icon ${online ? 'online' : 'offline'}`} aria-hidden="true">
+                {online ? <Cloud size={18} /> : <CloudOff size={18} />}
+              </span>
+              <span>{online ? 'Conectado a Supabase' : 'Sin conexion'}</span>
+            </div>
+            <div className="profile-sheet-actions">
+              {onChangePin ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeAdminProfile(false);
+                    setActiveModal({ type: 'change-pin' });
+                  }}
+                >
+                  <KeyRound size={20} />
+                  <span>Cambiar PIN</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  closeAdminProfile(false);
+                  onLogout();
+                }}
+              >
+                <LogOut size={20} />
+                <span>Salir</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <div className="admin-dashboard">
         <div className="admin-summary-strip" aria-label="Resumen del administrador">
@@ -938,7 +1154,8 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
         </div>
 
         <div className="admin-workspace">
-          <div className="admin-shortcuts-grid admin-section-switcher" role="tablist" aria-label="Secciones admin">
+          {!mobileChromeEnabled ? (
+            <div className="admin-shortcuts-grid admin-section-switcher admin-desktop-section-switcher" role="tablist" aria-label="Secciones admin">
             <button
               type="button"
               className={`admin-shortcut-card ${activeSection === 'catalogo' ? 'active' : ''}`}
@@ -1002,38 +1219,25 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 <span className="shortcut-badge">Estado tienda</span>
               </div>
             </button>
-
-          </div>
+            </div>
+          ) : null}
 
           {activeSection === 'catalogo' && (
             <div className="admin-section-content">
-              <div className="admin-list-toolbar">
-                <label className="admin-search-field">
-                  <Search size={18} />
-                  <input
-                    value={productQuery}
-                    onChange={(event) => setProductQuery(event.target.value)}
-                    placeholder="Buscar producto"
-                  />
-                </label>
-                <div className="admin-filter-pills" aria-label="Filtros de catalogo">
-                  {[
-                    ['active', 'Activos'],
-                    ['inactive', 'Desactivados'],
-                    ['low', 'Bajo stock'],
-                    ['all', 'Todos']
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={productFilter === value ? 'active' : ''}
-                      onClick={() => setProductFilter(value as ProductFilter)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <SearchFilterIsland
+                className="admin-catalog-search-filters"
+                query={productQuery}
+                onQueryChange={setProductQuery}
+                placeholder="Buscar producto"
+                searchLabel="Buscar producto"
+                filtersLabel="Filtros de catalogo"
+                options={PRODUCT_FILTER_OPTIONS}
+                activeValue={productFilter}
+                onActiveValueChange={(value) => setProductFilter(value as ProductFilter)}
+                compact={chromeCollapsed && !productQuery.trim() && !searchFocused}
+                onFocusChange={setSearchFocused}
+                onOverlayChange={setFilterOverlayOpen}
+              />
 
               <div className="admin-catalog-actions">
                 <button type="button" className="admin-create-card-button" onClick={() => setActiveModal({ type: 'create-product' })}>
@@ -1150,7 +1354,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
 
           {activeSection === 'cuentas' && (
             <div className="admin-section-content">
-              <div className="admin-accounts-control">
+              <div className="admin-accounts-control has-search-filter-island">
                 <div className="admin-account-tabs" role="tablist" aria-label="Vista de cuentas">
                   <button
                     type="button"
@@ -1171,54 +1375,25 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                     <Users size={16} /> Usuarios
                   </button>
                 </div>
-                <label className="admin-search-field">
-                  <Search size={18} />
-                  <input
-                    value={accountQuery}
-                    onChange={(event) => setAccountQuery(event.target.value)}
-                    placeholder={accountView === 'accounts' ? 'Buscar cuenta o usuario' : 'Buscar usuario o cuenta'}
-                  />
-                </label>
               </div>
 
-              <div className="admin-account-filter-row">
-                {accountView === 'accounts' ? (
-                  <div className="admin-filter-pills" aria-label="Filtros de cuentas">
-                    {[
-                      ['debt', 'Con deuda'],
-                      ['clear', 'Al dia'],
-                      ['inactive', 'Inactivas'],
-                      ['all', 'Todas']
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        className={accountFilter === value ? 'active' : ''}
-                        onClick={() => setAccountFilter(value as AccountFilter)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="admin-filter-pills" aria-label="Filtros de usuarios">
-                    {[
-                      ['active', 'Activos'],
-                      ['inactive', 'Inactivos'],
-                      ['all', 'Todos']
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        className={userFilter === value ? 'active' : ''}
-                        onClick={() => setUserFilter(value as UserFilter)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <SearchFilterIsland
+                className="admin-account-search-filters"
+                query={accountQuery}
+                onQueryChange={setAccountQuery}
+                placeholder={accountView === 'accounts' ? 'Buscar cuenta o usuario' : 'Buscar usuario o cuenta'}
+                searchLabel={accountView === 'accounts' ? 'Buscar cuenta o usuario' : 'Buscar usuario o cuenta'}
+                filtersLabel={accountView === 'accounts' ? 'Filtros de cuentas' : 'Filtros de usuarios'}
+                options={accountView === 'accounts' ? ACCOUNT_FILTER_OPTIONS : USER_FILTER_OPTIONS}
+                activeValue={accountView === 'accounts' ? accountFilter : userFilter}
+                onActiveValueChange={(value) => {
+                  if (accountView === 'accounts') setAccountFilter(value as AccountFilter);
+                  else setUserFilter(value as UserFilter);
+                }}
+                compact={chromeCollapsed && !accountQuery.trim() && !searchFocused}
+                onFocusChange={setSearchFocused}
+                onOverlayChange={setFilterOverlayOpen}
+              />
 
               <div className={`admin-smart-list admin-accounts-grid ${accountView === 'users' ? 'admin-users-list' : ''}`}>
                 {accountView === 'accounts' ? (
@@ -1664,6 +1839,47 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
         </div>
       </div>
 
+      {mobileChromeEnabled && !(activeSection === 'catalogo' && selectedProductIds.length > 0) ? (
+        <nav className="mobile-bottom-nav admin-mobile-bottom-nav" aria-label="Secciones de administracion">
+          <button
+            type="button"
+            className={activeSection === 'catalogo' ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'}
+            onClick={() => switchAdminSection('catalogo')}
+            aria-current={activeSection === 'catalogo' ? 'page' : undefined}
+          >
+            <Package size={20} />
+            <span>Catalogo</span>
+          </button>
+          <button
+            type="button"
+            className={activeSection === 'cuentas' ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'}
+            onClick={() => switchAdminSection('cuentas')}
+            aria-current={activeSection === 'cuentas' ? 'page' : undefined}
+          >
+            <Users size={20} />
+            <span>Cuentas</span>
+          </button>
+          <button
+            type="button"
+            className={activeSection === 'cobros' ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'}
+            onClick={() => switchAdminSection('cobros')}
+            aria-current={activeSection === 'cobros' ? 'page' : undefined}
+          >
+            <CreditCard size={20} />
+            <span>Cobros</span>
+          </button>
+          <button
+            type="button"
+            className={activeSection === 'finanzas' ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'}
+            onClick={() => switchAdminSection('finanzas')}
+            aria-current={activeSection === 'finanzas' ? 'page' : undefined}
+          >
+            <DollarSign size={20} />
+            <span>Finanzas</span>
+          </button>
+        </nav>
+      ) : null}
+
       {activeSection === 'catalogo' && selectedProductIds.length > 0 ? (
         <div
           className="admin-bulk-fab"
@@ -1724,11 +1940,17 @@ interface HeaderSyncWidgetProps {
   pendingSync: number;
   onMessage: (message: string) => void;
   onManualSync?: () => Promise<string>;
+  onSyncingChange?: (syncing: boolean) => void;
 }
 
-function HeaderSyncWidget({ online, pendingSync, onMessage, onManualSync }: HeaderSyncWidgetProps) {
+function HeaderSyncWidget({ online, pendingSync, onMessage, onManualSync, onSyncingChange }: HeaderSyncWidgetProps) {
   const [syncing, setSyncing] = useState(false);
   const syncConfigured = isSyncConfigured();
+
+  useEffect(() => {
+    onSyncingChange?.(syncing);
+    return () => onSyncingChange?.(false);
+  }, [onSyncingChange, syncing]);
 
   async function handleSync() {
     if (syncing || !online || !syncConfigured || !onManualSync) return;

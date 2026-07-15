@@ -1,6 +1,8 @@
-import { Download, Filter, History, Search } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Download, Filter, History, Search, SlidersHorizontal, X } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { AppSession, AuditLogEntry, PersonUser } from '../domain/types';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { loadAllAuditLog, loadAuditLog } from '../services/adminApi';
 
 interface AuditHistoryProps {
@@ -106,6 +108,27 @@ function saveAuditCsv(entries: AuditLogEntry[]): void {
   URL.revokeObjectURL(url);
 }
 
+function trapFocusWithin(event: ReactKeyboardEvent<HTMLElement>): void {
+  if (event.key !== 'Tab') return;
+
+  const focusable = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 export function AuditHistory({ session, users, onMessage }: AuditHistoryProps) {
   const [draft, setDraft] = useState<AuditFilters>(EMPTY_FILTERS);
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_FILTERS);
@@ -115,7 +138,32 @@ export function AuditHistory({ session, users, onMessage }: AuditHistoryProps) {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const requestVersion = useRef(0);
+  const filterTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const filterCloseRef = useRef<HTMLButtonElement | null>(null);
+  const filterSheetId = useId();
+  const filterSheetHeadingId = useId();
+
+  useBodyScrollLock(filterSheetOpen);
+
+  useEffect(() => {
+    if (!filterSheetOpen) return;
+
+    const focusFrame = window.requestAnimationFrame(() => filterCloseRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setFilterSheetOpen(false);
+      window.requestAnimationFrame(() => filterTriggerRef.current?.focus());
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [filterSheetOpen]);
 
   const loadPage = useCallback(
     async (nextPage: number, append: boolean): Promise<void> => {
@@ -164,6 +212,29 @@ export function AuditHistory({ session, users, onMessage }: AuditHistoryProps) {
   );
   const actorUsers = [...users].sort((left, right) => left.name.localeCompare(right.name, 'es'));
   const hasMore = page * 50 < total;
+  const advancedFilterCount = [draft.action, draft.entityType, draft.actorUserId, draft.dateFrom, draft.dateTo]
+    .filter(Boolean).length;
+
+  function closeFilterSheet(restoreFocus = true): void {
+    setFilterSheetOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => filterTriggerRef.current?.focus());
+    }
+  }
+
+  function applyDraftFilters(): void {
+    setFilters(draft);
+  }
+
+  function clearAllFilters(): void {
+    setDraft(EMPTY_FILTERS);
+    setFilters(EMPTY_FILTERS);
+  }
+
+  function clearSearch(): void {
+    setDraft((current) => ({ ...current, search: '' }));
+    setFilters((current) => ({ ...current, search: '' }));
+  }
 
   async function exportAudit(): Promise<void> {
     if (!session) return;
@@ -202,21 +273,34 @@ export function AuditHistory({ session, users, onMessage }: AuditHistoryProps) {
       </header>
 
       <form
-        className="audit-filters"
+        className="audit-filters audit-filter-bar"
         onSubmit={(event) => {
           event.preventDefault();
-          setFilters(draft);
+          applyDraftFilters();
         }}
       >
-        <label className="admin-search-field audit-search">
-          <Search size={17} />
+        <div className="admin-search-field audit-search audit-filter-search">
+          <Search size={17} aria-hidden="true" />
           <input
+            type="search"
             value={draft.search}
             onChange={(event) => setDraft((current) => ({ ...current, search: event.target.value }))}
             placeholder="Buscar actor, entidad, motivo o campo"
+            aria-label="Buscar en el historial"
           />
-        </label>
+          {draft.search ? (
+            <button
+              type="button"
+              className="audit-filter-search-clear"
+              onClick={clearSearch}
+              aria-label="Limpiar búsqueda"
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
         <select
+          className="audit-filter-desktop audit-filter-action"
           aria-label="Filtrar por acción"
           value={draft.action}
           onChange={(event) => setDraft((current) => ({ ...current, action: event.target.value }))}
@@ -225,6 +309,7 @@ export function AuditHistory({ session, users, onMessage }: AuditHistoryProps) {
           {Object.entries(ACTION_LABELS).map(([action, label]) => <option key={action} value={action}>{label}</option>)}
         </select>
         <select
+          className="audit-filter-desktop audit-filter-entity"
           aria-label="Filtrar por entidad"
           value={draft.entityType}
           onChange={(event) => setDraft((current) => ({ ...current, entityType: event.target.value }))}
@@ -233,6 +318,7 @@ export function AuditHistory({ session, users, onMessage }: AuditHistoryProps) {
           {entityOptions.map((entity) => <option key={entity} value={entity}>{entity}</option>)}
         </select>
         <select
+          className="audit-filter-desktop audit-filter-actor"
           aria-label="Filtrar por administrador"
           value={draft.actorUserId}
           onChange={(event) => setDraft((current) => ({ ...current, actorUserId: event.target.value }))}
@@ -240,20 +326,116 @@ export function AuditHistory({ session, users, onMessage }: AuditHistoryProps) {
           <option value="">Todos los responsables</option>
           {actorUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
         </select>
-        <label>Desde<input type="date" value={draft.dateFrom} onChange={(event) => setDraft((current) => ({ ...current, dateFrom: event.target.value }))} /></label>
-        <label>Hasta<input type="date" value={draft.dateTo} onChange={(event) => setDraft((current) => ({ ...current, dateTo: event.target.value }))} /></label>
-        <button type="submit" className="primary"><Filter size={16} /> Aplicar</button>
+        <label className="audit-filter-desktop audit-filter-date">Desde<input type="date" value={draft.dateFrom} onChange={(event) => setDraft((current) => ({ ...current, dateFrom: event.target.value }))} /></label>
+        <label className="audit-filter-desktop audit-filter-date">Hasta<input type="date" value={draft.dateTo} onChange={(event) => setDraft((current) => ({ ...current, dateTo: event.target.value }))} /></label>
+        <button type="submit" className="primary audit-filter-desktop audit-filter-apply"><Filter size={16} /> Aplicar</button>
         <button
           type="button"
-          className="ghost"
-          onClick={() => {
-            setDraft(EMPTY_FILTERS);
-            setFilters(EMPTY_FILTERS);
-          }}
+          className="ghost audit-filter-desktop audit-filter-clear"
+          onClick={clearAllFilters}
         >
           Limpiar
         </button>
+        <button
+          ref={filterTriggerRef}
+          type="button"
+          className="ghost audit-filter-trigger"
+          onClick={() => setFilterSheetOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={filterSheetOpen}
+          aria-controls={filterSheetId}
+        >
+          <SlidersHorizontal size={17} aria-hidden="true" />
+          Filtros
+          {advancedFilterCount > 0 ? <span className="audit-filter-count">{advancedFilterCount}</span> : null}
+        </button>
       </form>
+
+      {filterSheetOpen ? (
+        <div
+          className="filter-sheet-backdrop audit-filter-sheet-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeFilterSheet();
+          }}
+        >
+          <form
+            id={filterSheetId}
+            className="filter-sheet audit-filter-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={filterSheetHeadingId}
+            onKeyDown={trapFocusWithin}
+            onSubmit={(event) => {
+              event.preventDefault();
+              applyDraftFilters();
+              closeFilterSheet();
+            }}
+          >
+            <header className="filter-sheet-header">
+              <div>
+                <span>Historial</span>
+                <h2 id={filterSheetHeadingId}>Filtros avanzados</h2>
+              </div>
+              <button
+                ref={filterCloseRef}
+                type="button"
+                className="filter-sheet-close"
+                onClick={() => closeFilterSheet()}
+                aria-label="Cerrar filtros"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </header>
+
+            <div className="audit-filter-sheet-fields">
+              <label>
+                Acción
+                <select
+                  value={draft.action}
+                  onChange={(event) => setDraft((current) => ({ ...current, action: event.target.value }))}
+                >
+                  <option value="">Todas las acciones</option>
+                  {Object.entries(ACTION_LABELS).map(([action, label]) => <option key={action} value={action}>{label}</option>)}
+                </select>
+              </label>
+              <label>
+                Entidad
+                <select
+                  value={draft.entityType}
+                  onChange={(event) => setDraft((current) => ({ ...current, entityType: event.target.value }))}
+                >
+                  <option value="">Todas las entidades</option>
+                  {entityOptions.map((entity) => <option key={entity} value={entity}>{entity}</option>)}
+                </select>
+              </label>
+              <label>
+                Responsable
+                <select
+                  value={draft.actorUserId}
+                  onChange={(event) => setDraft((current) => ({ ...current, actorUserId: event.target.value }))}
+                >
+                  <option value="">Todos los responsables</option>
+                  {actorUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                </select>
+              </label>
+              <div className="audit-filter-sheet-dates">
+                <label>Desde<input type="date" value={draft.dateFrom} onChange={(event) => setDraft((current) => ({ ...current, dateFrom: event.target.value }))} /></label>
+                <label>Hasta<input type="date" value={draft.dateTo} onChange={(event) => setDraft((current) => ({ ...current, dateTo: event.target.value }))} /></label>
+              </div>
+            </div>
+
+            <footer className="audit-filter-sheet-actions">
+              <button type="button" className="ghost" onClick={() => {
+                clearAllFilters();
+                closeFilterSheet();
+              }}>
+                Limpiar
+              </button>
+              <button type="submit" className="primary"><Filter size={16} aria-hidden="true" /> Aplicar filtros</button>
+            </footer>
+          </form>
+        </div>
+      ) : null}
 
       {error ? <p className="login-error-message">{error}</p> : null}
       <div className="audit-list" aria-live="polite">

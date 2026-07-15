@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react';
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   CheckCircle2,
   CreditCard,
@@ -8,17 +8,18 @@ import {
   Minus,
   Package,
   Plus,
-  Search,
   ShoppingCart,
   Trash2,
   UserRound,
   Users,
   X
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { BrandLogo } from './BrandLogo';
+import { SearchFilterIsland } from './SearchFilterIsland';
 import type { CartItem, PersonUser, TiendaViewData } from '../domain/types';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useCollapsibleChrome } from '../hooks/useCollapsibleChrome';
 import { formatMoney } from '../utils/money';
 
 type TiendaData = TiendaViewData;
@@ -104,6 +105,27 @@ function countLabel(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function trapFocusWithin(event: ReactKeyboardEvent<HTMLElement>) {
+  if (event.key !== 'Tab') return;
+
+  const focusable = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 interface KioskProps {
   data: TiendaData;
   onMessage: (message: string) => void;
@@ -176,15 +198,30 @@ function UserSession({
   const [accountDetailTab, setAccountDetailTab] = useState<AccountDetailTab>('history');
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
-  const [searchBarVisible, setSearchBarVisible] = useState(true);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [headerFocused, setHeaderFocused] = useState(false);
+  const [mobileChromeEnabled, setMobileChromeEnabled] = useState(
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 860px)').matches
+  );
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSubmitting, setPinSubmitting] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const catalogAreaRef = useRef<HTMLElement | null>(null);
-  const lastCatalogScrollTop = useRef(0);
-  const searchBarVisibleRef = useRef(true);
+  const profileButtonRef = useRef<HTMLButtonElement | null>(null);
+  const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const checkoutLogoutTimerRef = useRef<number | null>(null);
+  const profileHeadingId = useId();
+  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || filterSheetOpen;
+  const { collapsed, rebaseline } = useCollapsibleChrome({
+    scroller: catalogAreaRef,
+    enabled: mobileChromeEnabled,
+    pinned: overlaysOpen || headerFocused,
+    resetKey: user.id
+  });
 
   useEffect(() => {
     if (!isSharedDevice || data.pendingSync > 0) return;
@@ -207,14 +244,39 @@ function UserSession({
     };
   }, []);
 
-  useBodyScrollLock(checkout || accountDetailOpen || pinModalOpen);
+  useBodyScrollLock(checkout || accountDetailOpen || pinModalOpen || profileMenuOpen);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(max-width: 860px)');
+    const handleChange = (event: MediaQueryListEvent) => setMobileChromeEnabled(event.matches);
+    setMobileChromeEnabled(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+
+    const focusFrame = window.requestAnimationFrame(() => profileCloseButtonRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setProfileMenuOpen(false);
+      window.requestAnimationFrame(() => profileButtonRef.current?.focus());
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [profileMenuOpen]);
 
   useEffect(() => {
     setProductQuery('');
     setCategory('Todas');
     setAccountFilter('all');
-    searchBarVisibleRef.current = true;
-    setSearchBarVisible(true);
     window.requestAnimationFrame(() => {
       const catalogArea = catalogAreaRef.current;
       if (typeof catalogArea?.scrollTo === 'function') {
@@ -235,50 +297,8 @@ function UserSession({
         document.documentElement.scrollTop = 0;
         document.body.scrollTop = 0;
       }
-      lastCatalogScrollTop.current = 0;
     });
   }, [user.id]);
-
-  useEffect(() => {
-    const setVisible = (visible: boolean) => {
-      if (searchBarVisibleRef.current === visible) return;
-      searchBarVisibleRef.current = visible;
-      setSearchBarVisible(visible);
-    };
-
-    const getScrollTop = () => {
-      const catalogArea = catalogAreaRef.current;
-      if (catalogArea && catalogArea.scrollHeight > catalogArea.clientHeight) {
-        return catalogArea.scrollTop;
-      }
-      return window.scrollY;
-    };
-
-    const handleScroll = () => {
-      const scrollTop = getScrollTop();
-      const delta = scrollTop - lastCatalogScrollTop.current;
-
-      if (scrollTop <= 24) {
-        setVisible(true);
-      } else if (delta > 10) {
-        setVisible(false);
-      } else if (delta < -6) {
-        setVisible(true);
-      }
-
-      lastCatalogScrollTop.current = scrollTop;
-    };
-
-    const catalogArea = catalogAreaRef.current;
-    lastCatalogScrollTop.current = getScrollTop();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    catalogArea?.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      catalogArea?.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
 
   const account = user.accountId ? data.accounts.find((entry) => entry.id === user.accountId) : undefined;
   const pendingReviews = data.pendingConsumptions.filter(
@@ -450,49 +470,79 @@ function UserSession({
     }
   }
 
+  function openAccountDetail() {
+    setAccountFilter('all');
+    setProfileMenuOpen(false);
+    setAccountDetailOpen(true);
+  }
+
+  function closeProfileMenu(restoreFocus = true) {
+    setProfileMenuOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => profileButtonRef.current?.focus());
+    }
+  }
+
   return (
-    <section className={searchBarVisible ? 'kiosk-session catalog-search-visible' : 'kiosk-session catalog-search-hidden'}>
-      <header className="kiosk-header">
-        <div className="kiosk-brand-block">
-          <div className="kiosk-logo" aria-hidden="true">
-            <BrandLogo />
+    <section className={`kiosk-session ${collapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'}`}>
+      <div
+        className={`kiosk-header-slot ${collapsed ? 'chrome-collapsed' : 'chrome-expanded'}`}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && event.propertyName === 'height') rebaseline();
+        }}
+      >
+        <header
+          className="kiosk-header kiosk-header-island"
+          aria-hidden={collapsed}
+          inert={collapsed ? true : undefined}
+          onFocusCapture={() => setHeaderFocused(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setHeaderFocused(false);
+            }
+          }}
+        >
+          <div className="kiosk-brand-block">
+            <div className="kiosk-logo" aria-hidden="true">
+              <BrandLogo />
+            </div>
+            <div className="kiosk-brand-copy">
+              <strong title={user.name}>{user.name}</strong>
+              <span>Tienda</span>
+            </div>
           </div>
-          <div className="kiosk-brand-copy">
-            <strong>Tienda</strong>
-          </div>
-        </div>
 
-        <div className="kiosk-account-actions">
-          {onChangePin ? (
-            <button className="ghost icon pin-action-button" onClick={() => setPinModalOpen(true)} aria-label="Cambiar PIN">
-              <KeyRound size={20} />
-            </button>
-          ) : null}
+          <div className="kiosk-account-actions">
+            <div className="kiosk-user-card">
+              <button
+                type="button"
+                className="account-link-button account-summary-button"
+                onClick={openAccountDetail}
+                aria-label={`Abrir mi cuenta. Saldo ${formatMoney(currentBalance)}`}
+              >
+                <span className="profile-summary-copy">
+                  <span>Mi saldo</span>
+                  <strong>{formatMoney(currentBalance)}</strong>
+                </span>
+              </button>
+            </div>
 
-          <div className="kiosk-user-card">
             <button
-              className="account-link-button account-summary-button"
-              onClick={() => {
-                setAccountFilter('all');
-                setAccountDetailOpen(true);
-              }}
-              aria-label="Abrir perfil y ver mi saldo"
+              ref={profileButtonRef}
+              type="button"
+              className="ghost icon profile-menu-button"
+              onClick={() => setProfileMenuOpen(true)}
+              aria-label={`Abrir perfil de ${user.name}`}
+              aria-haspopup="dialog"
+              aria-expanded={profileMenuOpen}
             >
               <span className="profile-summary-icon" aria-hidden="true">
                 <UserRound size={21} />
               </span>
-              <span className="profile-summary-copy">
-                <span>Mi saldo</span>
-                <strong>{formatMoney(currentBalance)}</strong>
-              </span>
             </button>
           </div>
-        </div>
-
-        <button className="ghost icon logout-button" onClick={onLogout} aria-label="Salir">
-          <LogOut size={20} />
-        </button>
-      </header>
+        </header>
+      </div>
 
       {data.pendingSync > 0 ? (
         <section className="pending-sync-banner" role="status" aria-live="polite">
@@ -540,33 +590,19 @@ function UserSession({
 
       <div className="kiosk-workspace">
         <main className="catalog-area" ref={catalogAreaRef}>
-          <div className="catalog-toolbar">
-            <label className="search catalog-search">
-              <Search size={18} />
-              <input
-                value={productQuery}
-                onChange={(event) => setProductQuery(event.target.value)}
-                onFocus={() => {
-                  searchBarVisibleRef.current = true;
-                  setSearchBarVisible(true);
-                }}
-                placeholder="Buscar producto..."
-              />
-            </label>
-          </div>
-
-          <div className="category-pills catalog-filter-bar">
-            {categories.map((entry) => (
-              <button
-                key={entry}
-                type="button"
-                className={category === entry ? 'category-pill active' : 'category-pill'}
-                onClick={() => setCategory(entry)}
-              >
-                {entry}
-              </button>
-            ))}
-          </div>
+          <SearchFilterIsland
+            query={productQuery}
+            onQueryChange={setProductQuery}
+            options={categories.map((entry) => ({ value: entry, label: entry }))}
+            activeValue={category}
+            onActiveValueChange={setCategory}
+            placeholder="Buscar producto..."
+            searchLabel="Buscar producto"
+            filtersLabel="Categorías"
+            compact={collapsed && !productQuery.trim() && !searchFocused}
+            onFocusChange={setSearchFocused}
+            onOverlayChange={setFilterSheetOpen}
+          />
 
           <div className="product-grid catalog-grid">
             {products.map((product) => {
@@ -798,6 +834,72 @@ function UserSession({
           Ver carrito
         </button>
       </footer>
+
+      {profileMenuOpen ? (
+        <div
+          className="profile-sheet-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeProfileMenu();
+          }}
+        >
+          <section
+            className="profile-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={profileHeadingId}
+            onKeyDown={trapFocusWithin}
+          >
+            <header className="profile-sheet-header">
+              <div>
+                <span>Perfil</span>
+                <h2 id={profileHeadingId}>{user.name}</h2>
+              </div>
+              <button
+                ref={profileCloseButtonRef}
+                type="button"
+                className="profile-sheet-close"
+                onClick={() => closeProfileMenu()}
+                aria-label="Cerrar perfil"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </header>
+
+            <button type="button" className="profile-sheet-summary" onClick={openAccountDetail}>
+              <span className="profile-summary-icon" aria-hidden="true">
+                <UserRound size={21} />
+              </span>
+              <span className="profile-summary-copy">
+                <span>Mi saldo</span>
+                <strong>{formatMoney(currentBalance)}</strong>
+              </span>
+            </button>
+
+            <div className="profile-sheet-actions">
+              <button type="button" onClick={openAccountDetail}>
+                <Users size={20} aria-hidden="true" />
+                Ver mi cuenta
+              </button>
+              {onChangePin ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    setPinModalOpen(true);
+                  }}
+                >
+                  <KeyRound size={20} aria-hidden="true" />
+                  Cambiar PIN
+                </button>
+              ) : null}
+              <button type="button" className="danger" onClick={onLogout}>
+                <LogOut size={20} aria-hidden="true" />
+                Salir
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {accountDetailOpen ? (
         <div className="modal-backdrop">

@@ -409,27 +409,31 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
         </div>
 
         <div className="login-inputs-group">
-          <input
-            aria-label="Usuario"
-            value={username}
-            onChange={(event) => handleUsernameChange(event.target.value)}
-            placeholder="Usuario"
-            autoComplete="username"
-            autoFocus
-            required
-            className={error ? 'input-error' : ''}
-          />
-          <input
-            aria-label="PIN de acceso"
-            value={password}
-            onChange={(event) => handlePasswordChange(event.target.value)}
-            placeholder="PIN de acceso"
-            type="password"
-            inputMode="numeric"
-            autoComplete="current-password"
-            required
-            className={error ? 'input-error' : ''}
-          />
+          <label className="login-field">
+            <span>Usuario</span>
+            <input
+              value={username}
+              onChange={(event) => handleUsernameChange(event.target.value)}
+              placeholder="Usuario"
+              autoComplete="username"
+              autoFocus
+              required
+              className={error ? 'input-error' : ''}
+            />
+          </label>
+          <label className="login-field">
+            <span>PIN de acceso</span>
+            <input
+              value={password}
+              onChange={(event) => handlePasswordChange(event.target.value)}
+              placeholder="PIN de acceso"
+              type="password"
+              inputMode="numeric"
+              autoComplete="current-password"
+              required
+              className={error ? 'input-error' : ''}
+            />
+          </label>
         </div>
 
         <label className="login-device-option">
