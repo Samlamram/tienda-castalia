@@ -11,6 +11,7 @@ import {
   Search,
   ShoppingCart,
   Trash2,
+  UserRound,
   Users,
   X
 } from 'lucide-react';
@@ -458,7 +459,6 @@ function UserSession({
           </div>
           <div className="kiosk-brand-copy">
             <strong>Tienda</strong>
-            <span>Usuario: {user.name}</span>
           </div>
         </div>
 
@@ -476,10 +476,15 @@ function UserSession({
                 setAccountFilter('all');
                 setAccountDetailOpen(true);
               }}
-              aria-label={`Ver cuenta ${account?.name ?? user.name}`}
+              aria-label="Abrir perfil y ver mi saldo"
             >
-              <span>Mi saldo{account?.name ? ` · ${account.name}` : ''}</span>
-              <strong>{formatMoney(currentBalance)}</strong>
+              <span className="profile-summary-icon" aria-hidden="true">
+                <UserRound size={21} />
+              </span>
+              <span className="profile-summary-copy">
+                <span>Mi saldo</span>
+                <strong>{formatMoney(currentBalance)}</strong>
+              </span>
             </button>
           </div>
         </div>

@@ -674,6 +674,35 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
     const projectedInventory = data.products.reduce((sum, product) => {
       return sum + Math.max(0, productStock(data, product.id)) * product.price;
     }, 0);
+    const confirmedConsumptionIds = new Set(
+      data.consumptions
+        .filter((consumption) => consumption.status === 'confirmed')
+        .map((consumption) => consumption.id)
+    );
+    const salesRevenue = data.consumptions
+      .filter((consumption) => consumption.status === 'confirmed')
+      .reduce((sum, consumption) => sum + consumption.total, 0);
+    const soldInventoryCost = data.consumptionCosts
+      .filter((cost) => confirmedConsumptionIds.has(cost.consumptionId))
+      .reduce((sum, cost) => sum + cost.costTotal, 0);
+    const pendingSaleCostQuantity = data.consumptionCosts
+      .filter((cost) => confirmedConsumptionIds.has(cost.consumptionId))
+      .reduce((sum, cost) => sum + cost.pendingCostQuantity, 0);
+    const balanceAdjustmentImpact = data.financialMovements
+      .filter((movement) => movement.movementType === 'adjustment' || movement.movementType === 'adjustment_reversal')
+      .reduce((sum, movement) => sum + movement.amount, 0);
+    const inventoryAdjustmentImpact = data.movements
+      .filter((movement) => {
+        if (movement.movementType !== 'adjustment' && movement.movementType !== 'adjustment_reversal') return false;
+        const original = movement.reversedMovementId ? movementById.get(movement.reversedMovementId) : undefined;
+        return original?.movementType !== 'purchase';
+      })
+      .reduce((sum, movement) => {
+        return sum + calculateInventoryMovementCostImpact({
+          movement,
+          allocations: data.fifoCostAllocations
+        }).amount;
+      }, 0);
     const storeValue = cash + inventoryCost + receivable - customerCredit;
     const profit = storeValue + withdrawals - contribution;
 
@@ -691,6 +720,12 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
       projectedMargin: projectedInventory - inventoryCost,
       storeValue,
       profit,
+      salesRevenue,
+      soldInventoryCost,
+      salesProfit: salesRevenue - soldInventoryCost,
+      pendingSaleCostQuantity,
+      balanceAdjustmentImpact,
+      inventoryAdjustmentImpact,
       retainedProfit: profit - withdrawals,
       totalIn: contribution + collected,
       totalOut: purchases + expenses + withdrawals
@@ -1522,16 +1557,57 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 </div>
                 <div className={`finance-profit-card ${financeSummary.profit < 0 ? 'is-negative' : ''}`}>
                   <div className="finance-profit-total">
-                    <span>Ganancia generada hasta hoy</span>
+                    <span>Resultado hasta hoy</span>
                     <strong>{formatMoney(financeSummary.profit)}</strong>
-                    <small>Lo producido por la tienda después de comparar su valor con la inversión.</small>
+                    <small>Este resultado combina lo ganado en ventas con cuadres y gastos.</small>
                   </div>
-                  <dl>
-                    <div><dt>Inversión de los dueños</dt><dd>{formatMoney(financeSummary.contribution)}</dd></div>
-                    <div><dt>Retirado por los dueños</dt><dd>{formatMoney(financeSummary.withdrawals)}</dd></div>
-                    <div><dt>Ganancia dentro de la tienda</dt><dd>{formatMoney(financeSummary.retainedProfit)}</dd></div>
-                  </dl>
+                  <div className="finance-profit-breakdown">
+                    <div className="finance-profit-row">
+                      <span>
+                        <b>Ganancia por ventas</b>
+                        <small>Ventas {formatMoney(financeSummary.salesRevenue)} − costo {formatMoney(financeSummary.soldInventoryCost)}</small>
+                      </span>
+                      <strong className={financeSummary.salesProfit >= 0 ? 'positive' : 'negative'}>
+                        {financeSummary.salesProfit > 0 ? '+' : ''}{formatMoney(financeSummary.salesProfit)}
+                      </strong>
+                    </div>
+                    <div className="finance-profit-row">
+                      <span>
+                        <b>Cuadres de inventario</b>
+                        <small>Faltantes, sobrantes y reversos valorados al costo</small>
+                      </span>
+                      <strong className={financeSummary.inventoryAdjustmentImpact >= 0 ? 'positive' : 'negative'}>
+                        {financeSummary.inventoryAdjustmentImpact > 0 ? '+' : ''}{formatMoney(financeSummary.inventoryAdjustmentImpact)}
+                      </strong>
+                    </div>
+                    <div className="finance-profit-row">
+                      <span><b>Gastos</b><small>Gastos registrados de la tienda</small></span>
+                      <strong className={financeSummary.expenses > 0 ? 'negative' : ''}>
+                        {financeSummary.expenses > 0 ? '−' : ''}{formatMoney(financeSummary.expenses)}
+                      </strong>
+                    </div>
+                    {financeSummary.balanceAdjustmentImpact !== 0 ? (
+                      <div className="finance-profit-row">
+                        <span><b>Ajustes de cuentas</b><small>Correcciones que cambiaron el valor por cobrar</small></span>
+                        <strong className={financeSummary.balanceAdjustmentImpact > 0 ? 'positive' : 'negative'}>
+                          {financeSummary.balanceAdjustmentImpact > 0 ? '+' : ''}{formatMoney(financeSummary.balanceAdjustmentImpact)}
+                        </strong>
+                      </div>
+                    ) : null}
+                    <div className="finance-profit-row total">
+                      <span><b>Resultado</b><small>Lo ganado menos pérdidas y gastos</small></span>
+                      <strong>{formatMoney(financeSummary.profit)}</strong>
+                    </div>
+                  </div>
                 </div>
+                <div className="finance-owner-summary">
+                  <span>Inversión <b>{formatMoney(financeSummary.contribution)}</b></span>
+                  <span>Retirado <b>{formatMoney(financeSummary.withdrawals)}</b></span>
+                  <span>Resultado dentro de la tienda <b>{formatMoney(financeSummary.retainedProfit)}</b></span>
+                </div>
+                {financeSummary.pendingSaleCostQuantity > 0 ? (
+                  <p className="finance-cost-warning">Hay {financeSummary.pendingSaleCostQuantity} unidad{financeSummary.pendingSaleCostQuantity === 1 ? '' : 'es'} vendida{financeSummary.pendingSaleCostQuantity === 1 ? '' : 's'} pendiente{financeSummary.pendingSaleCostQuantity === 1 ? '' : 's'} de costo. La ganancia por ventas puede cambiar al completar FIFO.</p>
+                ) : null}
               </section>
 
               <section className="finance-projection-section" aria-labelledby="finance-projection-title">
