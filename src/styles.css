@@ -128,6 +128,7 @@ html.modal-scroll-locked,
 body.modal-scroll-locked {
   overflow: hidden;
   overscroll-behavior: none;
+  height: 100dvh;
 }
 
 #root {
@@ -8680,7 +8681,7 @@ body,
   inset: 0 0 auto;
   z-index: 90;
   height: var(--safe-top);
-  background: var(--brand-evergreen);
+  background: var(--bg);
   pointer-events: none;
 }
 
@@ -9088,19 +9089,19 @@ body,
 
   .kiosk-header-slot,
   .admin-header-slot {
-    position: relative;
-    top: auto;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
     z-index: 45;
-    flex: 0 0 auto;
     height: calc(var(--safe-top) + 80px);
-    min-height: 0;
     background: transparent;
-    transition: height 220ms var(--ease);
+    pointer-events: none;
   }
 
   .kiosk-header-slot.chrome-collapsed,
   .admin-header-slot.chrome-collapsed {
-    height: calc(var(--safe-top) + 8px);
+    height: calc(var(--safe-top) + 80px);
   }
 
   .kiosk-header-slot > .kiosk-header-island,
@@ -9118,6 +9119,7 @@ body,
     opacity: 1;
     transition: transform 220ms var(--ease), opacity 140ms var(--ease);
     will-change: transform, opacity;
+    pointer-events: auto;
   }
 
   .kiosk-header-slot.chrome-collapsed > .kiosk-header-island,
@@ -9197,24 +9199,24 @@ body,
   }
 
   .kiosk-workspace {
-    height: auto;
-    padding: 0 12px calc(90px + var(--safe-bottom));
+    position: absolute;
+    inset: 0;
+    height: 100dvh;
+    padding: 0 12px calc(70px + var(--safe-bottom));
   }
 
   .catalog-area {
+    padding-top: calc(var(--safe-top) + 84px);
     padding-right: 0;
     scroll-padding-top: 8px;
   }
 
-  .search-filter-island {
-    top: 8px;
-    margin-bottom: 12px;
-  }
-
+  .kiosk-session .search-filter-island,
   .admin-session .search-filter-island {
     top: calc(var(--safe-top) + 84px);
   }
 
+  .kiosk-session.chrome-is-collapsed .search-filter-island,
   .admin-session.chrome-is-collapsed .search-filter-island {
     top: calc(var(--safe-top) + 10px);
   }
@@ -9304,7 +9306,7 @@ body,
 
   .admin-dashboard {
     max-width: none;
-    padding: 12px 12px calc(96px + var(--safe-bottom));
+    padding: calc(var(--safe-top) + 84px) 12px calc(96px + var(--safe-bottom));
   }
 
   .admin-summary-strip {

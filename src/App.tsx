@@ -52,6 +52,15 @@ export function App() {
     sessionRef.current = session;
   }, [session]);
 
+  // Update the status-bar / theme-color to match the current screen
+  useEffect(() => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (meta) {
+      meta.content = session ? '#f2f5f1' : '#052319';
+    }
+  }, [session]);
+
+
   useEffect(() => {
     let cancelled = false;
 
