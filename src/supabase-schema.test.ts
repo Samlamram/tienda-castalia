@@ -15,6 +15,10 @@ const priceHistoryMigration = readFileSync(
   join(process.cwd(), 'supabase', 'migrations', '202607140003_product_price_history.sql'),
   'utf8'
 );
+const productImagesMigration = readFileSync(
+  join(process.cwd(), 'supabase', 'migrations', '202607160001_product_images_storage.sql'),
+  'utf8'
+);
 const sheetsWebhooks = readFileSync(
   join(process.cwd(), 'supabase', 'apps-script-webhooks.sql'),
   'utf8'
@@ -130,7 +134,7 @@ describe('contrato del esquema oficial', () => {
 
   it('mantiene la migracion reproducible sincronizada con schema.sql', () => {
     expect(schema.trim()).toBe(
-      `${migration.trim()}\n\n${financeMigration.trim()}\n\n${priceHistoryMigration.trim()}`
+      `${migration.trim()}\n\n${financeMigration.trim()}\n\n${priceHistoryMigration.trim()}\n\n${productImagesMigration.trim()}`
     );
   });
 });

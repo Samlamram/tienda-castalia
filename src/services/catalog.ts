@@ -2,6 +2,7 @@ import { db } from '../data/db';
 import type { AppSession, CatalogProduct, Product } from '../domain/types';
 import { nowIso } from '../utils/id';
 import { getSupabaseClient, isSyncConfigured } from './sync';
+import { cacheCatalogImages } from './imageCache';
 
 type CatalogPayload = {
   version?: number;
@@ -107,6 +108,11 @@ export async function refreshCatalog(session: AppSession): Promise<AppSession> {
     };
     await db.appSessions.put(updated);
   });
+
+  // Recheck the complete local catalog, not only the RPC delta. If the browser
+  // evicts an image but keeps IndexedDB, the next sync restores the missing file.
+  const cachedCatalog = await db.catalogProducts.toArray();
+  await cacheCatalogImages(cachedCatalog.filter((product) => product.status === 'active'));
 
   return (await db.appSessions.get('current')) ?? session;
 }

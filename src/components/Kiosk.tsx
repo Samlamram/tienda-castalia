@@ -527,21 +527,27 @@ function UserSession({
               </button>
             </div>
 
-            <div className="search-header-wrapper">
-            <SearchFilterIsland
-              query={productQuery}
-              onQueryChange={setProductQuery}
-              options={categories.map((entry) => ({ value: entry, label: entry }))}
-              activeValue={category}
-              onActiveValueChange={setCategory}
-              placeholder="Buscar producto..."
-              searchLabel="Buscar producto"
-              filtersLabel="Categorías"
-              compact={collapsed && !productQuery.trim() && !searchFocused}
-              showFilters={!collapsed}
-              onFocusChange={setSearchFocused}
-            />
-            </div>
+            <button
+              type="button"
+              className="ghost icon mobile-cart-button"
+              onClick={openCheckout}
+              disabled={cart.length === 0}
+              aria-label={`Abrir carrito con ${cart.reduce((sum, item) => sum + item.quantity, 0)} productos`}
+            >
+              <ShoppingCart size={20} />
+              {cart.length > 0 ? <span>{cart.reduce((sum, item) => sum + item.quantity, 0)}</span> : null}
+            </button>
+            <button
+              ref={profileButtonRef}
+              type="button"
+              className="ghost icon profile-menu-button"
+              onClick={() => setProfileMenuOpen(true)}
+              aria-label="Abrir perfil"
+              aria-haspopup="dialog"
+              aria-expanded={profileMenuOpen}
+            >
+              <UserRound size={20} />
+            </button>
           </div>
         </header>
       </div>
@@ -592,6 +598,20 @@ function UserSession({
 
       <div className="kiosk-workspace">
         <main className="catalog-area" ref={catalogAreaRef}>
+          <SearchFilterIsland
+            className="user-catalog-search-filters"
+            query={productQuery}
+            onQueryChange={setProductQuery}
+            options={categories.map((entry) => ({ value: entry, label: entry }))}
+            activeValue={category}
+            onActiveValueChange={setCategory}
+            placeholder="Buscar producto..."
+            searchLabel="Buscar producto"
+            filtersLabel="Categorías"
+            compact={mobileChromeEnabled && !productQuery.trim() && !searchFocused}
+            onFocusChange={setSearchFocused}
+            onOverlayChange={setFilterSheetOpen}
+          />
           <div className="product-grid catalog-grid">
             {products.map((product) => {
               const quantityInCart = cart.find((item) => item.productId === product.id)?.quantity ?? 0;
@@ -811,17 +831,6 @@ function UserSession({
           </div>
         </aside>
       </div>
-
-      <footer className="subtotal-bar">
-        <div>
-          <span>Subtotal</span>
-          <strong>{formatMoney(cartTotal)}</strong>
-        </div>
-        <button disabled={cart.length === 0} onClick={() => setCheckout(true)}>
-          <ShoppingCart size={18} />
-          Ver carrito
-        </button>
-      </footer>
 
       {profileMenuOpen ? (
         <div

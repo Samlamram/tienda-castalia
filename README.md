@@ -34,9 +34,22 @@ Aplicación inicial:
 
 1. Ejecuta `supabase/schema.sql` o la migración base de `supabase/migrations`.
 2. Ejecuta `supabase/seed.sql` para cargar la demostración repetible.
-3. Si necesitas el respaldo secundario en Google Sheets, despliega `apps-script/Code.gs` como Web App.
-4. Configura sus propiedades `SPREADSHEET_ID` y `WEBHOOK_TOKEN`.
-5. Sustituye los marcadores y ejecuta `supabase/apps-script-webhooks.sql`.
+3. Despliega la función de imágenes con `supabase functions deploy product-image --no-verify-jwt`.
+4. Si necesitas el respaldo secundario en Google Sheets, despliega `apps-script/Code.gs` como Web App.
+5. Configura sus propiedades `SPREADSHEET_ID` y `WEBHOOK_TOKEN`.
+6. Sustituye los marcadores y ejecuta `supabase/apps-script-webhooks.sql`.
+
+## Imágenes de productos
+
+Las fotos nuevas se reducen a un máximo de 1200 px, se comprimen a WebP/JPEG y se suben al bucket
+público `product-images`. La escritura y el borrado pasan por la Edge Function `product-image`, que
+valida la sesión administrativa propia de la aplicación; el cliente nunca recibe la service role key.
+`products.image_url` conserva únicamente la URL pública. Al primer ingreso administrativo, la misma
+función migra de forma idempotente las imágenes Base64 existentes.
+
+El catálogo sigue almacenado en IndexedDB. Las imágenes HTTP nuevas se descargan una vez en Cache
+Storage (`catalog-images`, máximo 250 entradas) durante la sincronización y la aplicación solicita
+almacenamiento persistente al navegador para reducir desalojos del caché.
 
 Datos del seed:
 

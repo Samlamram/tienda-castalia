@@ -117,6 +117,14 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
+[storage.buckets.product-images]
+public = true
+file_size_limit = "10MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/webp"]
+
+[functions.product-image]
+verify_jwt = false
+
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
 # public = false

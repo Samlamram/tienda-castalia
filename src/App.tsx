@@ -16,6 +16,7 @@ import {
   logoutSession
 } from './services/auth';
 import { refreshCatalog } from './services/catalog';
+import { requestPersistentLocalStorage } from './services/imageCache';
 import {
   discardReviewedConsumption,
   queueOrSubmitConsumption,
@@ -67,6 +68,7 @@ export function App() {
     async function boot() {
       try {
         await initializeLocalDatabase();
+        void requestPersistentLocalStorage();
         const stored = await getStoredSession();
         if (!stored) return;
         let current = stored;

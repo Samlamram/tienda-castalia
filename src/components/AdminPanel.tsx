@@ -35,6 +35,12 @@ import { useCollapsibleChrome } from '../hooks/useCollapsibleChrome';
 import * as adminApi from '../services/adminApi';
 import { formatMoney, toNumber } from '../utils/money';
 import { isSyncConfigured } from '../services/sync';
+import {
+  compressProductImage,
+  deleteProductImage,
+  productImageStoragePath,
+  uploadProductImage
+} from '../services/productImages';
 import { SearchFilterIsland } from './SearchFilterIsland';
 
 type TiendaData = TiendaViewData;
@@ -2097,11 +2103,17 @@ function AdminModalContainer({
   const [productImageDraft, setProductImageDraft] = useState(
     modal.type === 'edit-product' ? (modal.target?.imageUrl ?? '') : ''
   );
+  const [productImageFile, setProductImageFile] = useState<File | null>(null);
+  const productPreviewObjectUrl = useRef<string | null>(null);
   const [bulkFailedImages, setBulkFailedImages] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [operationId] = useState(() => crypto.randomUUID());
   const [detailAccountTab, setDetailAccountTab] = useState<AdminAccountDetailTab>('history');
   const [detailAccountFilter, setDetailAccountFilter] = useState('all');
+
+  useEffect(() => () => {
+    if (productPreviewObjectUrl.current) URL.revokeObjectURL(productPreviewObjectUrl.current);
+  }, []);
   const bulkMode = modal.type === 'bulk-products' ? (modal.target?.mode as BulkProductAction | undefined) : undefined;
   const bulkProductIds = modal.type === 'bulk-products' && Array.isArray(modal.target?.productIds)
     ? (modal.target.productIds as string[])
@@ -2305,17 +2317,26 @@ function AdminModalContainer({
           onMessage('Cuentas unidas.');
           break;
 
-        case 'create-product':
-          await adminApi.createProduct({
-            name: String(form.get('name') ?? ''),
-            category: String(form.get('category') ?? ''),
-            price: 0,
-            stockMin: 0,
-            lastCost: 0,
-            imageUrl: String(form.get('imageUrl') ?? '')
-          }, adminSession, requestKey('create-product'));
+        case 'create-product': {
+          const uploaded = productImageFile
+            ? await uploadProductImage(await compressProductImage(productImageFile), adminSession)
+            : undefined;
+          try {
+            await adminApi.createProduct({
+              name: String(form.get('name') ?? ''),
+              category: String(form.get('category') ?? ''),
+              price: 0,
+              stockMin: 0,
+              lastCost: 0,
+              imageUrl: uploaded?.url ?? productImageDraft
+            }, adminSession, requestKey('create-product'));
+          } catch (error) {
+            if (uploaded) await deleteProductImage(uploaded.path, adminSession).catch(() => undefined);
+            throw error;
+          }
           onMessage('Producto creado.');
           break;
+        }
 
         case 'purchase':
           await adminApi.createPurchase({
@@ -2370,21 +2391,33 @@ function AdminModalContainer({
           onMessage('Usuario actualizado.');
           break;
 
-        case 'edit-product':
-          await adminApi.updateProduct(
-            {
-              ...modal.target,
-              name: String(form.get('name') ?? ''),
-              price: toNumber(form.get('price')),
-              category: String(form.get('category') ?? ''),
-              stockMin: toNumber(form.get('stockMin')),
-              imageUrl: String(form.get('imageUrl') ?? '')
-            },
-            adminSession,
-            requestKey('edit-product')
-          );
+        case 'edit-product': {
+          const previousImageUrl = String(modal.target?.imageUrl ?? '');
+          const uploaded = productImageFile
+            ? await uploadProductImage(await compressProductImage(productImageFile), adminSession)
+            : undefined;
+          try {
+            await adminApi.updateProduct(
+              {
+                ...modal.target,
+                name: String(form.get('name') ?? ''),
+                price: toNumber(form.get('price')),
+                category: String(form.get('category') ?? ''),
+                stockMin: toNumber(form.get('stockMin')),
+                imageUrl: uploaded?.url ?? productImageDraft
+              },
+              adminSession,
+              requestKey('edit-product')
+            );
+          } catch (error) {
+            if (uploaded) await deleteProductImage(uploaded.path, adminSession).catch(() => undefined);
+            throw error;
+          }
+          const previousPath = uploaded ? productImageStoragePath(previousImageUrl) : null;
+          if (previousPath) void deleteProductImage(previousPath, adminSession).catch(() => undefined);
           onMessage('Producto actualizado.');
           break;
+        }
 
         case 'toggle-product-status':
           await adminApi.setProductStatus(
@@ -2507,17 +2540,18 @@ function AdminModalContainer({
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       onMessage('Selecciona un archivo de imagen.');
+      event.target.value = '';
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setProductImageDraft(reader.result);
-      }
-    };
-    reader.onerror = () => onMessage('No se pudo cargar la imagen.');
-    reader.readAsDataURL(file);
+    if (file.size > 15 * 1024 * 1024) {
+      onMessage('La imagen original debe pesar maximo 15 MB.');
+      event.target.value = '';
+      return;
+    }
+    if (productPreviewObjectUrl.current) URL.revokeObjectURL(productPreviewObjectUrl.current);
+    productPreviewObjectUrl.current = URL.createObjectURL(file);
+    setProductImageFile(file);
+    setProductImageDraft(productPreviewObjectUrl.current);
   }
 
   const detailAccount = modal.type === 'account-detail' ? (modal.target as Account) : undefined;
@@ -2952,7 +2986,7 @@ function AdminModalContainer({
                   <input type="file" accept="image/*" onChange={handleProductImageUpload} />
                   <span>{productImageDraft ? 'Cambiar imagen' : 'Subir imagen'}</span>
                 </label>
-                <input type="hidden" name="imageUrl" value={productImageDraft} />
+                <small className="muted">Se optimiza y queda disponible sin conexion despues de sincronizar.</small>
               </div>
             )}
 

@@ -4,6 +4,7 @@ import { db } from '../data/db';
 import type { AdminSnapshot, AppSession } from '../domain/types';
 import { adminSnapshotToViewData, EMPTY_ADMIN_SNAPSHOT } from '../domain/viewData';
 import { loadAdminSnapshot } from '../services/adminApi';
+import { migrateLegacyProductImages } from '../services/productImages';
 
 export function useAdminData(session: AppSession | null | undefined, online: boolean) {
   const settings = useLiveQuery(() => db.settings.toArray(), [], []);
@@ -11,6 +12,7 @@ export function useAdminData(session: AppSession | null | undefined, online: boo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestVersion = useRef(0);
+  const migratedSessionToken = useRef<string | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!session || session.role !== 'admin') throw new Error('Sesion de administrador requerida.');
@@ -22,6 +24,12 @@ export function useAdminData(session: AppSession | null | undefined, online: boo
     setError(null);
 
     try {
+      if (migratedSessionToken.current !== session.token) {
+        migratedSessionToken.current = session.token;
+        // The migration is idempotent and only touches legacy data:image URLs.
+        // Keep admin loading compatible while the new function is being deployed.
+        await migrateLegacyProductImages(session).catch(() => undefined);
+      }
       const next = await loadAdminSnapshot(session);
       if (requestVersion.current === version) setSnapshot(next);
     } catch (cause) {
