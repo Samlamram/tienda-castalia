@@ -199,7 +199,6 @@ function UserSession({
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [headerFocused, setHeaderFocused] = useState(false);
   const [mobileChromeEnabled, setMobileChromeEnabled] = useState(
@@ -215,7 +214,7 @@ function UserSession({
   const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const checkoutLogoutTimerRef = useRef<number | null>(null);
   const profileHeadingId = useId();
-  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || filterSheetOpen;
+  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen;
   const { collapsed, rebaseline } = useCollapsibleChrome({
     scroller: catalogAreaRef,
     enabled: mobileChromeEnabled,
@@ -528,16 +527,6 @@ function UserSession({
             </div>
 
             <button
-              type="button"
-              className="ghost icon mobile-cart-button"
-              onClick={openCheckout}
-              disabled={cart.length === 0}
-              aria-label={`Abrir carrito con ${cart.reduce((sum, item) => sum + item.quantity, 0)} productos`}
-            >
-              <ShoppingCart size={20} />
-              {cart.length > 0 ? <span>{cart.reduce((sum, item) => sum + item.quantity, 0)}</span> : null}
-            </button>
-            <button
               ref={profileButtonRef}
               type="button"
               className="ghost icon profile-menu-button"
@@ -610,7 +599,6 @@ function UserSession({
             filtersLabel="Categorías"
             compact={mobileChromeEnabled && !productQuery.trim() && !searchFocused}
             onFocusChange={setSearchFocused}
-            onOverlayChange={setFilterSheetOpen}
           />
           <div className="product-grid catalog-grid">
             {products.map((product) => {
@@ -831,6 +819,17 @@ function UserSession({
           </div>
         </aside>
       </div>
+
+      <footer className="subtotal-bar">
+        <div>
+          <span>Subtotal</span>
+          <strong>{formatMoney(cartTotal)}</strong>
+        </div>
+        <button disabled={cart.length === 0} onClick={() => setCheckout(true)}>
+          <ShoppingCart size={18} />
+          Ver carrito
+        </button>
+      </footer>
 
       {profileMenuOpen ? (
         <div

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SearchFilterIsland } from './SearchFilterIsland';
 
@@ -30,7 +30,7 @@ describe('SearchFilterIsland', () => {
     expect(onQueryChange).toHaveBeenCalledWith('');
   });
 
-  it('aplica categorias desde chips y desde el bottom sheet compacto', () => {
+  it('mantiene las categorias como chips directos en modo compacto', () => {
     const onActiveValueChange = vi.fn();
     render(
       <SearchFilterIsland
@@ -46,13 +46,6 @@ describe('SearchFilterIsland', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Comida' }));
     expect(onActiveValueChange).toHaveBeenCalledWith('food');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Categorias: Todos' }));
-    expect(screen.getByRole('dialog', { name: 'Categorias' })).toBeInTheDocument();
-
-    const dialog = screen.getByRole('dialog', { name: 'Categorias' });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Comida' }));
-    expect(onActiveValueChange).toHaveBeenLastCalledWith('food');
-    expect(screen.queryByRole('dialog', { name: 'Categorias' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

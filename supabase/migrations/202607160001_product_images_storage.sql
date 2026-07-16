@@ -19,6 +19,51 @@ set public = excluded.public,
     file_size_limit = excluded.file_size_limit,
     allowed_mime_types = excluded.allowed_mime_types;
 
+-- Avoid copying legacy Base64 payloads into the immutable audit log while
+-- retaining evidence that the image field existed and changed.
+create or replace function public.app_redact_json(p_value jsonb)
+returns jsonb
+language plpgsql
+stable
+as $$
+declare
+  v_result jsonb;
+begin
+  if p_value is null then return null; end if;
+  if jsonb_typeof(p_value) = 'object' then
+    select coalesce(
+      jsonb_object_agg(
+        key,
+        case
+          when lower(key) in ('imageurl', 'image_url')
+            and jsonb_typeof(value) = 'string'
+            and value #>> '{}' like 'data:image/%'
+          then to_jsonb('[imagen Base64 omitida]'::text)
+          else public.app_redact_json(value)
+        end
+      ),
+      '{}'::jsonb
+    ) into v_result
+    from jsonb_each(p_value)
+    where lower(key) not in (
+      'pin', 'newpin', 'currentpin', 'new_pin', 'current_pin',
+      'pinhash', 'pinsalt', 'pin_hash', 'pin_salt',
+      'token', 'tokenhash', 'token_hash',
+      'sessiontoken', 'session_token', 'psessiontoken', 'p_session_token',
+      'accesstoken', 'access_token', 'refreshtoken', 'refresh_token',
+      'authorization'
+    );
+    return v_result;
+  end if;
+  if jsonb_typeof(p_value) = 'array' then
+    select coalesce(jsonb_agg(public.app_redact_json(value)), '[]'::jsonb)
+      into v_result from jsonb_array_elements(p_value);
+    return v_result;
+  end if;
+  return p_value;
+end;
+$$;
+
 -- Storage does not understand the application's custom PIN sessions. These
 -- service-role-only helpers let the Edge Function validate an administrator
 -- and preserve the normal product version/audit triggers during migration.

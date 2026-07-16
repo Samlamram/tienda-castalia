@@ -540,11 +540,10 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   const [headerSyncing, setHeaderSyncing] = useState(false);
   const [headerFocused, setHeaderFocused] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [filterOverlayOpen, setFilterOverlayOpen] = useState(false);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileChromeEnabled = useMediaQuery('(max-width: 860px)');
-  const chromePinned = Boolean(activeModal) || headerSyncing || profileOpen || headerFocused || filterOverlayOpen;
+  const chromePinned = Boolean(activeModal) || headerSyncing || profileOpen || headerFocused;
   const { collapsed: chromeCollapsed, expand: expandChrome, rebaseline: rebaselineChrome } = useCollapsibleChrome({
     scroller: 'window',
     enabled: mobileChromeEnabled,
@@ -604,7 +603,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   function switchAdminSection(section: AdminSection) {
     setActiveSection(section);
     setSearchFocused(false);
-    setFilterOverlayOpen(false);
     if (section !== 'catalogo') {
       setSelectedProductIds([]);
     }
@@ -1242,7 +1240,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 onActiveValueChange={(value) => setProductFilter(value as ProductFilter)}
                 compact={chromeCollapsed && !productQuery.trim() && !searchFocused}
                 onFocusChange={setSearchFocused}
-                onOverlayChange={setFilterOverlayOpen}
               />
 
               <div className="admin-catalog-actions">
@@ -1398,7 +1395,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 }}
                 compact={chromeCollapsed && !accountQuery.trim() && !searchFocused}
                 onFocusChange={setSearchFocused}
-                onOverlayChange={setFilterOverlayOpen}
               />
 
               <div className={`admin-smart-list admin-accounts-grid ${accountView === 'users' ? 'admin-users-list' : ''}`}>
