@@ -9242,6 +9242,44 @@ body,
     position: static;
     top: auto;
     margin: 0;
+    padding: 0;
+    gap: 4px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .user-search-chrome .search-filter-field {
+    border: 1px solid rgba(5, 35, 25, 0.07);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 8px 24px rgba(5, 35, 25, 0.08);
+  }
+
+  .user-search-chrome .search-filter-chips {
+    gap: 2px;
+    padding-inline: 4px;
+  }
+
+  .user-search-chrome .search-filter-chip {
+    min-height: 38px;
+    padding-inline: 13px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    box-shadow: none;
+  }
+
+  .user-search-chrome .search-filter-chip:hover {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text);
+  }
+
+  .user-search-chrome .search-filter-chip.active,
+  .user-search-chrome .search-filter-chip.active:hover {
+    border-color: var(--brand-evergreen);
+    background: var(--brand-evergreen);
+    color: #ffffff;
   }
 
   .kiosk-session .search-filter-island,
