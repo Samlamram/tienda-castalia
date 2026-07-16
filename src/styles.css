@@ -1563,7 +1563,7 @@ select:focus {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 20;
+  z-index: 50;
   padding: 14px max(20px, var(--safe-right)) calc(14px + var(--safe-bottom)) max(20px, var(--safe-left));
   justify-content: space-between;
   align-items: center;
@@ -2693,6 +2693,9 @@ select:focus {
     --catalog-sticky-gap: 0px;
     --catalog-search-gap: 0px;
     --catalog-search-block: 46px;
+  }
+  .catalog-area {
+    height: 100vh;
   }
 
   .app-header,
@@ -8793,7 +8796,7 @@ body,
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 10px 28px rgba(5, 35, 25, 0.09);
-  transition: top 220ms var(--ease), box-shadow 180ms var(--ease);
+  transition: box-shadow 180ms var(--ease);
 }
 
 .search-filter-row {
@@ -9202,7 +9205,10 @@ body,
     position: absolute;
     inset: 0;
     height: 100dvh;
-    padding: 0 12px calc(70px + var(--safe-bottom));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0 12px 0;
   }
 
   .catalog-area {
@@ -9213,12 +9219,12 @@ body,
 
   .kiosk-session .search-filter-island,
   .admin-session .search-filter-island {
-    top: calc(var(--safe-top) + 84px);
+    position: sticky;
+    top: calc(var(--safe-top) + 12px);
   }
 
-  .kiosk-session.chrome-is-collapsed .search-filter-island,
-  .admin-session.chrome-is-collapsed .search-filter-island {
-    top: calc(var(--safe-top) + 10px);
+  .search-filter-chips {
+    display: none !important;
   }
 
   .search-filter-island.compact .search-filter-button span {
@@ -9280,14 +9286,18 @@ body,
     min-height: 64px;
     border: 1px solid rgba(5, 35, 25, 0.08);
     border-radius: var(--island-radius);
-    background: rgba(255, 255, 255, 0.97);
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     box-shadow: 0 16px 42px rgba(5, 35, 25, 0.18);
   }
 
   .subtotal-bar {
+    z-index: 40;
     justify-content: space-between;
     gap: 10px;
     padding: 8px 9px 8px 14px;
+    border-top: 0;
   }
 
   .subtotal-bar span {
