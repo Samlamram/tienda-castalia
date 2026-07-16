@@ -544,11 +544,19 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileChromeEnabled = useMediaQuery('(max-width: 860px)');
   const chromePinned = Boolean(activeModal) || headerSyncing || profileOpen || headerFocused;
-  const { collapsed: chromeCollapsed, expand: expandChrome, rebaseline: rebaselineChrome } = useCollapsibleChrome({
+  const {
+    collapsed: chromeCollapsed,
+    offset: chromeOffset,
+    settling: chromeSettling,
+    expand: expandChrome,
+    rebaseline: rebaselineChrome
+  } = useCollapsibleChrome({
     scroller: 'window',
     enabled: mobileChromeEnabled,
     pinned: chromePinned,
-    resetKey: activeSection
+    resetKey: activeSection,
+    progressive: true,
+    travel: 160
   });
 
   useBodyScrollLock(profileOpen);
@@ -990,7 +998,8 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
         }}
       >
       <header
-        className="kiosk-header kiosk-header-island admin-kiosk-header"
+        className={`kiosk-header kiosk-header-island admin-kiosk-header progressive-mobile-chrome ${chromeSettling ? 'is-settling' : ''}`}
+        style={mobileChromeEnabled ? { transform: `translate3d(0, -${chromeOffset}px, 0)` } : undefined}
         onFocusCapture={() => setHeaderFocused(true)}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeaderFocused(false);
@@ -1848,6 +1857,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
             className={activeSection === 'catalogo' ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'}
             onClick={() => switchAdminSection('catalogo')}
             aria-current={activeSection === 'catalogo' ? 'page' : undefined}
+            aria-label="Catalogo"
           >
             <Package size={20} />
             <span>Catalogo</span>
@@ -1857,6 +1867,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
             className={activeSection === 'cuentas' ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'}
             onClick={() => switchAdminSection('cuentas')}
             aria-current={activeSection === 'cuentas' ? 'page' : undefined}
+            aria-label="Cuentas"
           >
             <Users size={20} />
             <span>Cuentas</span>
@@ -1866,6 +1877,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
             className={activeSection === 'cobros' ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'}
             onClick={() => switchAdminSection('cobros')}
             aria-current={activeSection === 'cobros' ? 'page' : undefined}
+            aria-label="Cobros"
           >
             <CreditCard size={20} />
             <span>Cobros</span>
@@ -1875,6 +1887,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
             className={activeSection === 'finanzas' ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'}
             onClick={() => switchAdminSection('finanzas')}
             aria-current={activeSection === 'finanzas' ? 'page' : undefined}
+            aria-label="Finanzas"
           >
             <DollarSign size={20} />
             <span>Finanzas</span>

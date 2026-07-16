@@ -365,4 +365,39 @@ describe('useCollapsibleChrome', () => {
     emitScroll(fixture, 72);
     expect(result.current.collapsed).toBe(false);
   });
+
+  it('sigue el scroll y resuelve a uno de dos estados en modo progresivo', () => {
+    const fixture = createScroller();
+    const scroller = { current: fixture.element };
+    const { result } = renderHook(() => useCollapsibleChrome({
+      scroller,
+      enabled: true,
+      pinned: false,
+      resetKey: 'progresivo',
+      progressive: true,
+      travel: 100,
+    }));
+
+    emitScroll(fixture, 20);
+    emitScroll(fixture, 50);
+    expect(result.current.offset).toBe(30);
+    expect(result.current.collapsed).toBe(false);
+
+    act(() => vi.advanceTimersByTime(100));
+    expect(result.current.offset).toBe(0);
+    expect(result.current.collapsed).toBe(false);
+
+    emitScroll(fixture, 120);
+    expect(result.current.offset).toBe(70);
+    act(() => vi.advanceTimersByTime(100));
+    expect(result.current.offset).toBe(100);
+    expect(result.current.collapsed).toBe(true);
+
+    emitScroll(fixture, 80);
+    emitScroll(fixture, 50);
+    expect(result.current.offset).toBe(30);
+    expect(result.current.collapsed).toBe(false);
+    act(() => vi.advanceTimersByTime(100));
+    expect(result.current.offset).toBe(0);
+  });
 });

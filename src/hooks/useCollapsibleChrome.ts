@@ -8,10 +8,14 @@ export interface UseCollapsibleChromeOptions {
   enabled: boolean;
   pinned: boolean;
   resetKey: unknown;
+  progressive?: boolean;
+  travel?: number;
 }
 
 export interface UseCollapsibleChromeResult {
   collapsed: boolean;
+  offset: number;
+  settling: boolean;
   expand: () => void;
   rebaseline: () => void;
 }
@@ -29,6 +33,7 @@ const EXPAND_DISTANCE = 12;
 const JITTER_DISTANCE = 2;
 const CHROME_TRANSITION_MS = 220;
 const TRANSITION_SETTLE_BUFFER_MS = 34;
+const PROGRESSIVE_SNAP_DELAY_MS = 90;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
@@ -79,9 +84,15 @@ export function useCollapsibleChrome({
   enabled,
   pinned,
   resetKey,
+  progressive = false,
+  travel = 144,
 }: UseCollapsibleChromeOptions): UseCollapsibleChromeResult {
   const [collapsed, setCollapsed] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [settling, setSettling] = useState(false);
   const collapsedRef = useRef(false);
+  const offsetRef = useRef(0);
+  const snapTimerRef = useRef<number | null>(null);
   const lastTopRef = useRef(0);
   const directionRef = useRef<-1 | 0 | 1>(0);
   const distanceRef = useRef(0);
@@ -147,6 +158,13 @@ export function useCollapsibleChrome({
   }, [rebaseline]);
 
   const expand = useCallback(() => {
+    if (snapTimerRef.current !== null) {
+      window.clearTimeout(snapTimerRef.current);
+      snapTimerRef.current = null;
+    }
+    offsetRef.current = 0;
+    setOffset(0);
+    setSettling(false);
     updateCollapsed(false);
     resetTracking(readScrollMetrics(scroller));
   }, [resetTracking, scroller, updateCollapsed]);
@@ -163,10 +181,14 @@ export function useCollapsibleChrome({
       transitionTimerRef.current = null;
     }
     transitionActiveRef.current = false;
+    if (snapTimerRef.current !== null) {
+      window.clearTimeout(snapTimerRef.current);
+      snapTimerRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
-    if (!enabled || pinned || typeof window === 'undefined') return;
+    if (progressive || !enabled || pinned || typeof window === 'undefined') return;
 
     const target = scroller === 'window' ? window : scroller.current;
     if (!target) {
@@ -264,7 +286,87 @@ export function useCollapsibleChrome({
         window.cancelAnimationFrame(animationFrame);
       }
     };
-  }, [enabled, expand, pinned, resetTracking, scroller, updateCollapsed]);
+  }, [enabled, expand, pinned, progressive, resetTracking, scroller, updateCollapsed]);
+
+  useEffect(() => {
+    if (!progressive || !enabled || pinned || typeof window === 'undefined') return;
+
+    const target = scroller === 'window' ? window : scroller.current;
+    if (!target) {
+      expand();
+      return;
+    }
+
+    const initialMetrics = readScrollMetrics(scroller);
+    lastTopRef.current = initialMetrics?.top ?? 0;
+    if (!initialMetrics?.hasOverflow) {
+      expand();
+      return;
+    }
+
+    let animationFrame: number | null = null;
+    const settle = () => {
+      if (snapTimerRef.current !== null) window.clearTimeout(snapTimerRef.current);
+      if (offsetRef.current <= 0 || offsetRef.current >= travel) return;
+
+      snapTimerRef.current = window.setTimeout(() => {
+        snapTimerRef.current = null;
+        const targetOffset = offsetRef.current >= travel / 2 ? travel : 0;
+        offsetRef.current = targetOffset;
+        setSettling(true);
+        setOffset(targetOffset);
+        updateCollapsed(targetOffset === travel);
+      }, PROGRESSIVE_SNAP_DELAY_MS);
+    };
+
+    const processScroll = () => {
+      animationFrame = null;
+      const metrics = readScrollMetrics(scroller);
+      if (!metrics?.hasOverflow) {
+        expand();
+        return;
+      }
+
+      const currentTop = metrics.top;
+      const delta = currentTop - lastTopRef.current;
+      lastTopRef.current = currentTop;
+
+      if (currentTop <= ALWAYS_EXPANDED_TOP) {
+        offsetRef.current = 0;
+        setSettling(false);
+        setOffset(0);
+        updateCollapsed(false);
+        return;
+      }
+      if (delta === 0) return;
+
+      if (delta < 0 && collapsedRef.current) updateCollapsed(false);
+
+      const nextOffset = clamp(offsetRef.current + delta, 0, travel);
+      if (nextOffset === offsetRef.current) return;
+      offsetRef.current = nextOffset;
+      setSettling(false);
+      setOffset(nextOffset);
+      if (nextOffset === 0) updateCollapsed(false);
+      if (nextOffset === travel) updateCollapsed(true);
+      settle();
+    };
+
+    const handleScroll = () => {
+      if (animationFrame !== null) return;
+      animationFrame = window.requestAnimationFrame(processScroll);
+    };
+
+    target.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      target.removeEventListener('scroll', handleScroll);
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      if (snapTimerRef.current !== null) {
+        window.clearTimeout(snapTimerRef.current);
+        snapTimerRef.current = null;
+      }
+    };
+  }, [enabled, expand, pinned, progressive, scroller, travel, updateCollapsed]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -276,5 +378,5 @@ export function useCollapsibleChrome({
     return () => viewport.removeEventListener('resize', rebaseline);
   }, [rebaseline]);
 
-  return { collapsed, expand, rebaseline };
+  return { collapsed, offset, settling, expand, rebaseline };
 }

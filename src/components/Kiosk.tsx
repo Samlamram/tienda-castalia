@@ -215,11 +215,13 @@ function UserSession({
   const checkoutLogoutTimerRef = useRef<number | null>(null);
   const profileHeadingId = useId();
   const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen;
-  const { collapsed, rebaseline } = useCollapsibleChrome({
+  const { collapsed, offset: chromeOffset, settling: chromeSettling, rebaseline } = useCollapsibleChrome({
     scroller: catalogAreaRef,
     enabled: mobileChromeEnabled,
     pinned: overlaysOpen || headerFocused || searchFocused,
-    resetKey: user.id
+    resetKey: user.id,
+    progressive: true,
+    travel: 160
   });
 
   useEffect(() => {
@@ -491,7 +493,8 @@ function UserSession({
         }}
       >
         <header
-          className="kiosk-header kiosk-header-island"
+          className={`kiosk-header kiosk-header-island progressive-mobile-chrome ${chromeSettling ? 'is-settling' : ''}`}
+          style={mobileChromeEnabled ? { transform: `translate3d(0, -${chromeOffset}px, 0)` } : undefined}
           aria-hidden={collapsed}
           inert={collapsed ? true : undefined}
           onFocusCapture={() => setHeaderFocused(true)}
@@ -822,12 +825,12 @@ function UserSession({
 
       <footer className="subtotal-bar">
         <div>
-          <span>Subtotal</span>
+          <span className="subtotal-label">Subtotal</span>
           <strong>{formatMoney(cartTotal)}</strong>
         </div>
-        <button disabled={cart.length === 0} onClick={() => setCheckout(true)}>
+        <button disabled={cart.length === 0} onClick={() => setCheckout(true)} aria-label="Ver carrito">
           <ShoppingCart size={18} />
-          Ver carrito
+          <span className="cart-button-label">Ver carrito</span>
         </button>
       </footer>
 
