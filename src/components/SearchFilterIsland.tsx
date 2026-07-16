@@ -56,6 +56,7 @@ export function SearchFilterIsland<Value extends string>({
   searchLabel = 'Buscar',
   filtersLabel = 'Filtros',
   compact = false,
+  showFilters = true,
   className,
   onFocusChange,
   onOverlayChange

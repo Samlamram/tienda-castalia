@@ -592,6 +592,9 @@ function UserSession({
 
       <div className="kiosk-workspace">
         <main className="catalog-area" ref={catalogAreaRef}>
+          <div className="product-grid catalog-grid">
+            {products.map((product) => {
+              const quantityInCart = cart.find((item) => item.productId === product.id)?.quantity ?? 0;
               const hasImage = product.imageUrl && !failedImages[product.id];
               return (
                 <div

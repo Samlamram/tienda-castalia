@@ -8681,17 +8681,6 @@ body,
   background: var(--bg);
 }
 
-.app-shell.user-shell::before,
-.app-shell.admin-shell::before {
-  content: '';
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 90;
-  height: var(--safe-top);
-  background: var(--bg);
-  pointer-events: none;
-}
-
 .kiosk-header-slot,
 .admin-header-slot {
   position: sticky;
