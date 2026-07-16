@@ -8778,10 +8778,6 @@ body,
   height: calc(100dvh - 96px);
 }
 
-.user-search-chrome {
-  width: 100%;
-}
-
 /* Shared search and filters island */
 .search-filter-island {
   position: sticky;
@@ -9213,34 +9209,12 @@ body,
   }
 
   .catalog-area {
-    padding-top: calc(88px + var(--user-search-height, 94px));
+    padding-top: 76px;
     padding-right: 0;
     scroll-padding-top: 6px;
   }
 
-  .progressive-user-chrome,
-  .user-search-chrome {
-    transition: none !important;
-    will-change: transform;
-  }
-
-  .progressive-user-chrome.is-settling,
-  .user-search-chrome.is-settling {
-    transition: transform 180ms var(--ease) !important;
-  }
-
-  .user-search-chrome {
-    position: fixed;
-    top: calc(var(--safe-top) + 76px);
-    left: 12px;
-    right: 12px;
-    z-index: 44;
-    width: auto;
-  }
-
-  .user-search-chrome .search-filter-island {
-    position: static;
-    top: auto;
+  .user-catalog-search-filters {
     margin: 0;
     padding: 0;
     gap: 4px;
@@ -9249,18 +9223,18 @@ body,
     box-shadow: none;
   }
 
-  .user-search-chrome .search-filter-field {
+  .user-catalog-search-filters .search-filter-field {
     border: 1px solid rgba(5, 35, 25, 0.07);
     background: rgba(255, 255, 255, 0.96);
     box-shadow: 0 8px 24px rgba(5, 35, 25, 0.08);
   }
 
-  .user-search-chrome .search-filter-chips {
+  .user-catalog-search-filters .search-filter-chips {
     gap: 2px;
     padding-inline: 4px;
   }
 
-  .user-search-chrome .search-filter-chip {
+  .user-catalog-search-filters .search-filter-chip {
     min-height: 38px;
     padding-inline: 13px;
     border-color: transparent;
@@ -9269,14 +9243,14 @@ body,
     box-shadow: none;
   }
 
-  .user-search-chrome .search-filter-chip:hover {
+  .user-catalog-search-filters .search-filter-chip:hover {
     border-color: transparent;
     background: transparent;
     color: var(--text);
   }
 
-  .user-search-chrome .search-filter-chip.active,
-  .user-search-chrome .search-filter-chip.active:hover {
+  .user-catalog-search-filters .search-filter-chip.active,
+  .user-catalog-search-filters .search-filter-chip.active:hover {
     border-color: var(--brand-evergreen);
     background: var(--brand-evergreen);
     color: #ffffff;
