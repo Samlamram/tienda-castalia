@@ -1,5 +1,5 @@
 import type { ChangeEvent, CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Boxes,
   BrushCleaning,
@@ -2047,7 +2047,10 @@ function AdminModalContainer({
   const productPreviewObjectUrl = useRef<string | null>(null);
   const [bulkFailedImages, setBulkFailedImages] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitSucceeded, setSubmitSucceeded] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [operationId] = useState(() => crypto.randomUUID());
+  const modalTitleId = useId();
   const [detailAccountTab, setDetailAccountTab] = useState<AdminAccountDetailTab>('history');
   const [detailAccountFilter, setDetailAccountFilter] = useState('all');
 
@@ -2068,7 +2071,9 @@ function AdminModalContainer({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting) return;
+    if (submitting || submitSucceeded) return;
+    setSubmitError(null);
+    setSubmitSucceeded(false);
     setSubmitting(true);
     const form = new FormData(event.currentTarget);
 
@@ -2477,8 +2482,14 @@ function AdminModalContainer({
           );
         }
       }
+      setSubmitting(false);
+      setSubmitSucceeded(true);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 650));
       onClose();
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error en la operaci\u00f3n.';
+      setSubmitSucceeded(false);
+      setSubmitError(message);
       onMessage(error instanceof Error ? error.message : 'Error en la operación.');
     } finally {
       setSubmitting(false);
@@ -2552,7 +2563,8 @@ function AdminModalContainer({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Operación administrativa"
+        aria-labelledby={modalTitleId}
+        aria-busy={submitting}
         className={
           modal.type === 'account-detail'
             ? 'modal account-modal admin-account-detail-modal'
@@ -2561,7 +2573,7 @@ function AdminModalContainer({
       >
         {modal.type !== 'account-detail' ? (
           <div className="admin-modal-title-row">
-            <h2>
+            <h2 id={modalTitleId}>
               {modal.type === 'change-pin' && 'Cambiar mi PIN'}
               {modal.type === 'create-account' && 'Crear Nueva Cuenta'}
               {modal.type === 'create-user' && 'Crear Nuevo Usuario'}
@@ -2597,9 +2609,46 @@ function AdminModalContainer({
               {modal.type === 'bulk-products' && bulkMode === 'inventory' && 'Cuadre de Inventario'}
               {modal.type === 'bulk-products' && bulkMode === 'prices' && 'Actualizar Precios'}
             </h2>
-            <button type="button" className="close-btn" onClick={onClose} aria-label="Cerrar">
+            <button
+              type="button"
+              className="close-btn"
+              onClick={onClose}
+              aria-label="Cerrar"
+              disabled={submitting || submitSucceeded}
+            >
               <X size={20} />
             </button>
+          </div>
+        ) : null}
+
+        {submitError ? (
+          <div className="admin-submit-error" role="alert">
+            {submitError}
+          </div>
+        ) : null}
+
+        {submitting || submitSucceeded ? (
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className={`admin-submit-overlay ${submitSucceeded ? 'is-success' : 'is-working'}`}
+          >
+            <div className="admin-submit-state">
+              {submitSucceeded ? (
+                <CircleCheck className="admin-submit-icon" size={44} aria-hidden="true" />
+              ) : (
+                <RefreshCw className="admin-submit-icon" size={38} aria-hidden="true" />
+              )}
+              <strong className="admin-submit-title">
+                {submitSucceeded ? 'Operaci\u00f3n completada' : 'Guardando cambios...'}
+              </strong>
+              <span className="admin-submit-copy">
+                {submitSucceeded
+                  ? 'Los datos quedaron actualizados.'
+                  : 'No cierres esta ventana mientras termina el proceso.'}
+              </span>
+            </div>
           </div>
         ) : null}
 
@@ -2608,7 +2657,7 @@ function AdminModalContainer({
             <div className="account-modal-hero">
               <div className="account-modal-title">
                 <span>Estado de cuenta</span>
-                <h2>{detailAccount.name}</h2>
+                <h2 id={modalTitleId}>{detailAccount.name}</h2>
                 <p>
                   <Users size={15} />
                   {detailUsers.length} usuario{detailUsers.length === 1 ? '' : 's'} asociado{detailUsers.length === 1 ? '' : 's'}
@@ -3648,7 +3697,7 @@ function AdminModalContainer({
             )}
 
             <div className="modal-actions">
-              <button type="submit" className="primary" disabled={submitting}>
+              <button type="submit" className="primary" disabled={submitting || submitSucceeded}>
                 {submitting
                   ? 'Guardando...'
                   : modal.type === 'toggle-product-status' ||

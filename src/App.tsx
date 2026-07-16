@@ -1,8 +1,10 @@
 import type { FormEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
+import { AppToast } from './components/AppToast';
 import { BrandLogo } from './components/BrandLogo';
 import { Kiosk } from './components/Kiosk';
+import { LoadingExperience } from './components/LoadingExperience';
 import { initializeLocalDatabase } from './data/db';
 import type { AppSession } from './domain/types';
 import { useAdminData } from './hooks/useAdminData';
@@ -253,10 +255,11 @@ export function App() {
 
   if (!ready) {
     return (
-      <main className="loading-screen">
-        <BrandLogo alt="Tienda Castalia" className="loading-logo" />
-        <p className="muted">Preparando...</p>
-      </main>
+      <LoadingExperience
+        label="Preparando tu tienda"
+        detail="Cargando el catalogo y tus preferencias."
+        variant="brand"
+      />
     );
   }
 
@@ -266,7 +269,7 @@ export function App() {
         session?.role === 'user' ? 'app-shell user-shell' : session?.role === 'admin' ? 'app-shell admin-shell' : 'app-shell'
       }
     >
-      {message ? <div className="toast" role="status" aria-live="polite">{message}</div> : null}
+      {message ? <AppToast message={message} onClose={() => setMessage('')} /> : null}
 
       {!session ? <LoginScreen onLogin={handleAuthenticatedSession} onMessage={setMessage} /> : null}
 
@@ -288,10 +291,12 @@ export function App() {
         !online ? (
           <AdminConnectionGate onLogout={logout} />
         ) : adminData.loading && !adminData.snapshot.generatedAt ? (
-          <section className="loading-screen">
-            <BrandLogo alt="Tienda Castalia" className="loading-logo" />
-            <p className="muted">Cargando administracion...</p>
-          </section>
+          <LoadingExperience
+            label="Cargando administracion"
+            detail="Sincronizando productos, cuentas y finanzas."
+            variant="surface"
+            skeleton
+          />
         ) : adminData.error && !adminData.snapshot.generatedAt ? (
           <AdminLoadError message={adminData.error} onRetry={adminData.refresh} onLogout={logout} />
         ) : (
@@ -463,8 +468,14 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
         {error ? <div className="login-error-message" role="alert">{error}</div> : null}
         {helpMessage ? <div className="login-help-message">{helpMessage}</div> : null}
 
-        <button type="submit" className="login-submit-btn" disabled={submitting}>
-          {submitting ? 'Entrando...' : 'Entrar'}
+        <button
+          type="submit"
+          className="login-submit-btn"
+          disabled={submitting}
+          aria-busy={submitting}
+        >
+          {submitting ? <span className="button-spinner" aria-hidden="true" /> : null}
+          <span>{submitting ? 'Entrando...' : 'Entrar'}</span>
         </button>
         <button
           type="button"

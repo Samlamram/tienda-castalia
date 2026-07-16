@@ -1,6 +1,8 @@
 import type { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   CheckCircle2,
+  CircleX,
+  CloudUpload,
   CreditCard,
   KeyRound,
   Loader2,
@@ -10,6 +12,7 @@ import {
   Plus,
   ShoppingCart,
   Trash2,
+  TriangleAlert,
   UserRound,
   Users,
   X
@@ -25,6 +28,8 @@ import { formatMoney } from '../utils/money';
 type TiendaData = TiendaViewData;
 type AccountDetailTab = 'history' | 'payments';
 type AccountFilter = 'all' | string;
+type CheckoutState = 'idle' | 'submitting' | 'confirmed' | 'queued' | 'needs_review' | 'failed';
+type PendingAction = { id: string; kind: 'retry' | 'discard' };
 type ConfirmConsumptionResult = {
   status: 'confirmed' | 'pending' | 'needs_review';
   message?: string;
@@ -191,7 +196,7 @@ function UserSession({
   const [productQuery, setProductQuery] = useState('');
   const [category, setCategory] = useState('Todas');
   const [checkout, setCheckout] = useState(false);
-  const [checkoutState, setCheckoutState] = useState<'idle' | 'submitting' | 'confirmed' | 'queued' | 'needs_review'>('idle');
+  const [checkoutState, setCheckoutState] = useState<CheckoutState>('idle');
   const [checkoutFeedback, setCheckoutFeedback] = useState('');
   const [confirmedCheckoutTotal, setConfirmedCheckoutTotal] = useState(0);
   const [accountDetailOpen, setAccountDetailOpen] = useState(false);
@@ -208,12 +213,18 @@ function UserSession({
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSubmitting, setPinSubmitting] = useState(false);
-  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [discardConfirmId, setDiscardConfirmId] = useState<string | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const discardTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const discardCancelRef = useRef<HTMLButtonElement | null>(null);
   const checkoutLogoutTimerRef = useRef<number | null>(null);
   const profileHeadingId = useId();
-  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen;
+  const checkoutHeadingId = useId();
+  const discardHeadingId = useId();
+  const discardDescriptionId = useId();
+  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || Boolean(discardConfirmId);
   const { collapsed, offset: chromeOffset, settling: chromeSettling, rebaseline } = useCollapsibleChrome({
     scroller: 'window',
     enabled: mobileChromeEnabled,
@@ -244,7 +255,7 @@ function UserSession({
     };
   }, []);
 
-  useBodyScrollLock(checkout || accountDetailOpen || pinModalOpen || profileMenuOpen);
+  useBodyScrollLock(overlaysOpen);
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
@@ -272,6 +283,24 @@ function UserSession({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [profileMenuOpen]);
+
+  useEffect(() => {
+    if (!discardConfirmId) return;
+
+    const focusFrame = window.requestAnimationFrame(() => discardCancelRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setDiscardConfirmId(null);
+      window.requestAnimationFrame(() => discardTriggerRef.current?.focus());
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [discardConfirmId]);
 
   useEffect(() => {
     setProductQuery('');
@@ -400,35 +429,48 @@ function UserSession({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo confirmar.';
       setCheckoutFeedback(message);
-      setCheckoutState('idle');
+      setCheckoutState('failed');
       onMessage(message);
     }
   }
 
   async function retryPendingConsumption(pendingId: string) {
-    if (!onRetryPendingConsumption || pendingActionId) return;
-    setPendingActionId(pendingId);
+    if (!onRetryPendingConsumption || pendingAction) return;
+    setPendingAction({ id: pendingId, kind: 'retry' });
     try {
       const result = await onRetryPendingConsumption(pendingId);
       onMessage(result.message ?? 'Compra pendiente procesada.');
     } catch (error) {
       onMessage(error instanceof Error ? error.message : 'No se pudo reintentar la compra pendiente.');
     } finally {
-      setPendingActionId(null);
+      setPendingAction(null);
     }
   }
 
   async function discardPendingConsumption(pendingId: string) {
-    if (!onDiscardPendingConsumption || pendingActionId) return;
-    if (!window.confirm('¿Descartar este intento local? Esta acción no elimina ninguna compra confirmada en Supabase.')) return;
-    setPendingActionId(pendingId);
+    if (!onDiscardPendingConsumption || pendingAction) return;
+    setDiscardConfirmId(null);
+    setPendingAction({ id: pendingId, kind: 'discard' });
     try {
       await onDiscardPendingConsumption(pendingId);
       onMessage('Intento local descartado.');
     } catch (error) {
       onMessage(error instanceof Error ? error.message : 'No se pudo descartar el intento local.');
     } finally {
-      setPendingActionId(null);
+      setPendingAction(null);
+    }
+  }
+
+  function openDiscardConfirmation(pendingId: string, trigger: HTMLButtonElement) {
+    if (!onDiscardPendingConsumption || pendingAction) return;
+    discardTriggerRef.current = trigger;
+    setDiscardConfirmId(pendingId);
+  }
+
+  function closeDiscardConfirmation(restoreFocus = true) {
+    setDiscardConfirmId(null);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => discardTriggerRef.current?.focus());
     }
   }
 
@@ -556,30 +598,52 @@ function UserSession({
             <span>No se confirmó en Supabase. Reintenta después de corregir la causa o descarta solo el intento local.</span>
           </div>
           <div className="pending-review-list">
-            {pendingReviews.map((entry) => (
-              <article key={entry.id}>
-                <span>{entry.error ?? 'El servidor solicitó revisión manual.'}</span>
-                <small>{new Date(entry.createdAt).toLocaleString('es-CO')}</small>
-                <div className="inline-actions">
-                  <button
-                    type="button"
-                    className="ghost small"
-                    disabled={Boolean(pendingActionId)}
-                    onClick={() => void retryPendingConsumption(entry.id)}
-                  >
-                    Reintentar
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost small danger"
-                    disabled={Boolean(pendingActionId)}
-                    onClick={() => void discardPendingConsumption(entry.id)}
-                  >
-                    Descartar intento
-                  </button>
-                </div>
-              </article>
-            ))}
+            {pendingReviews.map((entry) => {
+              const retrying = pendingAction?.id === entry.id && pendingAction.kind === 'retry';
+              const discarding = pendingAction?.id === entry.id && pendingAction.kind === 'discard';
+              return (
+                <article key={entry.id} aria-busy={retrying || discarding}>
+                  <span>{entry.error ?? 'El servidor solicitó revisión manual.'}</span>
+                  <small>{new Date(entry.createdAt).toLocaleString('es-CO')}</small>
+                  <div className="inline-actions" aria-live="polite">
+                    <button
+                      type="button"
+                      className={`ghost small ${retrying ? 'is-pending' : ''}`}
+                      disabled={Boolean(pendingAction)}
+                      onClick={() => void retryPendingConsumption(entry.id)}
+                    >
+                      {retrying ? (
+                        <>
+                          <Loader2
+                            size={15}
+                            className="pending-action-spinner"
+                            style={{ animation: 'checkout-spin 0.9s linear infinite' }}
+                          />
+                          Reintentando...
+                        </>
+                      ) : 'Reintentar'}
+                    </button>
+                    <button
+                      type="button"
+                      className={`ghost small danger ${discarding ? 'is-pending' : ''}`}
+                      disabled={Boolean(pendingAction)}
+                      onClick={(event) => openDiscardConfirmation(entry.id, event.currentTarget)}
+                    >
+                      {discarding ? (
+                        <>
+                          <Loader2
+                            size={15}
+                            className="pending-action-spinner"
+                            style={{ animation: 'checkout-spin 0.9s linear infinite' }}
+                          />
+                          Descartando...
+                        </>
+                      ) : 'Descartar intento'}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -600,7 +664,23 @@ function UserSession({
             onFocusChange={setSearchFocused}
           />
           <div className="product-grid catalog-grid">
-            {products.map((product) => {
+            {products.length === 0 ? (
+              <div className="admin-empty-state admin-catalog-empty catalog-empty-state" role="status">
+                <Package size={36} aria-hidden="true" />
+                <strong>No encontramos productos</strong>
+                <span>Prueba con otra búsqueda o vuelve a ver todas las categorías.</span>
+                <button
+                  type="button"
+                  className="ghost small"
+                  onClick={() => {
+                    setProductQuery('');
+                    setCategory('Todas');
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+              </div>
+            ) : products.map((product) => {
               const quantityInCart = cart.find((item) => item.productId === product.id)?.quantity ?? 0;
               const hasImage = product.imageUrl && !failedImages[product.id];
               return (
@@ -661,7 +741,11 @@ function UserSession({
                             >
                               <Minus size={18} />
                             </button>
-                            <span className="product-inline-quantity" aria-live="polite">
+                            <span
+                              key={`product-quantity-${product.id}-${quantityInCart}`}
+                              className="product-inline-quantity quantity-pop"
+                              aria-live="polite"
+                            >
                               {quantityInCart}
                             </span>
                             <button
@@ -760,7 +844,12 @@ function UserSession({
                       >
                         <Minus size={18} />
                       </button>
-                      <span className="cart-item-quantity">{item.quantity}</span>
+                      <span
+                        key={`cart-quantity-${item.productId}-${item.quantity}`}
+                        className="cart-item-quantity quantity-pop"
+                      >
+                        {item.quantity}
+                      </span>
                       <button
                         type="button"
                         className="cart-action-add"
@@ -815,14 +904,18 @@ function UserSession({
         </aside>
       </div>
 
-      <footer className="subtotal-bar">
+      <footer className={`subtotal-bar${checkout && checkoutState === 'idle' ? ' checkout-mode' : ''}`}>
         <div>
-          <span className="subtotal-label">Subtotal</span>
+          <span className="subtotal-label">Total</span>
           <strong>{formatMoney(cartTotal)}</strong>
         </div>
-        <button disabled={cart.length === 0} onClick={() => setCheckout(true)} aria-label="Ver carrito">
-          <ShoppingCart size={18} />
-          <span className="cart-button-label">Ver carrito</span>
+        <button
+          disabled={cart.length === 0}
+          onClick={checkout ? confirmConsumption : openCheckout}
+          aria-label={checkout ? 'Confirmar compra' : 'Ver carrito'}
+        >
+          {checkout ? <CheckCircle2 size={18} /> : <ShoppingCart size={18} />}
+          <span className="cart-button-label">{checkout ? 'Confirmar' : 'Ver carrito'}</span>
         </button>
       </footer>
 
@@ -1099,23 +1192,81 @@ function UserSession({
         </div>
       ) : null}
 
-      {checkout ? (
-        <div className="modal-backdrop">
-          <div
-            className={checkoutState === 'idle' ? 'modal wide checkout-modal' : 'modal checkout-feedback-modal'}
+      {discardConfirmId ? (
+        <div
+          className="modal-backdrop confirm-action-sheet-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeDiscardConfirmation();
+          }}
+        >
+          <section
+            className="modal pin-modal confirm-action-sheet pending-discard-sheet"
             role="dialog"
             aria-modal="true"
-            aria-label="Confirmar compra"
+            aria-labelledby={discardHeadingId}
+            aria-describedby={discardDescriptionId}
+            onKeyDown={trapFocusWithin}
+          >
+            <div className="pin-modal-header">
+              <h2 id={discardHeadingId}>¿Descartar este intento?</h2>
+              <button
+                type="button"
+                className="account-close-button"
+                onClick={() => closeDiscardConfirmation()}
+                aria-label="Cerrar confirmación"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p id={discardDescriptionId} className="admin-confirm-copy">
+              Se eliminará únicamente este intento guardado en el dispositivo. Ninguna compra confirmada en Supabase será eliminada.
+            </p>
+            <div className="modal-actions confirm-action-sheet-actions">
+              <button
+                ref={discardCancelRef}
+                type="button"
+                className="ghost"
+                onClick={() => closeDiscardConfirmation()}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="ghost danger"
+                onClick={() => void discardPendingConsumption(discardConfirmId)}
+              >
+                Descartar intento
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {checkout ? (
+        <div className="modal-backdrop checkout-backdrop">
+          <div
+            className={
+              checkoutState === 'idle'
+                ? 'modal wide checkout-modal checkout-state-idle'
+                : `modal checkout-feedback-modal checkout-state-${checkoutState}`
+            }
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={checkoutHeadingId}
           >
             <div className="checkout-modal-header">
-              <h2>
+              <h2 id={checkoutHeadingId}>
                 {checkoutState === 'confirmed'
                   ? 'Compra confirmada'
                   : checkoutState === 'queued'
                     ? 'Compra guardada'
                     : checkoutState === 'needs_review'
                       ? 'Revisión necesaria'
-                      : 'Confirmar consumo'}
+                      : checkoutState === 'failed'
+                        ? 'No pudimos confirmar'
+                        : checkoutState === 'submitting'
+                          ? 'Confirmando compra'
+                          : 'Confirmar consumo'}
               </h2>
               {checkoutState === 'idle' ? (
                 <button
@@ -1172,7 +1323,12 @@ function UserSession({
                           >
                             <Minus size={18} />
                           </button>
-                          <span className="checkout-qty-value">{item.quantity}</span>
+                          <span
+                            key={`checkout-quantity-${item.productId}-${item.quantity}`}
+                            className="checkout-qty-value quantity-pop"
+                          >
+                            {item.quantity}
+                          </span>
                           <button
                             type="button"
                             className="checkout-qty-btn checkout-qty-btn-plus"
@@ -1215,14 +1371,33 @@ function UserSession({
                 </footer>
               </>
             ) : (
-              <div className="checkout-feedback-panel" role="status" aria-live="polite">
-                <span className={checkoutState === 'confirmed' ? 'checkout-feedback-icon success' : 'checkout-feedback-icon'}>
+              <div
+                className={`checkout-feedback-panel checkout-feedback-${checkoutState}`}
+                role={checkoutState === 'failed' ? 'alert' : 'status'}
+                aria-live={checkoutState === 'failed' ? 'assertive' : 'polite'}
+              >
+                <span
+                  className={`checkout-feedback-icon ${checkoutState === 'confirmed' ? 'success' : `is-${checkoutState}`}`}
+                  style={
+                    checkoutState === 'queued'
+                      ? { background: 'var(--warn-bg)', color: 'var(--warn-text)' }
+                      : checkoutState === 'needs_review'
+                        ? { background: '#fff8e8', color: '#b45309' }
+                        : checkoutState === 'failed'
+                          ? { background: 'var(--danger-soft)', color: 'var(--danger)' }
+                          : undefined
+                  }
+                >
                   {checkoutState === 'confirmed' ? (
                     <CheckCircle2 size={34} />
                   ) : checkoutState === 'submitting' ? (
                     <Loader2 size={34} />
+                  ) : checkoutState === 'queued' ? (
+                    <CloudUpload size={34} style={{ animation: 'none' }} />
+                  ) : checkoutState === 'needs_review' ? (
+                    <TriangleAlert size={34} style={{ animation: 'none' }} />
                   ) : (
-                    <Package size={34} />
+                    <CircleX size={34} style={{ animation: 'none' }} />
                   )}
                 </span>
                 <strong>
@@ -1232,10 +1407,21 @@ function UserSession({
                       ? 'Pendiente de envío'
                       : checkoutState === 'needs_review'
                         ? 'Sin confirmar'
-                        : 'Un momento'}
+                        : checkoutState === 'failed'
+                          ? 'Intenta nuevamente'
+                          : 'Un momento'}
                 </strong>
                 <p>{checkoutFeedback}</p>
-                {checkoutState !== 'submitting' && !(checkoutState === 'confirmed' && isSharedDevice) ? (
+                {checkoutState === 'failed' ? (
+                  <div className="checkout-feedback-actions">
+                    <button type="button" className="checkout-primary-action" onClick={() => void confirmConsumption()}>
+                      Reintentar
+                    </button>
+                    <button type="button" className="ghost" onClick={closeCheckout}>
+                      Revisar carrito
+                    </button>
+                  </div>
+                ) : checkoutState !== 'submitting' && !(checkoutState === 'confirmed' && isSharedDevice) ? (
                   <button type="button" className="checkout-primary-action" onClick={closeCheckout}>
                     {checkoutState === 'confirmed' ? 'Seguir comprando' : 'Volver al catálogo'}
                   </button>
