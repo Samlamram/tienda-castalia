@@ -423,11 +423,13 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
           <label className="login-field">
             <span>Usuario</span>
             <input
+              id="username"
+              name="username"
+              type="text"
               value={username}
               onChange={(event) => handleUsernameChange(event.target.value)}
               placeholder="Usuario"
               autoComplete="username"
-              autoFocus
               required
               className={error ? 'input-error' : ''}
             />
@@ -435,6 +437,8 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
           <label className="login-field">
             <span>PIN de acceso</span>
             <input
+              id="password"
+              name="password"
               value={password}
               onChange={(event) => handlePasswordChange(event.target.value)}
               placeholder="PIN de acceso"
