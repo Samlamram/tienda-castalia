@@ -8778,6 +8778,10 @@ body,
   height: calc(100dvh - 96px);
 }
 
+.user-search-chrome {
+  width: 100%;
+}
+
 /* Shared search and filters island */
 .search-filter-island {
   position: sticky;
@@ -9209,9 +9213,35 @@ body,
   }
 
   .catalog-area {
-    padding-top: 76px;
+    padding-top: calc(88px + var(--user-search-height, 94px));
     padding-right: 0;
     scroll-padding-top: 6px;
+  }
+
+  .progressive-user-chrome,
+  .user-search-chrome {
+    transition: none !important;
+    will-change: transform;
+  }
+
+  .progressive-user-chrome.is-settling,
+  .user-search-chrome.is-settling {
+    transition: transform 180ms var(--ease) !important;
+  }
+
+  .user-search-chrome {
+    position: fixed;
+    top: calc(var(--safe-top) + 76px);
+    left: 12px;
+    right: 12px;
+    z-index: 44;
+    width: auto;
+  }
+
+  .user-search-chrome .search-filter-island {
+    position: static;
+    top: auto;
+    margin: 0;
   }
 
   .kiosk-session .search-filter-island,

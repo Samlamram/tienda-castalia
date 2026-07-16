@@ -1,4 +1,4 @@
-import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   CheckCircle2,
   CreditCard,
@@ -19,7 +19,6 @@ import { BrandLogo } from './BrandLogo';
 import { SearchFilterIsland } from './SearchFilterIsland';
 import type { CartItem, PersonUser, TiendaViewData } from '../domain/types';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import { useCollapsibleChrome } from '../hooks/useCollapsibleChrome';
 import { formatMoney } from '../utils/money';
 
 type TiendaData = TiendaViewData;
@@ -201,6 +200,9 @@ function UserSession({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [headerFocused, setHeaderFocused] = useState(false);
+  const [chromeOffset, setChromeOffset] = useState(0);
+  const [chromeSettling, setChromeSettling] = useState(false);
+  const [searchChromeHeight, setSearchChromeHeight] = useState(106);
   const [mobileChromeEnabled, setMobileChromeEnabled] = useState(
     () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       && window.matchMedia('(max-width: 860px)').matches
@@ -210,17 +212,108 @@ function UserSession({
   const [pinSubmitting, setPinSubmitting] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const catalogAreaRef = useRef<HTMLElement | null>(null);
+  const searchChromeRef = useRef<HTMLDivElement | null>(null);
+  const chromeOffsetRef = useRef(0);
+  const chromeTravelRef = useRef(182);
+  const chromeSnapTimerRef = useRef<number | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const checkoutLogoutTimerRef = useRef<number | null>(null);
   const profileHeadingId = useId();
   const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen;
-  const { collapsed, rebaseline } = useCollapsibleChrome({
-    scroller: catalogAreaRef,
-    enabled: mobileChromeEnabled,
-    pinned: overlaysOpen || headerFocused,
-    resetKey: user.id
-  });
+  const chromePinned = overlaysOpen || headerFocused || searchFocused;
+
+  useEffect(() => {
+    chromeOffsetRef.current = chromeOffset;
+  }, [chromeOffset]);
+
+  useEffect(() => {
+    if (!mobileChromeEnabled) {
+      if (chromeSnapTimerRef.current !== null) window.clearTimeout(chromeSnapTimerRef.current);
+      chromeOffsetRef.current = 0;
+      setChromeSettling(false);
+      setChromeOffset(0);
+      return;
+    }
+
+    const searchChrome = searchChromeRef.current;
+    if (!searchChrome) return;
+
+    const measure = () => {
+      const height = searchChrome.offsetHeight;
+      setSearchChromeHeight(height);
+      chromeTravelRef.current = Math.max(1, searchChrome.getBoundingClientRect().bottom + chromeOffsetRef.current);
+    };
+    measure();
+
+    const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    resizeObserver?.observe(searchChrome);
+    window.addEventListener('resize', measure);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [mobileChromeEnabled]);
+
+  useEffect(() => {
+    const catalogArea = catalogAreaRef.current;
+    if (!mobileChromeEnabled || !catalogArea) return;
+
+    if (chromePinned) {
+      if (chromeSnapTimerRef.current !== null) window.clearTimeout(chromeSnapTimerRef.current);
+      chromeOffsetRef.current = 0;
+      setChromeSettling(false);
+      setChromeOffset(0);
+    }
+
+    let lastTop = catalogArea.scrollTop;
+    let animationFrame: number | null = null;
+    const processScroll = () => {
+      animationFrame = null;
+      const currentTop = Math.max(0, catalogArea.scrollTop);
+      const delta = currentTop - lastTop;
+      lastTop = currentTop;
+
+      if (chromePinned || currentTop <= 0) {
+        if (chromeOffsetRef.current !== 0) {
+          chromeOffsetRef.current = 0;
+          setChromeOffset(0);
+        }
+        return;
+      }
+
+      const nextOffset = Math.min(Math.max(chromeOffsetRef.current + delta, 0), chromeTravelRef.current);
+      if (nextOffset === chromeOffsetRef.current) return;
+      chromeOffsetRef.current = nextOffset;
+      setChromeSettling(false);
+      setChromeOffset(nextOffset);
+
+      if (chromeSnapTimerRef.current !== null) window.clearTimeout(chromeSnapTimerRef.current);
+      if (nextOffset > 0 && nextOffset < chromeTravelRef.current) {
+        chromeSnapTimerRef.current = window.setTimeout(() => {
+          chromeSnapTimerRef.current = null;
+          const target = chromeOffsetRef.current >= chromeTravelRef.current / 2 ? chromeTravelRef.current : 0;
+          chromeOffsetRef.current = target;
+          setChromeSettling(true);
+          setChromeOffset(target);
+        }, 90);
+      }
+    };
+    const handleScroll = () => {
+      if (animationFrame !== null) return;
+      animationFrame = window.requestAnimationFrame(processScroll);
+    };
+
+    catalogArea.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      catalogArea.removeEventListener('scroll', handleScroll);
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      if (chromeSnapTimerRef.current !== null) {
+        window.clearTimeout(chromeSnapTimerRef.current);
+        chromeSnapTimerRef.current = null;
+      }
+    };
+  }, [chromePinned, mobileChromeEnabled]);
 
   useEffect(() => {
     if (!isSharedDevice || data.pendingSync > 0) return;
@@ -276,6 +369,8 @@ function UserSession({
     setProductQuery('');
     setCategory('Todas');
     setAccountFilter('all');
+    chromeOffsetRef.current = 0;
+    setChromeOffset(0);
     window.requestAnimationFrame(() => {
       const catalogArea = catalogAreaRef.current;
       if (typeof catalogArea?.scrollTo === 'function') {
@@ -483,17 +578,13 @@ function UserSession({
   }
 
   return (
-    <section className={`kiosk-session ${collapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'}`}>
-      <div
-        className={`kiosk-header-slot ${collapsed ? 'chrome-collapsed' : 'chrome-expanded'}`}
-        onTransitionEnd={(event) => {
-          if (event.target === event.currentTarget && event.propertyName === 'height') rebaseline();
-        }}
-      >
+    <section className="kiosk-session chrome-is-expanded">
+      <div className="kiosk-header-slot chrome-expanded">
         <header
-          className="kiosk-header kiosk-header-island"
-          aria-hidden={collapsed}
-          inert={collapsed ? true : undefined}
+          className={`kiosk-header kiosk-header-island progressive-user-chrome ${chromeSettling ? 'is-settling' : ''}`}
+          style={mobileChromeEnabled ? { transform: `translate3d(0, -${chromeOffset}px, 0)` } : undefined}
+          aria-hidden={mobileChromeEnabled && chromeOffset >= chromeTravelRef.current}
+          inert={mobileChromeEnabled && chromeOffset >= chromeTravelRef.current ? true : undefined}
           onFocusCapture={() => setHeaderFocused(true)}
           onBlurCapture={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
@@ -585,21 +676,32 @@ function UserSession({
         </section>
       ) : null}
 
-      <div className="kiosk-workspace">
+      <div
+        className="kiosk-workspace"
+        style={{ '--user-search-height': `${searchChromeHeight}px` } as CSSProperties}
+      >
         <main className="catalog-area" ref={catalogAreaRef}>
-          <SearchFilterIsland
-            className="user-catalog-search-filters"
-            query={productQuery}
-            onQueryChange={setProductQuery}
-            options={categories.map((entry) => ({ value: entry, label: entry }))}
-            activeValue={category}
-            onActiveValueChange={setCategory}
-            placeholder="Buscar producto..."
-            searchLabel="Buscar producto"
-            filtersLabel="Categorías"
-            compact={mobileChromeEnabled && !productQuery.trim() && !searchFocused}
-            onFocusChange={setSearchFocused}
-          />
+          <div
+            ref={searchChromeRef}
+            className={`user-search-chrome ${chromeSettling ? 'is-settling' : ''}`}
+            style={mobileChromeEnabled ? { transform: `translate3d(0, -${chromeOffset}px, 0)` } : undefined}
+            aria-hidden={mobileChromeEnabled && chromeOffset >= chromeTravelRef.current}
+            inert={mobileChromeEnabled && chromeOffset >= chromeTravelRef.current ? true : undefined}
+          >
+            <SearchFilterIsland
+              className="user-catalog-search-filters"
+              query={productQuery}
+              onQueryChange={setProductQuery}
+              options={categories.map((entry) => ({ value: entry, label: entry }))}
+              activeValue={category}
+              onActiveValueChange={setCategory}
+              placeholder="Buscar producto..."
+              searchLabel="Buscar producto"
+              filtersLabel="Categorías"
+              compact={mobileChromeEnabled && !productQuery.trim() && !searchFocused}
+              onFocusChange={setSearchFocused}
+            />
+          </div>
           <div className="product-grid catalog-grid">
             {products.map((product) => {
               const quantityInCart = cart.find((item) => item.productId === product.id)?.quantity ?? 0;
