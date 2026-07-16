@@ -527,19 +527,21 @@ function UserSession({
               </button>
             </div>
 
-            <button
-              ref={profileButtonRef}
-              type="button"
-              className="ghost icon profile-menu-button"
-              onClick={() => setProfileMenuOpen(true)}
-              aria-label={`Abrir perfil de ${user.name}`}
-              aria-haspopup="dialog"
-              aria-expanded={profileMenuOpen}
-            >
-              <span className="profile-summary-icon" aria-hidden="true">
-                <UserRound size={21} />
-              </span>
-            </button>
+            <div className="search-header-wrapper">
+            <SearchFilterIsland
+              query={productQuery}
+              onQueryChange={setProductQuery}
+              options={categories.map((entry) => ({ value: entry, label: entry }))}
+              activeValue={category}
+              onActiveValueChange={setCategory}
+              placeholder="Buscar producto..."
+              searchLabel="Buscar producto"
+              filtersLabel="Categorías"
+              compact={collapsed && !productQuery.trim() && !searchFocused}
+              showFilters={!collapsed}
+              onFocusChange={setSearchFocused}
+            />
+            </div>
           </div>
         </header>
       </div>
@@ -590,23 +592,6 @@ function UserSession({
 
       <div className="kiosk-workspace">
         <main className="catalog-area" ref={catalogAreaRef}>
-          <SearchFilterIsland
-            query={productQuery}
-            onQueryChange={setProductQuery}
-            options={categories.map((entry) => ({ value: entry, label: entry }))}
-            activeValue={category}
-            onActiveValueChange={setCategory}
-            placeholder="Buscar producto..."
-            searchLabel="Buscar producto"
-            filtersLabel="Categorías"
-            compact={collapsed && !productQuery.trim() && !searchFocused}
-            onFocusChange={setSearchFocused}
-            onOverlayChange={setFilterSheetOpen}
-          />
-
-          <div className="product-grid catalog-grid">
-            {products.map((product) => {
-              const quantityInCart = cart.find((item) => item.productId === product.id)?.quantity ?? 0;
               const hasImage = product.imageUrl && !failedImages[product.id];
               return (
                 <div

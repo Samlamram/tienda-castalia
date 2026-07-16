@@ -582,6 +582,13 @@ select:focus {
   --catalog-search-block: 58px;
   --catalog-sticky-top: calc(var(--catalog-header-offset) + var(--catalog-sticky-gap));
   --catalog-filter-top: var(--catalog-sticky-top);
+  background: linear-gradient(
+    to bottom,
+    #052319 0,
+    #052319 var(--safe-top),
+    var(--frost-bg-strong) var(--safe-top),
+    var(--frost-bg-strong) 100%
+  );
 }
 
 .kiosk-session.catalog-search-visible {
@@ -593,11 +600,10 @@ select:focus {
   top: 0;
   z-index: 12;
   min-height: 76px;
-  padding:
-    calc(14px + var(--safe-top))
-    max(22px, var(--safe-right))
-    14px
-    max(22px, var(--safe-left));
+  padding-top: calc(14px + var(--safe-top));
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
   display: grid;
   grid-template-columns: minmax(240px, 1fr) fit-content(360px) auto;
   align-items: center;
@@ -610,6 +616,16 @@ select:focus {
     var(--frost-bg-strong) 100%
   );
   border-bottom: 1px solid var(--line);
+}
+
+/* Header collapsed – hide but keep background via session */
+.chrome-collapsed .kiosk-header {
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  border-bottom: none;
 }
 
 .kiosk-brand-block {
@@ -2697,18 +2713,6 @@ select:focus {
   .catalog-area {
     height: 100vh;
   }
-
-  .app-header,
-  .toolbar,
-  .summary-heading,
-  .session-layout,
-  .two-column {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .top-nav {
-    width: 100%;
   }
 
   .top-nav button {

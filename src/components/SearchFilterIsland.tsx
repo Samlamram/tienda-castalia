@@ -42,6 +42,8 @@ export interface SearchFilterIslandProps<Value extends string = string> {
   className?: string;
   onFocusChange?: (focused: boolean) => void;
   onOverlayChange?: (open: boolean) => void;
+  hideOnScroll?: boolean;
+  showFilters?: boolean;
 }
 
 export function SearchFilterIsland<Value extends string>({
@@ -58,10 +60,6 @@ export function SearchFilterIsland<Value extends string>({
   onFocusChange,
   onOverlayChange
 }: SearchFilterIslandProps<Value>) {
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const headingId = useId();
-  const filterButtonRef = useRef<HTMLButtonElement | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const activeOption = options.find((option) => option.value === activeValue);
   const islandClassName = [
     'search-filter-island',
@@ -69,44 +67,11 @@ export function SearchFilterIsland<Value extends string>({
     className
   ].filter(Boolean).join(' ');
 
-  useBodyScrollLock(filtersOpen);
+  // No modal overlay needed; removed scroll lock and overlay effect.
 
-  useEffect(() => {
-    onOverlayChange?.(filtersOpen);
-    return () => {
-      if (filtersOpen) onOverlayChange?.(false);
-    };
-  }, [filtersOpen, onOverlayChange]);
+// Removed focus management for modal filter sheet.
 
-  useEffect(() => {
-    if (!filtersOpen) return;
-
-    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      setFiltersOpen(false);
-      window.requestAnimationFrame(() => filterButtonRef.current?.focus());
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [filtersOpen]);
-
-  function closeFilters(restoreFocus = true) {
-    setFiltersOpen(false);
-    if (restoreFocus) {
-      window.requestAnimationFrame(() => filterButtonRef.current?.focus());
-    }
-  }
-
-  function selectFilter(value: Value) {
-    onActiveValueChange(value);
-    closeFilters();
-  }
+// No modal filter actions required.
 
   return (
     <section className={islandClassName} aria-label={`${searchLabel} y ${filtersLabel.toLowerCase()}`}>
@@ -133,90 +98,26 @@ export function SearchFilterIsland<Value extends string>({
             </button>
           ) : null}
         </div>
-
-        <button
-          ref={filterButtonRef}
-          type="button"
-          className="search-filter-button"
-          onClick={() => setFiltersOpen(true)}
-          aria-haspopup="dialog"
-          aria-expanded={filtersOpen}
-          aria-label={`${filtersLabel}: ${activeOption?.label ?? activeValue}`}
-        >
-          <SlidersHorizontal size={18} aria-hidden="true" />
-          <span>{filtersLabel}</span>
-          <strong>{activeOption?.label ?? activeValue}</strong>
-        </button>
       </div>
 
-      <div className="search-filter-chips" aria-label={filtersLabel}>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={option.value === activeValue ? 'search-filter-chip active' : 'search-filter-chip'}
-            onClick={() => onActiveValueChange(option.value)}
-            aria-pressed={option.value === activeValue}
-            disabled={option.disabled}
-          >
-            <span>{option.label}</span>
-            {typeof option.count === 'number' ? <small>{option.count}</small> : null}
-          </button>
-        ))}
-      </div>
-
-      {filtersOpen ? (
-        <div
-          className="filter-sheet-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeFilters();
-          }}
-        >
-          <section
-            className="filter-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={headingId}
-            onKeyDown={trapFocusWithin}
-          >
-            <header className="filter-sheet-header">
-              <div>
-                <span>Mostrar por</span>
-                <h2 id={headingId}>{filtersLabel}</h2>
-              </div>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                className="filter-sheet-close"
-                onClick={() => closeFilters()}
-                aria-label="Cerrar filtros"
-              >
-                <X size={20} aria-hidden="true" />
-              </button>
-            </header>
-
-            <div className="filter-sheet-options">
-              {options.map((option) => {
-                const selected = option.value === activeValue;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={selected ? 'filter-sheet-option active' : 'filter-sheet-option'}
-                    onClick={() => selectFilter(option.value)}
-                    aria-pressed={selected}
-                    disabled={option.disabled}
-                  >
-                    <span>{option.label}</span>
-                    {typeof option.count === 'number' ? <small>{option.count}</small> : null}
-                    {selected ? <Check size={19} aria-hidden="true" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+      {/* Filter chips displayed directly below the search field */}
+      {showFilters !== false && (
+        <div className="search-filter-chips" aria-label={filtersLabel}>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={option.value === activeValue ? 'search-filter-chip active' : 'search-filter-chip'}
+              onClick={() => onActiveValueChange(option.value)}
+              aria-pressed={option.value === activeValue}
+              disabled={option.disabled}
+            >
+              <span>{option.label}</span>
+              {typeof option.count === 'number' ? <small>{option.count}</small> : null}
+            </button>
+          ))}
         </div>
-      ) : null}
+      )}
     </section>
   );
 }
