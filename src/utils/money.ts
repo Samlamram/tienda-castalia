@@ -15,3 +15,12 @@ export function toNumber(value: FormDataEntryValue | null): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
+
+/** Parses a positive whole COP amount written as 50000 or 50.000. */
+export function parseCopAmount(value: FormDataEntryValue | null): number | null {
+  const input = String(value ?? '').trim();
+  if (!/^\d+(?:\.\d{3})*$/.test(input)) return null;
+
+  const parsed = Number(input.replaceAll('.', ''));
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}

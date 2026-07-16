@@ -33,7 +33,7 @@ import { calculateInventoryMovementCostImpact, calculateOpenConsumptions, roundM
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { useCollapsibleChrome } from '../hooks/useCollapsibleChrome';
 import * as adminApi from '../services/adminApi';
-import { formatMoney, toNumber } from '../utils/money';
+import { formatMoney, parseCopAmount, toNumber } from '../utils/money';
 import { isSyncConfigured } from '../services/sync';
 import {
   compressProductImage,
@@ -70,6 +70,7 @@ const USER_FILTER_OPTIONS = [
   { value: 'inactive', label: 'Inactivos' },
   { value: 'all', label: 'Todos' }
 ] as const;
+const FINANCE_HISTORY_PREVIEW = 6;
 
 interface DatedEntry {
   createdAt: string;
@@ -532,6 +533,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [accountView, setAccountView] = useState<AccountPanelTab>('accounts');
   const [userFilter, setUserFilter] = useState<UserFilter>('all');
+  const [showAllFinanceHistory, setShowAllFinanceHistory] = useState(false);
   const [productQuery, setProductQuery] = useState('');
   const [accountQuery, setAccountQuery] = useState('');
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -985,6 +987,10 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
     return entries.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }, [data]);
 
+  const visibleFinanceHistory = showAllFinanceHistory
+    ? financeHistory
+    : financeHistory.slice(0, FINANCE_HISTORY_PREVIEW);
+
   return (
     <section className={`admin-session ${chromeCollapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'} ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}>
       <div
@@ -1238,7 +1244,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
           {activeSection === 'catalogo' && (
             <div className="admin-section-content">
               <SearchFilterIsland
-                className="admin-catalog-search-filters"
+                className="catalog-search-filters admin-catalog-search-filters"
                 query={productQuery}
                 onQueryChange={setProductQuery}
                 placeholder="Buscar producto"
@@ -1631,22 +1637,22 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
           )}
 
           {activeSection === 'finanzas' && (
-            <div className="admin-section-content finance-panel">
-              <header className="finance-heading">
+            <div className="admin-section-content finance-simple">
+              <header className="finance-simple-header">
                 <div>
                   <span className="finance-eyebrow">Finanzas</span>
-                  <h2>Estado de la tienda</h2>
-                  <p>Lo que tienes, lo que se movió y lo que has ganado.</p>
+                  <h2>Resumen financiero</h2>
+                  <p>Un resumen claro de cómo está la tienda.</p>
                 </div>
-                <div className="finance-actions">
+                <div className="finance-simple-actions" aria-label="Registrar movimiento">
                   <button type="button" className="primary small" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'capital_contribution' } })}>
-                    <Plus size={16} /> Inversión
+                    <Plus size={16} /> Aporte
                   </button>
                   <button type="button" className="secondary small" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'expense' } })}>
-                    Registrar gasto
+                    Gasto
                   </button>
                   <button type="button" className="secondary small" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'owner_withdrawal' } })}>
-                    Registrar retiro
+                    Retiro
                   </button>
                 </div>
               </header>
@@ -1655,194 +1661,116 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 <div className="finance-notice" role="status">
                   <DollarSign size={20} />
                   <div>
-                    <strong>Falta registrar la inversión inicial</strong>
-                    <span>La caja puede verse negativa porque ya hay compras, pero todavía no se registró el dinero con el que empezó la tienda.</span>
+                    <strong>Falta registrar el aporte inicial</strong>
+                    <span>Regístralo para que la caja calculada sea correcta.</span>
                   </div>
                   <button type="button" onClick={() => setActiveModal({ type: 'finance-event', target: { eventType: 'capital_contribution' } })}>
-                    Registrar inversión
+                    Registrar aporte
                   </button>
                 </div>
               ) : null}
 
-              <section className="finance-overview-card" aria-labelledby="finance-assets-title">
-                <div className="finance-section-title">
+              <section className="finance-kpis" aria-label="Resumen financiero">
+                <article className={`finance-kpi finance-kpi-main ${financeSummary.cash < 0 ? 'is-negative' : ''}`}>
+                  <span className="finance-kpi-icon" aria-hidden="true"><DollarSign size={20} /></span>
                   <div>
-                    <span className="finance-eyebrow">1 · Estado actual</span>
-                    <h3 id="finance-assets-title">Lo que tiene la tienda hoy</h3>
-                  </div>
-                  <div className="finance-overview-total">
-                    <span>Valor de la tienda</span>
-                    <strong>{formatMoney(financeSummary.storeValue)}</strong>
-                  </div>
-                </div>
-                <div className="finance-value-equation">
-                  <div className={`finance-value-part cash ${financeSummary.cash < 0 ? 'is-negative' : ''}`}>
-                    <span>Caja calculada</span>
+                    <span>Caja</span>
                     <strong>{formatMoney(financeSummary.cash)}</strong>
-                    <small>Dinero disponible según el sistema</small>
+                    <small>Disponible según los registros</small>
                   </div>
-                  <span className="finance-equation-sign" aria-hidden="true">+</span>
-                  <div className="finance-value-part receivable">
+                </article>
+                <article className="finance-kpi">
+                  <span className="finance-kpi-icon" aria-hidden="true"><CreditCard size={20} /></span>
+                  <div>
                     <span>Por cobrar</span>
                     <strong>{formatMoney(financeSummary.receivable)}</strong>
-                    <small>Dinero pendiente de clientes</small>
+                    <small>Pendiente de clientes</small>
                   </div>
-                  <span className="finance-equation-sign" aria-hidden="true">+</span>
-                  <div className="finance-value-part inventory">
-                    <span>Mercancía</span>
+                </article>
+                <article className="finance-kpi">
+                  <span className="finance-kpi-icon" aria-hidden="true"><Boxes size={20} /></span>
+                  <div>
+                    <span>Inventario</span>
                     <strong>{formatMoney(financeSummary.inventoryCost)}</strong>
-                    <small>Valorada al costo</small>
+                    <small>Mercancía valorada al costo</small>
                   </div>
-                  {financeSummary.customerCredit > 0 ? (
-                    <>
-                      <span className="finance-equation-sign" aria-hidden="true">−</span>
-                      <div className="finance-value-part credit">
-                        <span>Saldos a favor</span>
-                        <strong>{formatMoney(financeSummary.customerCredit)}</strong>
-                        <small>Dinero a favor de clientes</small>
-                      </div>
-                    </>
+                </article>
+                <article className={`finance-kpi ${financeSummary.profit < 0 ? 'is-negative' : ''}`}>
+                  <span className="finance-kpi-icon" aria-hidden="true"><ReceiptText size={20} /></span>
+                  <div>
+                    <span>Resultado</span>
+                    <strong>{formatMoney(financeSummary.profit)}</strong>
+                    <small>{financeSummary.pendingSaleCostQuantity > 0 ? 'Provisional: faltan costos' : 'Ganancia o pérdida acumulada'}</small>
+                  </div>
+                </article>
+              </section>
+
+              {financeSummary.customerCredit > 0 ? (
+                <p className="finance-inline-note">Saldos a favor de clientes: <strong>{formatMoney(financeSummary.customerCredit)}</strong></p>
+              ) : null}
+
+              {financeSummary.pendingSaleCostQuantity > 0 ? (
+                <p className="finance-cost-warning finance-summary-warning">
+                  El resultado puede cambiar: hay {financeSummary.pendingSaleCostQuantity} unidad{financeSummary.pendingSaleCostQuantity === 1 ? '' : 'es'} vendida{financeSummary.pendingSaleCostQuantity === 1 ? '' : 's'} pendiente{financeSummary.pendingSaleCostQuantity === 1 ? '' : 's'} de costo.
+                </p>
+              ) : null}
+
+              <section className="finance-simple-card" aria-labelledby="finance-cash-title">
+                <div className="finance-simple-card-heading">
+                  <h3 id="finance-cash-title">Movimiento del dinero</h3>
+                  <small>Desde el inicio</small>
+                </div>
+                <dl className="finance-cash-summary">
+                  <div className="incoming">
+                    <dt>
+                      <span>Entró</span>
+                      <small>Aportes {formatMoney(financeSummary.contribution)} · Cobros {formatMoney(financeSummary.collected)}</small>
+                    </dt>
+                    <dd>{formatMoney(financeSummary.totalIn)}</dd>
+                  </div>
+                  <div className="outgoing">
+                    <dt>
+                      <span>Salió</span>
+                      <small>Compras {formatMoney(financeSummary.purchases)} · Gastos {formatMoney(financeSummary.expenses)} · Retiros {formatMoney(financeSummary.withdrawals)}</small>
+                    </dt>
+                    <dd>{formatMoney(financeSummary.totalOut)}</dd>
+                  </div>
+                </dl>
+                <p className="finance-helper-note">Las ventas pendientes entran a caja cuando el cliente paga.</p>
+              </section>
+
+              <section className="finance-simple-card" aria-labelledby="finance-recent-title">
+                <div className="finance-simple-card-heading">
+                  <div>
+                    <h3 id="finance-recent-title">Movimientos recientes</h3>
+                    <small>{financeHistory.length} movimiento{financeHistory.length === 1 ? '' : 's'} registrado{financeHistory.length === 1 ? '' : 's'}</small>
+                  </div>
+                  {financeHistory.length > FINANCE_HISTORY_PREVIEW ? (
+                    <button type="button" className="secondary small" onClick={() => setShowAllFinanceHistory((current) => !current)}>
+                      {showAllFinanceHistory ? 'Ver menos' : 'Ver todos'}
+                    </button>
                   ) : null}
                 </div>
-              </section>
-
-              <section className="finance-flow-section" aria-labelledby="finance-flow-title">
-                <div className="finance-section-title">
-                  <div>
-                    <span className="finance-eyebrow">2 · Caja</span>
-                    <h3 id="finance-flow-title">Movimientos de caja</h3>
-                  </div>
-                  <small>Solo dinero recibido o pagado</small>
-                </div>
-                <div className="finance-flow-grid">
-                  <article className="finance-flow-card incoming">
-                    <header><span>Dinero recibido</span><strong>{formatMoney(financeSummary.totalIn)}</strong></header>
-                    <dl>
-                      <div><dt>Inversión</dt><dd>{formatMoney(financeSummary.contribution)}</dd></div>
-                      <div><dt>Cobros</dt><dd>{formatMoney(financeSummary.collected)}</dd></div>
-                    </dl>
-                  </article>
-                  <article className="finance-flow-card outgoing">
-                    <header><span>Dinero pagado</span><strong>{formatMoney(financeSummary.totalOut)}</strong></header>
-                    <dl>
-                      <div><dt>Compras</dt><dd>{formatMoney(financeSummary.purchases)}</dd></div>
-                      <div><dt>Gastos</dt><dd>{formatMoney(financeSummary.expenses)}</dd></div>
-                      <div><dt>Retiros</dt><dd>{formatMoney(financeSummary.withdrawals)}</dd></div>
-                    </dl>
-                  </article>
-                </div>
-                <p className="finance-helper-note">Las cuentas por cobrar aparecen aquí únicamente cuando el cliente paga.</p>
-              </section>
-
-              <section className="finance-profit-section" aria-labelledby="finance-profit-title">
-                <div className="finance-section-title">
-                  <div>
-                    <span className="finance-eyebrow">3 · Resultado</span>
-                    <h3 id="finance-profit-title">Ganancia</h3>
-                  </div>
-                </div>
-                <div className={`finance-profit-card ${financeSummary.profit < 0 ? 'is-negative' : ''}`}>
-                  <div className="finance-profit-total">
-                    <span>Resultado hasta hoy</span>
-                    <strong>{formatMoney(financeSummary.profit)}</strong>
-                    <small>Este resultado combina lo ganado en ventas con cuadres y gastos.</small>
-                  </div>
-                  <div className="finance-profit-breakdown">
-                    <div className="finance-profit-row">
-                      <span>
-                        <b>Ganancia por ventas</b>
-                        <small>Ventas {formatMoney(financeSummary.salesRevenue)} − costo {formatMoney(financeSummary.soldInventoryCost)}</small>
+                <ul className="finance-recent-list">
+                  {visibleFinanceHistory.map((entry) => (
+                    <li key={entry.id}>
+                      <span className={`finance-kind kind-${entry.kind.toLowerCase()}`}>{entry.kind}</span>
+                      <span className="finance-recent-copy">
+                        <strong>{entry.title}</strong>
+                        <small>
+                          {entry.subtitle} · {new Date(entry.createdAt).toLocaleDateString('es-CO')}
+                          {entry.reversed ? ' · Reversado' : ''}
+                        </small>
                       </span>
-                      <strong className={financeSummary.salesProfit >= 0 ? 'positive' : 'negative'}>
-                        {financeSummary.salesProfit > 0 ? '+' : ''}{formatMoney(financeSummary.salesProfit)}
-                      </strong>
-                    </div>
-                    <div className="finance-profit-row">
-                      <span>
-                        <b>Cuadres de inventario</b>
-                        <small>Faltantes, sobrantes y reversos valorados al costo</small>
-                      </span>
-                      <strong className={financeSummary.inventoryAdjustmentImpact >= 0 ? 'positive' : 'negative'}>
-                        {financeSummary.inventoryAdjustmentImpact > 0 ? '+' : ''}{formatMoney(financeSummary.inventoryAdjustmentImpact)}
-                      </strong>
-                    </div>
-                    <div className="finance-profit-row">
-                      <span><b>Gastos</b><small>Gastos registrados de la tienda</small></span>
-                      <strong className={financeSummary.expenses > 0 ? 'negative' : ''}>
-                        {financeSummary.expenses > 0 ? '−' : ''}{formatMoney(financeSummary.expenses)}
-                      </strong>
-                    </div>
-                    {financeSummary.balanceAdjustmentImpact !== 0 ? (
-                      <div className="finance-profit-row">
-                        <span><b>Ajustes de cuentas</b><small>Correcciones que cambiaron el valor por cobrar</small></span>
-                        <strong className={financeSummary.balanceAdjustmentImpact > 0 ? 'positive' : 'negative'}>
-                          {financeSummary.balanceAdjustmentImpact > 0 ? '+' : ''}{formatMoney(financeSummary.balanceAdjustmentImpact)}
+                      {entry.amount !== undefined ? (
+                        <strong className={entry.amount >= 0 ? 'finance-positive' : 'finance-negative'}>
+                          {entry.amount > 0 ? '+' : ''}{formatMoney(entry.amount)}
                         </strong>
-                      </div>
-                    ) : null}
-                    <div className="finance-profit-row total">
-                      <span><b>Resultado</b><small>Lo ganado menos pérdidas y gastos</small></span>
-                      <strong>{formatMoney(financeSummary.profit)}</strong>
-                    </div>
-                  </div>
-                </div>
-                <div className="finance-owner-summary">
-                  <span>Inversión <b>{formatMoney(financeSummary.contribution)}</b></span>
-                  <span>Retirado <b>{formatMoney(financeSummary.withdrawals)}</b></span>
-                  <span>Resultado dentro de la tienda <b>{formatMoney(financeSummary.retainedProfit)}</b></span>
-                </div>
-                {financeSummary.pendingSaleCostQuantity > 0 ? (
-                  <p className="finance-cost-warning">Hay {financeSummary.pendingSaleCostQuantity} unidad{financeSummary.pendingSaleCostQuantity === 1 ? '' : 'es'} vendida{financeSummary.pendingSaleCostQuantity === 1 ? '' : 's'} pendiente{financeSummary.pendingSaleCostQuantity === 1 ? '' : 's'} de costo. La ganancia por ventas puede cambiar al completar FIFO.</p>
-                ) : null}
-              </section>
-
-              <section className="finance-projection-section" aria-labelledby="finance-projection-title">
-                <div className="finance-section-title">
-                  <div>
-                    <span className="finance-eyebrow">4 · Proyección</span>
-                    <h3 id="finance-projection-title">Qué podría dejar el inventario</h3>
-                  </div>
-                  <small>No es ganancia actual</small>
-                </div>
-                <div className="finance-projection" aria-label="Proyección del inventario">
-                  <div><span>Mercancía al costo</span><strong>{formatMoney(financeSummary.inventoryCost)}</strong></div>
-                  <div><span>Si se vende al precio actual</span><strong>{formatMoney(financeSummary.projectedInventory)}</strong></div>
-                  <div className="potential"><span>Diferencia posible al vender</span><strong>{formatMoney(financeSummary.projectedMargin)}</strong></div>
-                </div>
-                <p className="finance-helper-note">Es una posibilidad: todavía falta vender la mercancía y pueden existir gastos o pérdidas.</p>
-              </section>
-
-              <section className="finance-history-section">
-                <div className="finance-history-heading">
-                  <div>
-                    <span className="finance-eyebrow">5 · Historial</span>
-                    <h3>Todo lo que ha pasado</h3>
-                  </div>
-                  <span>{financeHistory.length} movimientos</span>
-                </div>
-                <div className="finance-history-list">
-                  {financeHistory.map((entry) => (
-                    <details className="finance-history-entry" key={entry.id}>
-                      <summary>
-                        <span className={`finance-kind kind-${entry.kind.toLowerCase()}`}>{entry.kind}</span>
-                        <span className="finance-history-main">
-                          <strong>{entry.title}</strong>
-                          <small>{entry.subtitle} · {new Date(entry.createdAt).toLocaleString('es-CO')}</small>
-                        </span>
-                        {entry.amount !== undefined ? (
-                          <strong className={entry.amount >= 0 ? 'finance-positive' : 'finance-negative'}>
-                            {entry.amount > 0 ? '+' : ''}{formatMoney(entry.amount)}
-                          </strong>
-                        ) : null}
-                        {entry.reversed ? <span className="status-pill muted">Reversado</span> : null}
-                      </summary>
-                      <div className="finance-history-detail">
-                        {entry.details.map((detail, index) => <p key={`${entry.id}-${index}`}>{detail}</p>)}
-                      </div>
-                    </details>
+                      ) : null}
+                    </li>
                   ))}
-                  {financeHistory.length === 0 ? <p className="admin-empty-state">Todavía no hay movimientos financieros.</p> : null}
-                </div>
+                </ul>
+                {financeHistory.length === 0 ? <p className="admin-empty-state">Todavía no hay movimientos financieros.</p> : null}
               </section>
             </div>
           )}
@@ -2229,6 +2157,11 @@ function AdminModalContainer({
           break;
 
         case 'payment':
+          const paymentAmount = parseCopAmount(form.get('amount'));
+          if (paymentAmount === null) {
+            onMessage('Escribe un valor válido en pesos, por ejemplo 50.000.');
+            return;
+          }
           const paymentUserIdValue = paymentTargetType === 'user' ? String(form.get('userId') ?? '') : undefined;
           const paymentUser = paymentUserIdValue ? activeUsers.find((user) => user.id === paymentUserIdValue) : undefined;
           await adminApi.createPayment({
@@ -2239,17 +2172,22 @@ function AdminModalContainer({
             targetType: paymentTargetType === 'user' ? 'user' : 'account',
             userId: paymentUserIdValue,
             paidByUserId: String(form.get('paidByUserId') ?? ''),
-            amount: toNumber(form.get('amount')),
+            amount: paymentAmount,
             note: String(form.get('note') ?? '')
           }, adminSession, requestKey('payment'));
           onMessage('Cobro registrado.');
           break;
 
         case 'finance-event': {
+          const amount = parseCopAmount(form.get('amount'));
+          if (amount === null) {
+            onMessage('Escribe un valor válido en pesos, por ejemplo 50.000.');
+            return;
+          }
           const eventType = String(modal.target?.eventType ?? 'expense') as 'capital_contribution' | 'expense' | 'owner_withdrawal';
           await adminApi.createStoreFinanceEvent({
             eventType,
-            amount: toNumber(form.get('amount')),
+            amount,
             beneficiary: String(form.get('beneficiary') ?? ''),
             note: String(form.get('note') ?? '')
           }, adminSession, requestKey(`finance-${eventType}`));
@@ -3271,7 +3209,7 @@ function AdminModalContainer({
                   <span>Valor</span>
                   <label className="payment-amount-field">
                     <span>$</span>
-                    <input name="amount" inputMode="numeric" placeholder="0" required autoFocus />
+                    <input name="amount" inputMode="numeric" pattern="[0-9]+([.][0-9]{3})*" placeholder="Ej. 50.000" title="Escribe un valor como 50000 o 50.000" required autoFocus />
                   </label>
                 </div>
                 {modal.target?.eventType === 'owner_withdrawal' ? (

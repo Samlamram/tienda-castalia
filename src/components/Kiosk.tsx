@@ -209,14 +209,13 @@ function UserSession({
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSubmitting, setPinSubmitting] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
-  const catalogAreaRef = useRef<HTMLElement | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const checkoutLogoutTimerRef = useRef<number | null>(null);
   const profileHeadingId = useId();
   const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen;
   const { collapsed, offset: chromeOffset, settling: chromeSettling, rebaseline } = useCollapsibleChrome({
-    scroller: catalogAreaRef,
+    scroller: 'window',
     enabled: mobileChromeEnabled,
     pinned: overlaysOpen || headerFocused || searchFocused,
     resetKey: user.id,
@@ -279,12 +278,6 @@ function UserSession({
     setCategory('Todas');
     setAccountFilter('all');
     window.requestAnimationFrame(() => {
-      const catalogArea = catalogAreaRef.current;
-      if (typeof catalogArea?.scrollTo === 'function') {
-        catalogArea.scrollTo({ top: 0 });
-      } else if (catalogArea) {
-        catalogArea.scrollTop = 0;
-      }
       const supportsWindowScrollTo =
         typeof window.scrollTo === 'function' && !window.navigator.userAgent.toLowerCase().includes('jsdom');
       try {
@@ -589,9 +582,9 @@ function UserSession({
       ) : null}
 
       <div className="kiosk-workspace">
-        <main className="catalog-area" ref={catalogAreaRef}>
+        <main className="catalog-area">
           <SearchFilterIsland
-            className="user-catalog-search-filters"
+            className="catalog-search-filters user-catalog-search-filters"
             query={productQuery}
             onQueryChange={setProductQuery}
             options={categories.map((entry) => ({ value: entry, label: entry }))}
