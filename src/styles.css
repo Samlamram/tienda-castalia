@@ -1077,6 +1077,80 @@ select:focus {
   -webkit-backdrop-filter: blur(12px) saturate(135%);
 }
 
+.product-details.selected {
+  gap: 4px;
+  padding: 5px 5px 5px 9px;
+}
+
+.product-details.selected .product-price {
+  font-size: clamp(0.68rem, 2.8vw, 0.8rem);
+}
+
+.product-inline-stepper {
+  display: grid;
+  grid-template-columns: 34px minmax(24px, auto) 34px;
+  align-items: stretch;
+  height: 40px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.product-inline-action {
+  min-width: 38px;
+  min-height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  color: #ffffff;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 150ms var(--ease), color 150ms var(--ease);
+}
+
+.product-inline-action.dec {
+  color: #fecaca;
+}
+
+.product-inline-action.inc {
+  color: #bbf7d0;
+}
+
+.product-inline-action.dec:hover {
+  color: #ffffff;
+  background: rgba(220, 38, 38, 0.42);
+}
+
+.product-inline-action.inc:hover {
+  color: #ffffff;
+  background: rgba(5, 150, 105, 0.42);
+}
+
+.product-inline-action:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #ffffff;
+  outline-offset: -3px;
+}
+
+.product-inline-quantity {
+  min-width: 28px;
+  display: grid;
+  place-items: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+}
+
 .product-name {
   font-size: 0.72rem;
   font-weight: 600;
@@ -8789,8 +8863,8 @@ body,
   transition: gap 180ms var(--ease), box-shadow 180ms var(--ease);
 }
 
-/* Catalog search must remain a real sticky row in both scroll models:
-   window scrolling in admin and the internal catalog scroller in user. */
+/* Keep catalog search as a non-shrinking sticky row in both sessions so it
+   consistently occupies the header position after the mobile chrome leaves. */
 .catalog-search-filters {
   flex: 0 0 auto;
   align-self: stretch;
@@ -9252,7 +9326,7 @@ body,
 
   .catalog-search-filters {
     position: sticky;
-    top: calc(var(--safe-top) + 6px);
+    top: calc(var(--safe-top) + 6px + var(--catalog-header-reveal, 0px));
     margin: 0 0 12px;
     padding: 0;
     gap: 4px;
@@ -9297,7 +9371,15 @@ body,
   .kiosk-session .search-filter-island,
   .admin-session .search-filter-island {
     position: sticky;
-    top: calc(var(--safe-top) + 6px);
+    top: calc(var(--safe-top) + 6px + var(--catalog-header-reveal, 0px));
+  }
+
+  .chrome-is-settling .catalog-search-filters {
+    will-change: top;
+    transition:
+      top 180ms var(--ease),
+      gap 180ms var(--ease),
+      box-shadow 180ms var(--ease);
   }
 
   .search-filter-chips {

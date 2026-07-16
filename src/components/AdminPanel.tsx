@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { ChangeEvent, CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Boxes,
@@ -975,7 +975,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
       entries.push({
         id: `finance-${event.id}`,
         kind,
-        title: kind === 'Capital' ? 'Inversión o aporte' : kind === 'Retiro' ? 'Retiro de dueño' : 'Gasto de la tienda',
+        title: kind === 'Capital' ? 'Aporte de capital' : kind === 'Retiro' ? 'Retiro de dueño' : 'Gasto de la tienda',
         subtitle: event.beneficiary ?? event.note,
         amount: event.amount * sign * (isReversal ? -1 : 1),
         reversed: isReversal,
@@ -992,7 +992,10 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
     : financeHistory.slice(0, FINANCE_HISTORY_PREVIEW);
 
   return (
-    <section className={`admin-session ${chromeCollapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'} ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}>
+    <section
+      className={`admin-session ${chromeCollapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'} ${chromeSettling ? 'chrome-is-settling' : ''} ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}
+      style={mobileChromeEnabled ? { '--catalog-header-reveal': `${Math.max(0, 72 - chromeOffset)}px` } as CSSProperties : undefined}
+    >
       <div
         className={`header-slot admin-header-slot ${
           chromeCollapsed ? 'collapsed chrome-collapsed' : 'expanded chrome-expanded'
@@ -2191,7 +2194,7 @@ function AdminModalContainer({
             beneficiary: String(form.get('beneficiary') ?? ''),
             note: String(form.get('note') ?? '')
           }, adminSession, requestKey(`finance-${eventType}`));
-          onMessage(eventType === 'capital_contribution' ? 'Inversión registrada.' : eventType === 'owner_withdrawal' ? 'Retiro registrado.' : 'Gasto registrado.');
+          onMessage(eventType === 'capital_contribution' ? 'Aporte registrado.' : eventType === 'owner_withdrawal' ? 'Retiro registrado.' : 'Gasto registrado.');
           break;
         }
 
@@ -2563,7 +2566,7 @@ function AdminModalContainer({
               {modal.type === 'create-account' && 'Crear Nueva Cuenta'}
               {modal.type === 'create-user' && 'Crear Nuevo Usuario'}
               {modal.type === 'payment' && 'Registrar Cobro'}
-              {modal.type === 'finance-event' && modal.target?.eventType === 'capital_contribution' && 'Registrar Inversión'}
+              {modal.type === 'finance-event' && modal.target?.eventType === 'capital_contribution' && 'Registrar aporte'}
               {modal.type === 'finance-event' && modal.target?.eventType === 'expense' && 'Registrar Gasto'}
               {modal.type === 'finance-event' && modal.target?.eventType === 'owner_withdrawal' && 'Registrar Retiro'}
               {modal.type === 'reverse-payment' && 'Reversar Pago'}
@@ -3223,7 +3226,7 @@ function AdminModalContainer({
                   name="note"
                   placeholder={
                     modal.target?.eventType === 'capital_contribution'
-                      ? 'Ej. inversión inicial'
+                      ? 'Ej. aporte inicial'
                       : modal.target?.eventType === 'owner_withdrawal'
                         ? 'Ej. reparto de utilidades'
                         : 'Ej. transporte o reparación'
@@ -3232,7 +3235,7 @@ function AdminModalContainer({
                 />
                 <p className="muted">
                   {modal.target?.eventType === 'capital_contribution'
-                    ? 'Aumenta el dinero y la inversión acumulada.'
+                    ? 'Aumenta el dinero y los aportes acumulados.'
                     : modal.target?.eventType === 'owner_withdrawal'
                       ? 'Disminuye el dinero, pero conserva la utilidad histórica generada.'
                       : 'Disminuye el dinero y la utilidad de la tienda.'}

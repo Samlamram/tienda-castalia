@@ -1,4 +1,4 @@
-import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   CheckCircle2,
   CreditCard,
@@ -478,7 +478,10 @@ function UserSession({
   }
 
   return (
-    <section className={`kiosk-session ${collapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'}`}>
+    <section
+      className={`kiosk-session ${collapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'} ${chromeSettling ? 'chrome-is-settling' : ''}`}
+      style={mobileChromeEnabled ? { '--catalog-header-reveal': `${Math.max(0, 72 - chromeOffset)}px` } as CSSProperties : undefined}
+    >
       <div
         className={`kiosk-header-slot ${collapsed ? 'chrome-collapsed' : 'chrome-expanded'}`}
         onTransitionEnd={(event) => {
@@ -634,11 +637,48 @@ function UserSession({
                         </div>
                       )}
                     </span>
-                    <div className="product-details">
-                      <strong className="product-name" title={product.name}>
-                        {product.name}
-                      </strong>
-                      <span className="product-price">{formatMoney(product.price)}</span>
+                    <div className={quantityInCart > 0 ? 'product-details selected' : 'product-details'}>
+                      {quantityInCart === 0 ? (
+                        <>
+                          <strong className="product-name" title={product.name}>
+                            {product.name}
+                          </strong>
+                          <span className="product-price">{formatMoney(product.price)}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="product-price">{formatMoney(product.price)}</span>
+                          <div className="product-inline-stepper" role="group" aria-label={`Cantidad de ${product.name}`}>
+                            <button
+                              type="button"
+                              className="product-inline-action dec"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                updateQuantity(product.id, quantityInCart - 1);
+                              }}
+                              aria-label={`Restar una unidad de ${product.name}`}
+                              title="Restar uno"
+                            >
+                              <Minus size={18} />
+                            </button>
+                            <span className="product-inline-quantity" aria-live="polite">
+                              {quantityInCart}
+                            </span>
+                            <button
+                              type="button"
+                              className="product-inline-action inc"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                addProduct(product.id);
+                              }}
+                              aria-label={`Sumar una unidad de ${product.name}`}
+                              title="Sumar uno"
+                            >
+                              <Plus size={18} />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -650,54 +690,13 @@ function UserSession({
                         event.stopPropagation();
                         updateQuantity(product.id, 0);
                       }}
-                      aria-label={`Quitar ${product.name}`}
-                      title="Quitar"
+                      aria-label={`Eliminar todas las unidades de ${product.name}`}
+                      title="Eliminar del carrito"
                     >
                       <X size={16} />
                     </button>
                   )}
 
-                  <div className={`product-tile-action-bar ${quantityInCart > 0 ? 'selected' : ''}`}>
-                    {quantityInCart === 0 ? (
-                      <button
-                        type="button"
-                        className="tile-add-btn"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          addProduct(product.id);
-                        }}
-                      >
-                        <Plus size={16} />
-                        Agregar
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="tile-action-btn dec"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            updateQuantity(product.id, quantityInCart - 1);
-                          }}
-                          aria-label="Restar uno"
-                        >
-                          <Minus size={18} />
-                        </button>
-                        <span className="tile-action-qty">{quantityInCart}</span>
-                        <button
-                          type="button"
-                          className="tile-action-btn inc"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            addProduct(product.id);
-                          }}
-                          aria-label="Sumar uno"
-                        >
-                          <Plus size={18} />
-                        </button>
-                      </>
-                    )}
-                  </div>
                 </div>
               );
             })}
@@ -1193,7 +1192,7 @@ function UserSession({
                           type="button"
                           className="checkout-item-remove"
                           onClick={() => updateQuantity(item.productId, 0)}
-                          title="Quitar"
+                          title="Eliminar del carrito"
                           aria-label={`Eliminar ${item.product.name} del carrito`}
                         >
                           <Trash2 size={18} />
