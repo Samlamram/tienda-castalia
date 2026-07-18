@@ -2029,6 +2029,34 @@ function AdminModalContainer({
     fixedPaymentTarget &&
     fixedPaymentBalance > 0 &&
     (paymentOpenConsumptions.length > 0 || paymentCarryoverBalance > 0);
+  const paymentOpenConsumptionIds = new Set(paymentOpenConsumptions.map((consumption) => consumption.id));
+  const paymentCheckoutItems = Array.from(
+    data.items
+      .filter((item) => paymentOpenConsumptionIds.has(item.consumptionId))
+      .reduce((grouped, item) => {
+        const current = grouped.get(item.productId);
+        grouped.set(item.productId, {
+          productId: item.productId,
+          productName: item.productName,
+          quantity: (current?.quantity ?? 0) + item.quantity,
+          total: (current?.total ?? 0) + item.total
+        });
+        return grouped;
+      }, new Map<string, { productId: string; productName: string; quantity: number; total: number }>())
+      .values()
+  );
+  const paymentConsumptionsWithItems = new Set(
+    data.items
+      .filter((item) => paymentOpenConsumptionIds.has(item.consumptionId))
+      .map((item) => item.consumptionId)
+  );
+  const paymentUnitemizedConsumptions = paymentOpenConsumptions.filter(
+    (consumption) => !paymentConsumptionsWithItems.has(consumption.id)
+  );
+  const paymentUnitemizedTotal = paymentUnitemizedConsumptions.reduce(
+    (sum, consumption) => sum + consumption.openAmount,
+    0
+  );
 
   // Ajuste manual
   const [adjAccount, setAdjAccount] = useState(targetAccountId);
@@ -3190,57 +3218,49 @@ function AdminModalContainer({
                       <strong>{formatMoney(fixedPaymentBalance)}</strong>
                     </div>
                     <div className="payment-checkout-list">
-                      {paymentOpenConsumptions.flatMap((consumption) => {
-                        const consumptionItems = data.items.filter((item) => item.consumptionId === consumption.id);
-                        if (consumptionItems.length === 0) {
-                          return [
-                            <div className="payment-checkout-row" key={consumption.id}>
-                              <span className="payment-checkout-thumbnail">
+                      {paymentCheckoutItems.map((item) => {
+                        const product = data.products.find((entry) => entry.id === item.productId);
+                        const imageUrl = product?.imageUrl && !bulkFailedImages[item.productId]
+                          ? product.imageUrl
+                          : undefined;
+                        return (
+                          <div className="payment-checkout-row" key={item.productId}>
+                            <span className="payment-checkout-thumbnail">
+                              {imageUrl ? (
+                                <img
+                                  src={imageUrl}
+                                  alt=""
+                                  onError={() => setBulkFailedImages((current) => ({
+                                    ...current,
+                                    [item.productId]: true
+                                  }))}
+                                />
+                              ) : (
                                 <span className="payment-checkout-placeholder"><Package size={16} /></span>
-                              </span>
-                              <span className="payment-checkout-item-copy">
-                                <strong>Compra</strong>
-                                <small>{new Date(consumption.createdAt).toLocaleDateString('es-CO')}</small>
-                              </span>
-                              <span className="payment-checkout-qty">x1</span>
-                              <strong>{formatMoney(consumption.openAmount)}</strong>
-                            </div>
-                          ];
-                        }
-
-                        return consumptionItems.map((item) => {
-                          const product = data.products.find((entry) => entry.id === item.productId);
-                          const imageUrl = product?.imageUrl && !bulkFailedImages[item.productId]
-                            ? product.imageUrl
-                            : undefined;
-                          return (
-                            <div className="payment-checkout-row" key={item.id}>
-                              <span className="payment-checkout-thumbnail">
-                                {imageUrl ? (
-                                  <img
-                                    src={imageUrl}
-                                    alt=""
-                                    onError={() => setBulkFailedImages((current) => ({
-                                      ...current,
-                                      [item.productId]: true
-                                    }))}
-                                  />
-                                ) : (
-                                  <span className="payment-checkout-placeholder"><Package size={16} /></span>
-                                )}
-                              </span>
-                              <span className="payment-checkout-item-copy">
-                                <strong>{item.productName}</strong>
-                                <small>
-                                  {formatMoney(item.unitPrice)} c/u · {new Date(consumption.createdAt).toLocaleDateString('es-CO')}
-                                </small>
-                              </span>
-                              <span className="payment-checkout-qty">x{item.quantity}</span>
-                              <strong>{formatMoney(item.total)}</strong>
-                            </div>
-                          );
-                        });
+                              )}
+                            </span>
+                            <span className="payment-checkout-item-copy">
+                              <strong>{item.productName}</strong>
+                              <small>{formatMoney(item.quantity > 0 ? item.total / item.quantity : 0)} prom. c/u</small>
+                            </span>
+                            <span className="payment-checkout-qty">x{item.quantity}</span>
+                            <strong>{formatMoney(item.total)}</strong>
+                          </div>
+                        );
                       })}
+                      {paymentUnitemizedConsumptions.length > 0 ? (
+                        <div className="payment-checkout-row" key="unitemized-consumptions">
+                          <span className="payment-checkout-thumbnail">
+                            <span className="payment-checkout-placeholder"><Package size={16} /></span>
+                          </span>
+                          <span className="payment-checkout-item-copy">
+                            <strong>Compras sin detalle</strong>
+                            <small>Sin productos asociados</small>
+                          </span>
+                          <span className="payment-checkout-qty">x{paymentUnitemizedConsumptions.length}</span>
+                          <strong>{formatMoney(paymentUnitemizedTotal)}</strong>
+                        </div>
+                      ) : null}
                       {paymentCarryoverBalance > 0 ? (
                         <div className="payment-checkout-row carryover">
                           <span className="payment-checkout-thumbnail">
