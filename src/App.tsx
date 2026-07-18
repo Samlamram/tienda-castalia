@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
-import { AppToast } from './components/AppToast';
+import { AppToast, type ToastTone } from './components/AppToast';
 import { BrandLogo } from './components/BrandLogo';
 import { Kiosk } from './components/Kiosk';
 import { LoadingExperience } from './components/LoadingExperience';
@@ -25,9 +25,13 @@ import {
   discardReviewedConsumption,
   queueOrSubmitConsumption,
   retryReviewedConsumption,
+  RETRYABLE_CONSUMPTION_MESSAGE,
   syncPendingConsumptions
 } from './services/consumptions';
 import { isSyncConfigured } from './services/sync';
+
+const SYNC_IDLE_INTERVAL_MS = 30_000;
+const SYNC_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000] as const;
 
 type AuthSession =
   | { role: 'admin'; cloudSession?: AppSession }
@@ -46,6 +50,7 @@ export function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const sessionRef = useRef<AuthSession | null>(null);
   const [message, setMessage] = useState('');
+  const [messageTone, setMessageTone] = useState<ToastTone>();
   const [userActivityRefreshVersion, setUserActivityRefreshVersion] = useState(0);
   const [userActivityState, setUserActivityState] = useState<{
     token: string;
@@ -57,6 +62,14 @@ export function App() {
     : null;
   const cloudUserData = useCloudUserData(userSession, userActivity);
   const adminData = useAdminData(session?.role === 'admin' ? session.cloudSession : null, online);
+  const showMessage = useCallback((nextMessage: string, tone?: ToastTone) => {
+    setMessage(nextMessage);
+    setMessageTone(tone);
+  }, []);
+  const closeMessage = useCallback(() => {
+    setMessage('');
+    setMessageTone(undefined);
+  }, []);
   const logout = useCallback(() => {
     const cloudSession = sessionRef.current?.cloudSession;
     setUserActivityState(null);
@@ -84,21 +97,22 @@ export function App() {
       .catch((error) => {
         if (cancelled) return;
         if (isSessionAuthenticationError(error)) {
-          setMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.');
+          showMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.', 'error');
           logout();
           return;
         }
-        setMessage(
+        showMessage(
           error instanceof Error
             ? `No se pudo actualizar tu historial: ${error.message}`
-            : 'No se pudo actualizar tu historial.'
+            : 'No se pudo actualizar tu historial.',
+          'warning'
         );
       });
 
     return () => {
       cancelled = true;
     };
-  }, [logout, online, session?.cloudSession, session?.role, userActivityRefreshVersion]);
+  }, [logout, online, session?.cloudSession, session?.role, showMessage, userActivityRefreshVersion]);
 
   // Update the status-bar / theme-color to match the current screen
   useEffect(() => {
@@ -126,14 +140,15 @@ export function App() {
           } catch (error) {
             if (isSessionAuthenticationError(error)) {
               await logoutSession(stored).catch(() => undefined);
-              if (!cancelled) setMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.');
+              if (!cancelled) showMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.', 'error');
               return;
             }
             if (!cancelled) {
-              setMessage(
+              showMessage(
                 error instanceof Error
                   ? `Se usará el catálogo guardado: ${error.message}`
-                  : 'Se usará el catálogo guardado.'
+                  : 'Se usará el catálogo guardado.',
+                'warning'
               );
             }
           }
@@ -143,7 +158,7 @@ export function App() {
           setSession(authSessionFromAppSession(current));
         }
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'No se pudo inicializar.');
+        showMessage(error instanceof Error ? error.message : 'No se pudo inicializar.', 'error');
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -153,58 +168,119 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showMessage]);
 
   useEffect(() => {
     if (!online || !isSyncConfigured() || session?.role !== 'user' || !session.cloudSession) return;
     const userSession = session.cloudSession;
+    let cancelled = false;
+    let retryTimer: number | undefined;
+    let consecutiveFailures = 0;
 
-    const run = async () => {
+    const nextRetryDelay = () => {
+      const delay = SYNC_RETRY_DELAYS_MS[
+        Math.min(consecutiveFailures, SYNC_RETRY_DELAYS_MS.length - 1)
+      ];
+      consecutiveFailures += 1;
+      return delay;
+    };
+
+    const scheduleNext = (delay: number) => {
+      if (cancelled) return;
+      retryTimer = window.setTimeout(() => void run(), delay);
+    };
+
+    async function run() {
+      if (cancelled) return;
+      let nextDelay = SYNC_IDLE_INTERVAL_MS;
+      let submitted = 0;
+      let pending = 0;
+
       try {
         const result = await syncPendingConsumptions(userSession);
+        if (cancelled) return;
+        submitted = result.submitted;
+        pending = result.pending;
+
         if (result.requiresLogin) {
-          setMessage('Tu sesión expiró. La compra quedó guardada para revisarla al volver a iniciar sesión.');
+          showMessage(
+            'Tu sesión expiró. La compra quedó guardada para revisarla al volver a iniciar sesión.',
+            'error'
+          );
           logout();
           return;
         }
+
+        if (result.failed > 0 && pending > 0) {
+          if (consecutiveFailures === 0) {
+            showMessage(RETRYABLE_CONSUMPTION_MESSAGE, 'warning');
+          }
+          nextDelay = nextRetryDelay();
+        } else {
+          consecutiveFailures = 0;
+        }
+
         await refreshCatalog(userSession);
+        if (cancelled) return;
         setUserActivityRefreshVersion((current) => current + 1);
-        if (result.submitted > 0) {
-          setMessage(
-            `${result.submitted} compra${result.submitted === 1 ? '' : 's'} pendiente${
-              result.submitted === 1 ? '' : 's'
-            } sincronizada${result.submitted === 1 ? '' : 's'}.`
+
+        if (submitted > 0) {
+          const syncedMessage =
+            `${submitted} compra${submitted === 1 ? '' : 's'} pendiente${
+              submitted === 1 ? '' : 's'
+            } sincronizada${submitted === 1 ? '' : 's'}.`;
+          showMessage(
+            pending > 0
+              ? `${syncedMessage} ${pending} sigue${pending === 1 ? '' : 'n'} esperando conexión.`
+              : syncedMessage,
+            pending > 0 ? 'warning' : 'success'
           );
-          if (userSession.deviceMode === 'shared') {
+          if (userSession.deviceMode === 'shared' && pending === 0) {
             logout();
+            return;
           }
         }
       } catch (error) {
+        if (cancelled) return;
         if (isSessionAuthenticationError(error)) {
-          setMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.');
+          showMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.', 'error');
           logout();
           return;
         }
-        setMessage(error instanceof Error ? error.message : 'Sincronizacion fallida.');
+        if (submitted > 0) {
+          showMessage(
+            'La compra se sincronizó; el saldo se actualizará cuando la conexión se estabilice.',
+            'warning'
+          );
+        } else if (pending > 0 && consecutiveFailures === 0) {
+          showMessage(RETRYABLE_CONSUMPTION_MESSAGE, 'warning');
+        }
+        if (nextDelay === SYNC_IDLE_INTERVAL_MS) {
+          nextDelay = nextRetryDelay();
+        }
       }
-    };
 
-    run();
-    const interval = window.setInterval(run, 30_000);
-    return () => window.clearInterval(interval);
-  }, [logout, online, session]);
+      scheduleNext(nextDelay);
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryTimer);
+    };
+  }, [logout, online, session, showMessage]);
 
   useEffect(() => {
     if (session?.role !== 'admin' || !adminData.error || !isSessionAuthenticationError(adminData.error)) return;
-    setMessage('Tu sesión administrativa ya no es válida. Inicia sesión nuevamente.');
+    showMessage('Tu sesión administrativa ya no es válida. Inicia sesión nuevamente.', 'error');
     logout();
-  }, [adminData.error, logout, session?.role]);
+  }, [adminData.error, logout, session?.role, showMessage]);
 
   useEffect(() => {
     if (!message) return;
-    const timeout = window.setTimeout(() => setMessage(''), 5000);
+    const timeout = window.setTimeout(closeMessage, 5000);
     return () => window.clearTimeout(timeout);
-  }, [message]);
+  }, [closeMessage, message]);
 
   const activeData = cloudUserData;
   const loggedUser = session?.role === 'user' ? activeData.users.find((user) => user.id === session.userId) : undefined;
@@ -216,14 +292,15 @@ export function App() {
         current = await refreshCatalog(nextSession);
       } catch (error) {
         if (isSessionAuthenticationError(error)) {
-          setMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.');
+          showMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.', 'error');
           await logoutSession(nextSession).catch(() => undefined);
           return;
         }
-        setMessage(
+        showMessage(
           error instanceof Error
             ? `Sesión iniciada; se usará el catálogo guardado: ${error.message}`
-            : 'Sesión iniciada; se usará el catálogo guardado.'
+            : 'Sesión iniciada; se usará el catálogo guardado.',
+          'warning'
         );
       }
     }
@@ -253,14 +330,15 @@ export function App() {
         setUserActivityRefreshVersion((current) => current + 1);
       } catch (error) {
         if (isSessionAuthenticationError(error)) {
-          setMessage('La compra quedó guardada, pero tu sesión venció. Inicia sesión nuevamente.');
+          showMessage('La compra quedó guardada, pero tu sesión venció. Inicia sesión nuevamente.', 'error');
           logout();
           return result;
         }
-        setMessage(
+        showMessage(
           error instanceof Error
             ? `Compra guardada; el saldo se actualizará después: ${error.message}`
-            : 'Compra guardada; el saldo se actualizará después.'
+            : 'Compra guardada; el saldo se actualizará después.',
+          'warning'
         );
       }
     }
@@ -282,14 +360,15 @@ export function App() {
         setUserActivityRefreshVersion((current) => current + 1);
       } catch (error) {
         if (isSessionAuthenticationError(error)) {
-          setMessage('La compra se confirmó, pero tu sesión venció. Inicia sesión nuevamente.');
+          showMessage('La compra se confirmó, pero tu sesión venció. Inicia sesión nuevamente.', 'error');
           logout();
           return result;
         }
-        setMessage(
+        showMessage(
           error instanceof Error
             ? `Compra confirmada; el saldo se actualizará después: ${error.message}`
-            : 'Compra confirmada; el saldo se actualizará después.'
+            : 'Compra confirmada; el saldo se actualizará después.',
+          'warning'
         );
       }
     }
@@ -317,14 +396,14 @@ export function App() {
         session?.role === 'user' ? 'app-shell user-shell' : session?.role === 'admin' ? 'app-shell admin-shell' : 'app-shell'
       }
     >
-      {message ? <AppToast message={message} onClose={() => setMessage('')} /> : null}
+      {message ? <AppToast message={message} tone={messageTone} onClose={closeMessage} /> : null}
 
-      {!session ? <LoginScreen onLogin={handleAuthenticatedSession} onMessage={setMessage} /> : null}
+      {!session ? <LoginScreen onLogin={handleAuthenticatedSession} onMessage={showMessage} /> : null}
 
       {session?.role === 'user' && loggedUser ? (
         <Kiosk
           data={activeData}
-          onMessage={setMessage}
+          onMessage={showMessage}
           sessionUser={loggedUser}
           onLogout={logout}
           isSharedDevice={session.cloudSession?.deviceMode !== 'personal'}
@@ -350,7 +429,7 @@ export function App() {
         ) : (
           <AdminPanel
             data={adminData.data}
-            onMessage={setMessage}
+            onMessage={showMessage}
             onLogout={logout}
             online={online}
             adminSession={session.cloudSession}

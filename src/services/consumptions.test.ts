@@ -3,7 +3,7 @@ import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, LOCAL_DATABASE_NAME } from '../data/db';
 import type { AppSession } from '../domain/types';
-import { queueOrSubmitConsumption, retryReviewedConsumption, syncPendingConsumptions } from './consumptions';
+import { RETRYABLE_CONSUMPTION_MESSAGE, queueOrSubmitConsumption, retryReviewedConsumption, syncPendingConsumptions } from './consumptions';
 import { setSupabaseClientForTests } from './sync';
 
 const session: AppSession = {
@@ -82,6 +82,10 @@ describe('outbox de consumos offline', () => {
 
     setOnline(true);
     await expect(syncPendingConsumptions(session)).resolves.toEqual({ submitted: 0, failed: 1, pending: 1 });
+    await expect(db.pendingConsumptions.get(clientOperationId)).resolves.toMatchObject({
+      status: 'pending',
+      error: RETRYABLE_CONSUMPTION_MESSAGE
+    });
     await expect(syncPendingConsumptions(session)).resolves.toEqual({ submitted: 1, failed: 0, pending: 0 });
     await expect(syncPendingConsumptions(session)).resolves.toEqual({ submitted: 0, failed: 0, pending: 0 });
 
@@ -162,6 +166,37 @@ describe('outbox de consumos offline', () => {
       status: 'confirmed',
       officialTotal: 345.5
     });
+    await expect(db.pendingConsumptions.get(clientOperationId)).resolves.toBeUndefined();
+  });
+  it('devuelve a pendiente cuando la llamada de red lanza una excepción', async () => {
+    const clientOperationId = '00000000-0000-4000-8000-000000000104';
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(clientOperationId);
+    const rpc = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({
+        data: {
+          status: 'confirmed',
+          message: 'Compra confirmada.',
+          consumption_id: '00000000-0000-4000-8000-000000000204'
+        },
+        error: null
+      });
+    setSupabaseClientForTests({ rpc } as unknown as SupabaseClient);
+
+    setOnline(false);
+    await queueOrSubmitConsumption(session, session.userId, [
+      { productId: '00000000-0000-4000-8000-000000000304', quantity: 1 }
+    ]);
+
+    setOnline(true);
+    await expect(syncPendingConsumptions(session)).resolves.toEqual({ submitted: 0, failed: 1, pending: 1 });
+    await expect(db.pendingConsumptions.get(clientOperationId)).resolves.toMatchObject({
+      status: 'pending',
+      error: RETRYABLE_CONSUMPTION_MESSAGE
+    });
+
+    await expect(syncPendingConsumptions(session)).resolves.toEqual({ submitted: 1, failed: 0, pending: 0 });
     await expect(db.pendingConsumptions.get(clientOperationId)).resolves.toBeUndefined();
   });
 });

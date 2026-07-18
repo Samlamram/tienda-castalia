@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { BrandLogo } from './BrandLogo';
+import type { ToastTone } from './AppToast';
 import { SearchFilterIsland } from './SearchFilterIsland';
 import type {
   CartItem,
@@ -118,10 +119,10 @@ function countLabel(count: number, singular: string, plural: string) {
 
 export function pendingStatusMeta(status: PendingConsumptionStatus) {
   if (status === 'sending') return { label: 'Sincronizando', className: 'sync-sending' };
-  if (status === 'failed') return { label: 'Error de sincronización', className: 'sync-failed' };
+  if (status === 'failed') return { label: 'Esperando conexión', className: 'sync-pending' };
   if (status === 'needs_review') return { label: 'Requiere revisión', className: 'sync-review' };
   if (status === 'confirmed') return { label: 'Sincronizada', className: 'sync-synced' };
-  return { label: 'Sin sincronizar', className: 'sync-pending' };
+  return { label: 'Esperando conexión', className: 'sync-pending' };
 }
 
 export function paymentStatusMeta(status: ConsumptionPaymentState) {
@@ -133,7 +134,7 @@ export function paymentStatusMeta(status: ConsumptionPaymentState) {
 
 function PendingStatusIcon({ status }: { status: PendingConsumptionStatus }) {
   if (status === 'sending') return <Loader2 size={13} className="is-spinning" aria-hidden="true" />;
-  if (status === 'failed' || status === 'needs_review') return <TriangleAlert size={13} aria-hidden="true" />;
+  if (status === 'needs_review') return <TriangleAlert size={13} aria-hidden="true" />;
   if (status === 'confirmed') return <CheckCircle2 size={13} aria-hidden="true" />;
   return <CloudUpload size={13} aria-hidden="true" />;
 }
@@ -161,7 +162,7 @@ function trapFocusWithin(event: ReactKeyboardEvent<HTMLElement>) {
 
 interface KioskProps {
   data: TiendaData;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, tone?: ToastTone) => void;
   sessionUser: PersonUser;
   onLogout: () => void;
   isSharedDevice: boolean;
@@ -200,7 +201,7 @@ export function Kiosk({
 interface UserSessionProps {
   user: PersonUser;
   data: TiendaData;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, tone?: ToastTone) => void;
   onLogout: () => void;
   isSharedDevice: boolean;
   onChangePin?: (currentPin: string, newPin: string) => Promise<void>;
@@ -472,7 +473,12 @@ function UserSession({
       setCheckoutState(
         result.status === 'confirmed' ? 'confirmed' : result.status === 'needs_review' ? 'needs_review' : 'queued'
       );
-      onMessage(shouldLogout ? `${message} Sesion cerrada.` : message);
+      const tone: ToastTone = result.status === 'confirmed'
+        ? 'success'
+        : result.status === 'needs_review'
+          ? 'error'
+          : 'warning';
+      onMessage(shouldLogout ? `${message} Sesion cerrada.` : message, tone);
       setCart([]);
 
       if (shouldLogout) {
@@ -484,7 +490,7 @@ function UserSession({
       const message = error instanceof Error ? error.message : 'No se pudo confirmar.';
       setCheckoutFeedback(message);
       setCheckoutState('failed');
-      onMessage(message);
+      onMessage(message, 'error');
     }
   }
 
@@ -493,9 +499,12 @@ function UserSession({
     setPendingAction({ id: pendingId, kind: 'retry' });
     try {
       const result = await onRetryPendingConsumption(pendingId);
-      onMessage(result.message ?? 'Compra pendiente procesada.');
+      onMessage(
+        result.message ?? 'Compra pendiente procesada.',
+        result.status === 'confirmed' ? 'success' : result.status === 'needs_review' ? 'error' : 'warning'
+      );
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : 'No se pudo reintentar la compra pendiente.');
+      onMessage(error instanceof Error ? error.message : 'No se pudo reintentar la compra pendiente.', 'error');
     } finally {
       setPendingAction(null);
     }
@@ -1202,7 +1211,11 @@ function UserSession({
                               <span>Total estimado</span>
                               <strong>{formatMoney(estimatedTotal)}</strong>
                             </div>
-                            {entry.error ? <p className="history-card-note is-error">{entry.error}</p> : null}
+                            {entry.error ? (
+                              <p className={`history-card-note${entry.status === 'needs_review' ? ' is-error' : ''}`}>
+                                {entry.error}
+                              </p>
+                            ) : null}
                             <p className="history-card-note">El total definitivo se confirmará al sincronizar.</p>
                           </article>
                         );

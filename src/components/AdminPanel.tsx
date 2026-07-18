@@ -72,6 +72,28 @@ const USER_FILTER_OPTIONS = [
 ] as const;
 const FINANCE_HISTORY_PREVIEW = 6;
 
+function adminModalSection(type: string): string {
+  if (type === 'change-pin') return 'Seguridad';
+  if (['create-product', 'edit-product', 'toggle-product-status'].includes(type)) return 'Cat\u00e1logo';
+  if (['purchase', 'stock-adjustment', 'reverse-inventory', 'inventory-history', 'bulk-products'].includes(type)) {
+    return 'Inventario';
+  }
+  if (['payment', 'adjustment', 'reverse-payment', 'reverse-adjustment', 'void-consumption', 'history'].includes(type)) {
+    return 'Cobros y movimientos';
+  }
+  if (type === 'finance-event') return 'Finanzas';
+  return 'Cuentas y usuarios';
+}
+
+function isDestructiveAdminModal(type: string, target?: any): boolean {
+  if (['reverse-payment', 'reverse-adjustment', 'void-consumption', 'reverse-inventory', 'remove-user-account'].includes(type)) {
+    return true;
+  }
+
+  return ['toggle-product-status', 'toggle-account-status', 'toggle-user-status'].includes(type)
+    && target?.status === 'active';
+}
+
 interface DatedEntry {
   createdAt: string;
 }
@@ -2092,6 +2114,7 @@ function AdminModalContainer({
   const bulkProducts = bulkProductIds
     .map((id) => data.products.find((product) => product.id === id))
     .filter(Boolean) as Product[];
+  const modalIsDestructive = isDestructiveAdminModal(modal.type, modal.target);
 
   function requestKey(suffix = modal.type): string {
     return `${operationId}:${suffix}`;
@@ -2593,6 +2616,8 @@ function AdminModalContainer({
         aria-modal="true"
         aria-labelledby={modalTitleId}
         aria-busy={submitting}
+        data-modal-type={modal.type}
+        data-dialog-tone={modalIsDestructive ? 'danger' : 'default'}
         className={
           modal.type === 'account-detail'
             ? 'modal account-modal admin-account-detail-modal'
@@ -2601,42 +2626,45 @@ function AdminModalContainer({
       >
         {modal.type !== 'account-detail' ? (
           <div className="admin-modal-title-row">
-            <h2 id={modalTitleId}>
-              {modal.type === 'change-pin' && 'Cambiar mi PIN'}
-              {modal.type === 'create-account' && 'Crear Nueva Cuenta'}
-              {modal.type === 'create-user' && 'Crear Nuevo Usuario'}
-              {modal.type === 'payment' && 'Registrar Cobro'}
-              {modal.type === 'finance-event' && modal.target?.eventType === 'capital_contribution' && 'Registrar aporte'}
-              {modal.type === 'finance-event' && modal.target?.eventType === 'expense' && 'Registrar Gasto'}
-              {modal.type === 'finance-event' && modal.target?.eventType === 'owner_withdrawal' && 'Registrar Retiro'}
-              {modal.type === 'reverse-payment' && 'Reversar Pago'}
-              {modal.type === 'reverse-adjustment' && 'Reversar Ajuste'}
-              {modal.type === 'void-consumption' && 'Anular Consumo'}
-              {modal.type === 'reverse-inventory' && 'Reversar Movimiento de Inventario'}
-              {modal.type === 'assign-user' && 'Agregar Usuario a Cuenta'}
-              {modal.type === 'adjustment' && 'Realizar Ajuste Manual'}
-              {modal.type === 'independize' && 'Independizar Usuario'}
-              {modal.type === 'merge' && 'Unir Cuentas'}
-              {modal.type === 'create-product' && 'Agregar Producto'}
-              {modal.type === 'purchase' && 'Registrar Compra / Inventario'}
-              {modal.type === 'stock-adjustment' && 'Ajuste de Stock'}
-              {modal.type === 'edit-account' && 'Editar Cuenta'}
-              {modal.type === 'edit-user' && 'Editar Usuario'}
-              {modal.type === 'edit-product' && 'Editar Producto'}
-              {modal.type === 'history' && 'Historial de Consumos'}
-              {modal.type === 'inventory-history' && 'Movimientos de Inventario'}
-              {modal.type === 'toggle-account-status' &&
-                (modal.target.status === 'active' ? 'Desactivar Cuenta' : 'Activar Cuenta')}
-              {modal.type === 'toggle-product-status' &&
-                (modal.target.status === 'active' ? 'Desactivar Producto' : 'Activar Producto')}
-              {modal.type === 'toggle-user-status' &&
-                (modal.target.status === 'active' ? 'Desactivar Usuario' : 'Activar Usuario')}
-              {modal.type === 'remove-user-account' && 'Quitar Usuario de Cuenta'}
-              {modal.type === 'move-user' && 'Mover Usuario'}
-              {modal.type === 'bulk-products' && bulkMode === 'purchase' && 'Compra de Productos'}
-              {modal.type === 'bulk-products' && bulkMode === 'inventory' && 'Cuadre de Inventario'}
-              {modal.type === 'bulk-products' && bulkMode === 'prices' && 'Actualizar Precios'}
-            </h2>
+            <div className="admin-modal-heading">
+              <span className="admin-modal-eyebrow">{adminModalSection(modal.type)}</span>
+              <h2 id={modalTitleId}>
+                {modal.type === 'change-pin' && 'Cambiar mi PIN'}
+                {modal.type === 'create-account' && 'Crear nueva cuenta'}
+                {modal.type === 'create-user' && 'Crear nuevo usuario'}
+                {modal.type === 'payment' && 'Registrar cobro'}
+                {modal.type === 'finance-event' && modal.target?.eventType === 'capital_contribution' && 'Registrar aporte'}
+                {modal.type === 'finance-event' && modal.target?.eventType === 'expense' && 'Registrar gasto'}
+                {modal.type === 'finance-event' && modal.target?.eventType === 'owner_withdrawal' && 'Registrar retiro'}
+                {modal.type === 'reverse-payment' && 'Reversar pago'}
+                {modal.type === 'reverse-adjustment' && 'Reversar ajuste'}
+                {modal.type === 'void-consumption' && 'Anular consumo'}
+                {modal.type === 'reverse-inventory' && 'Reversar movimiento de inventario'}
+                {modal.type === 'assign-user' && 'Agregar usuario a cuenta'}
+                {modal.type === 'adjustment' && 'Realizar ajuste manual'}
+                {modal.type === 'independize' && 'Independizar usuario'}
+                {modal.type === 'merge' && 'Unir cuentas'}
+                {modal.type === 'create-product' && 'Agregar producto'}
+                {modal.type === 'purchase' && 'Registrar compra de inventario'}
+                {modal.type === 'stock-adjustment' && 'Ajustar stock'}
+                {modal.type === 'edit-account' && 'Editar cuenta'}
+                {modal.type === 'edit-user' && 'Editar usuario'}
+                {modal.type === 'edit-product' && 'Editar producto'}
+                {modal.type === 'history' && 'Historial de consumos'}
+                {modal.type === 'inventory-history' && 'Movimientos de inventario'}
+                {modal.type === 'toggle-account-status' &&
+                  (modal.target.status === 'active' ? 'Desactivar cuenta' : 'Activar cuenta')}
+                {modal.type === 'toggle-product-status' &&
+                  (modal.target.status === 'active' ? 'Desactivar producto' : 'Activar producto')}
+                {modal.type === 'toggle-user-status' &&
+                  (modal.target.status === 'active' ? 'Desactivar usuario' : 'Activar usuario')}
+                {modal.type === 'remove-user-account' && 'Quitar usuario de cuenta'}
+                {modal.type === 'move-user' && 'Mover usuario'}
+                {modal.type === 'bulk-products' && bulkMode === 'purchase' && 'Compra de productos'}
+                {modal.type === 'bulk-products' && bulkMode === 'inventory' && 'Cuadre de inventario'}
+                {modal.type === 'bulk-products' && bulkMode === 'prices' && 'Actualizar precios'}
+              </h2>
+            </div>
             <button
               type="button"
               className="close-btn"
@@ -3738,6 +3766,14 @@ function AdminModalContainer({
             )}
 
             <div className="modal-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={onClose}
+                disabled={submitting || submitSucceeded}
+              >
+                Cancelar
+              </button>
               <button type="submit" className="primary" disabled={submitting || submitSucceeded}>
                 {submitting
                   ? 'Guardando...'

@@ -746,6 +746,10 @@
     transition-duration: var(--cv-motion-press);
   }
 
+  .admin-inventory-thumb:active:not(:disabled) {
+    transform: translateY(-50%);
+  }
+
   .app-toast__close:active {
     transform: none;
   }
@@ -816,4 +820,615 @@
 @keyframes cv-toast-in-mobile {
   from { opacity: 0; transform: translate(-50%, 18px) scale(0.96); }
   to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+/* Compact dialog system
+   Content determines the size: confirmations < forms < detail views. */
+:root {
+  --cv-dialog-radius: 22px;
+  --cv-dialog-border: rgba(5, 35, 25, 0.1);
+  --cv-dialog-shadow:
+    0 28px 80px rgba(2, 18, 14, 0.24),
+    0 6px 18px rgba(2, 18, 14, 0.08);
+}
+
+.modal-backdrop,
+.filter-sheet-backdrop,
+.profile-sheet-backdrop {
+  background: rgba(2, 18, 14, 0.54);
+  backdrop-filter: blur(8px) saturate(0.88);
+  -webkit-backdrop-filter: blur(8px) saturate(0.88);
+}
+
+.modal,
+.filter-sheet,
+.profile-sheet {
+  border: 1px solid var(--cv-dialog-border);
+  border-radius: var(--cv-dialog-radius);
+  box-shadow: var(--cv-dialog-shadow);
+}
+
+.modal {
+  width: min(420px, 100%);
+  max-height: min(86dvh, 760px);
+  padding: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(5, 35, 25, 0.2) transparent;
+}
+
+.modal.wide {
+  width: min(720px, 100%);
+}
+
+.admin-action-modal {
+  width: min(430px, 100%);
+}
+
+.admin-payment-modal {
+  width: min(520px, 100%);
+}
+
+.admin-bulk-modal {
+  width: min(760px, 100%);
+}
+
+.admin-action-modal:is(
+  [data-modal-type='history'],
+  [data-modal-type='inventory-history']
+) {
+  width: min(680px, 100%);
+}
+
+.admin-action-modal:is(
+  [data-modal-type='reverse-payment'],
+  [data-modal-type='reverse-adjustment'],
+  [data-modal-type='void-consumption'],
+  [data-modal-type='reverse-inventory'],
+  [data-modal-type='toggle-product-status'],
+  [data-modal-type='toggle-account-status'],
+  [data-modal-type='toggle-user-status'],
+  [data-modal-type='remove-user-account']
+) {
+  width: min(390px, 100%);
+}
+
+.modal.account-modal {
+  width: min(640px, 100%);
+  max-height: min(86dvh, 760px);
+}
+
+.checkout-modal {
+  width: min(700px, 100%);
+  padding: 18px 18px 0;
+}
+
+.checkout-feedback-modal {
+  width: min(380px, 100%);
+}
+
+.pin-modal {
+  width: min(390px, 100%);
+}
+
+.sync-panel-modal {
+  width: min(440px, 100%);
+  gap: 14px;
+}
+
+.admin-modal-title-row {
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 40px;
+  margin: 0 0 14px;
+  padding-right: 42px;
+}
+
+.admin-modal-heading {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.admin-modal-eyebrow {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.075em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.admin-modal-title-row h2 {
+  max-width: 34ch;
+  font-size: 1.14rem;
+  font-weight: 820;
+  letter-spacing: -0.015em;
+  line-height: 1.22;
+}
+
+.admin-action-modal[data-dialog-tone='danger'] .admin-modal-eyebrow {
+  background: var(--cv-danger-soft);
+  color: #b42318;
+}
+
+.admin-action-modal .close-btn {
+  top: 16px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  border-color: transparent;
+  background: var(--surface-muted);
+}
+
+.admin-modal-form {
+  gap: 10px;
+}
+
+.admin-modal-form > label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 780;
+  line-height: 1.25;
+}
+
+.admin-modal-form input,
+.admin-modal-form select {
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+.admin-action-modal .admin-confirm-copy {
+  padding: 12px 13px;
+  border-radius: 13px;
+  font-size: 0.86rem;
+  line-height: 1.48;
+}
+
+.admin-action-modal[data-dialog-tone='danger'] .admin-confirm-copy {
+  border-color: rgba(220, 38, 38, 0.14);
+  background: var(--cv-danger-soft);
+  color: #8f1d1d;
+}
+
+.admin-action-modal .modal-actions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 6;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: 6px -20px -20px;
+  padding: 13px 20px 17px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 -10px 28px rgba(5, 35, 25, 0.055);
+}
+
+.admin-action-modal .modal-actions button {
+  min-width: 104px;
+  min-height: 40px;
+  padding-inline: 16px;
+  border-radius: 12px;
+}
+
+.admin-action-modal[data-dialog-tone='danger'] .modal-actions .primary {
+  background: #b42318;
+  color: #fff;
+  box-shadow: 0 7px 18px rgba(180, 35, 24, 0.2);
+}
+
+.admin-action-modal[data-dialog-tone='danger'] .modal-actions .primary:hover {
+  background: #941b12;
+}
+
+.payment-checkout-summary {
+  gap: 8px;
+}
+
+.payment-checkout-list {
+  gap: 6px;
+  max-height: min(32dvh, 300px);
+}
+
+.payment-checkout-row {
+  min-height: 54px;
+  padding: 6px 8px;
+}
+
+.admin-history-modal-body .table-list {
+  gap: 8px;
+}
+
+.admin-history-modal-body .history-row {
+  padding-block: 10px;
+}
+
+.account-modal-hero {
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 10px;
+  padding: 14px 16px 12px;
+}
+
+.account-modal-title h2 {
+  margin-block: 4px 5px;
+  font-size: 1.24rem;
+}
+
+.account-close-button,
+.sync-panel-header .account-close-button {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  box-shadow: none;
+}
+
+.account-balance-stack {
+  gap: 6px;
+  margin: 12px 16px 10px;
+  padding: 10px;
+}
+
+.account-balance-row {
+  min-height: 50px;
+  padding: 7px 10px;
+}
+
+.account-tabs {
+  margin: 10px 16px 13px;
+}
+
+.account-timeline {
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+.admin-account-detail-actions {
+  padding: 0 16px 16px;
+}
+
+.checkout-modal-header {
+  margin-bottom: 10px;
+}
+
+.checkout-modal h2,
+.pin-modal-header h2,
+.sync-panel-header h2 {
+  font-size: 1.14rem;
+  letter-spacing: -0.012em;
+  line-height: 1.22;
+}
+
+.checkout-close-button {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.checkout-feedback-panel {
+  min-height: 210px;
+  gap: 10px;
+  padding: 14px 4px 6px;
+}
+
+.checkout-feedback-icon {
+  width: 54px;
+  height: 54px;
+}
+
+.checkout-feedback-panel strong {
+  font-size: 1.4rem;
+}
+
+.checkout-footer {
+  margin-inline: -18px;
+  padding: 9px 18px calc(9px + var(--safe-bottom));
+}
+
+.pin-modal-header {
+  margin-bottom: 12px;
+}
+
+.pin-change-form {
+  gap: 9px;
+}
+
+.pin-change-form input {
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.pin-modal .modal-actions {
+  margin-top: 3px;
+}
+
+.sync-panel-header {
+  grid-template-columns: 40px minmax(0, 1fr) 38px;
+  gap: 10px;
+}
+
+.sync-panel-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.sync-empty-state {
+  min-height: 148px;
+  gap: 6px;
+  padding: 18px;
+  border-radius: 15px;
+}
+
+.sync-entry-list {
+  gap: 8px;
+  max-height: min(42dvh, 360px);
+}
+
+.sync-entry {
+  gap: 5px;
+  padding: 11px 12px;
+  border-radius: 13px;
+}
+
+.sync-panel-note {
+  padding: 10px 12px;
+}
+
+.filter-sheet,
+.profile-sheet {
+  width: min(420px, 100%);
+  max-height: min(80dvh, 620px);
+  padding: 16px;
+}
+
+.filter-sheet-header,
+.profile-sheet-header {
+  margin-bottom: 12px;
+}
+
+.filter-sheet-header h2,
+.profile-sheet-header h2 {
+  margin-top: 3px;
+  font-size: 1.16rem;
+}
+
+.filter-sheet-close,
+.profile-sheet-close,
+.admin-profile-sheet .profile-sheet-header > button {
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: 12px;
+}
+
+.filter-sheet-options,
+.profile-sheet-actions {
+  gap: 6px;
+}
+
+.filter-sheet-option,
+.profile-sheet-actions > button {
+  min-height: 46px;
+  border-radius: 13px;
+}
+
+.profile-sheet-summary {
+  min-height: 56px;
+  margin-bottom: 9px;
+  border-radius: 14px;
+}
+
+.modal :is(
+  .close-btn,
+  .account-close-button,
+  .checkout-close-button
+):focus-visible,
+.filter-sheet-close:focus-visible,
+.profile-sheet-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+@media (min-width: 681px) {
+  .checkout-item-row {
+    grid-template-columns: 60px minmax(0, 1fr) 108px 96px 36px;
+    column-gap: 9px;
+    padding: 10px;
+  }
+
+  .checkout-item-thumbnail {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+@media (max-width: 680px) {
+  .modal-backdrop,
+  .filter-sheet-backdrop,
+  .profile-sheet-backdrop {
+    padding:
+      max(10px, var(--safe-top))
+      10px
+      max(10px, var(--safe-bottom));
+  }
+
+  .modal {
+    max-height: min(88dvh, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 20px));
+    padding: 16px;
+    border-radius: 22px;
+  }
+
+  .checkout-backdrop,
+  .confirm-action-sheet-backdrop,
+  .modal-backdrop:has(> .admin-action-modal),
+  .filter-sheet-backdrop,
+  .profile-sheet-backdrop {
+    align-items: flex-end;
+    padding:
+      max(10px, var(--safe-top))
+      8px
+      max(8px, var(--safe-bottom));
+  }
+
+  .checkout-backdrop > .checkout-modal,
+  .checkout-backdrop > .checkout-feedback-modal,
+  .modal-backdrop > .admin-action-modal,
+  .confirm-action-sheet,
+  .filter-sheet,
+  .profile-sheet {
+    width: 100%;
+    max-height: min(88dvh, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 18px));
+    padding: 18px 16px calc(14px + var(--safe-bottom));
+    border-radius: 24px 24px 18px 18px;
+  }
+
+  .checkout-backdrop > .checkout-modal::before,
+  .checkout-backdrop > .checkout-feedback-modal::before,
+  .modal-backdrop > .admin-action-modal::before {
+    top: 7px;
+    width: 36px;
+    height: 4px;
+    background: rgba(5, 35, 25, 0.13);
+  }
+
+  .admin-action-modal .admin-modal-title-row,
+  .checkout-modal .checkout-modal-header {
+    top: -18px;
+    margin-inline: -16px;
+    padding: 22px 52px 11px 16px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.975);
+  }
+
+  .checkout-modal .checkout-modal-header {
+    padding-right: 16px;
+    background: rgba(248, 248, 246, 0.98);
+  }
+
+  .admin-action-modal .close-btn {
+    top: 18px;
+    right: 16px;
+  }
+
+  .admin-modal-title-row h2 {
+    font-size: 1.08rem;
+  }
+
+  .admin-action-modal .modal-actions {
+    display: grid;
+    bottom: calc(-14px - var(--safe-bottom));
+    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+    margin: 12px -16px calc(-14px - var(--safe-bottom));
+    padding: 10px 16px calc(10px + var(--safe-bottom));
+  }
+
+  .admin-action-modal .modal-actions button,
+  .admin-action-modal .modal-actions .primary {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 12px;
+  }
+
+  .checkout-feedback-panel {
+    min-height: 184px;
+    padding-bottom: 4px;
+  }
+
+  .checkout-backdrop:has(> .checkout-state-idle) {
+    padding-right: 8px;
+    padding-bottom: calc(76px + var(--safe-bottom));
+    padding-left: 8px;
+  }
+
+  .checkout-backdrop > .checkout-state-idle {
+    max-height: min(76dvh, calc(100dvh - 100px - var(--safe-top)));
+  }
+
+  .checkout-footer {
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+
+  .confirm-action-sheet {
+    padding: 18px 16px calc(14px + var(--safe-bottom));
+  }
+
+  .confirm-action-sheet::before {
+    width: 36px;
+    height: 4px;
+    margin: -10px auto 14px;
+  }
+
+  .confirm-action-sheet .admin-confirm-copy {
+    margin-bottom: 12px;
+    padding: 12px;
+  }
+
+  .confirm-action-sheet-actions {
+    bottom: calc(-14px - var(--safe-bottom));
+    margin: 12px -16px calc(-14px - var(--safe-bottom));
+    padding: 10px 16px calc(10px + var(--safe-bottom));
+  }
+
+  .modal.account-modal {
+    width: 100%;
+    max-height: min(90dvh, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 20px));
+    border-radius: 22px;
+  }
+
+  .account-modal-hero {
+    grid-template-columns: minmax(0, 1fr) 38px;
+    padding: 12px 14px 10px;
+  }
+
+  .account-balance-stack {
+    margin: 10px 12px 8px;
+    padding: 8px;
+  }
+
+  .account-balance-row {
+    min-height: 48px;
+    padding: 6px 9px;
+  }
+
+  .account-tabs {
+    margin: 8px 12px 11px;
+  }
+
+  .account-timeline {
+    padding: 0 12px 12px;
+  }
+
+  .admin-account-detail-actions {
+    padding: 0 12px 12px;
+  }
+
+  .filter-sheet,
+  .profile-sheet {
+    padding: 16px 14px calc(14px + var(--safe-bottom));
+  }
+
+  .filter-sheet-header,
+  .profile-sheet-header {
+    position: sticky;
+    top: -16px;
+    z-index: 3;
+    margin: -16px -14px 12px;
+    padding: 16px 14px 10px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.975);
+  }
 }

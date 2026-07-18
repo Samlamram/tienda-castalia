@@ -3,10 +3,10 @@ import { paymentStatusMeta, pendingStatusMeta } from './Kiosk';
 
 describe('estados visibles del historial de usuario', () => {
   it.each([
-    ['pending', 'Sin sincronizar', 'sync-pending'],
+    ['pending', 'Esperando conexión', 'sync-pending'],
     ['sending', 'Sincronizando', 'sync-sending'],
     ['confirmed', 'Sincronizada', 'sync-synced'],
-    ['failed', 'Error de sincronización', 'sync-failed'],
+    ['failed', 'Esperando conexión', 'sync-pending'],
     ['needs_review', 'Requiere revisión', 'sync-review']
   ] as const)('mapea sincronizacion %s', (status, label, className) => {
     expect(pendingStatusMeta(status)).toEqual({ label, className });

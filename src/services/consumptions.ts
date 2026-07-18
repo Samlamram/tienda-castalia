@@ -12,6 +12,9 @@ export type ConsumptionSubmitResult = {
   requiresLogin?: boolean;
 };
 
+export const RETRYABLE_CONSUMPTION_MESSAGE =
+  'Conexión inestable. Tu compra está guardada y se reintentará automáticamente.';
+
 class ConsumptionSubmissionError extends Error {
   constructor(
     message: string,
@@ -23,19 +26,26 @@ class ConsumptionSubmissionError extends Error {
 }
 
 function classifySubmissionError(message: string): { needsReview: boolean; requiresLogin: boolean } {
-  const normalized = message.toLocaleLowerCase('es-CO');
+  const normalized = message
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es-CO');
   const requiresLogin =
     normalized.includes('sesion invalida') ||
-    normalized.includes('sesión inválida') ||
     normalized.includes('sesion expirada') ||
-    normalized.includes('sesión expirada') ||
-    normalized.includes('inicia sesion') ||
-    normalized.includes('inicia sesión');
-  const needsReview = normalized.includes('producto no disponible') ||
+    normalized.includes('inicia sesion');
+  const needsReview =
+    normalized.includes('producto no disponible') ||
     normalized.includes('cuenta inactiva') ||
     normalized.includes('usuario inactivo') ||
     normalized.includes('revision') ||
-    normalized.includes('revisión');
+    normalized.includes('lista de productos es invalida') ||
+    normalized.includes('cantidad invalida') ||
+    normalized.includes('cantidades deben ser mayores') ||
+    normalized.includes('carrito esta vacio') ||
+    normalized.includes('producto no puede repetirse') ||
+    normalized.includes('client_operation_id') ||
+    normalized.includes('solo usuarios pueden registrar');
   return { needsReview, requiresLogin };
 }
 
@@ -120,27 +130,42 @@ async function submitPendingConsumption(session: AppSession, pending: PendingCon
     updatedAt: nowIso()
   });
 
-  const { data, error } = await supabase.rpc('create_consumption', {
-    p_session_token: session.token,
-    p_client_operation_id: pending.clientOperationId,
-    p_device_id: pending.deviceId,
-    p_catalog_version: pending.catalogVersion,
-    p_items: pending.items
-  });
+  let response: Awaited<ReturnType<typeof supabase.rpc>>;
+  try {
+    response = await supabase.rpc('create_consumption', {
+      p_session_token: session.token,
+      p_client_operation_id: pending.clientOperationId,
+      p_device_id: pending.deviceId,
+      p_catalog_version: pending.catalogVersion,
+      p_items: pending.items
+    });
+  } catch (cause) {
+    await db.pendingConsumptions.put({
+      ...pending,
+      attempts,
+      status: 'pending',
+      error: RETRYABLE_CONSUMPTION_MESSAGE,
+      updatedAt: nowIso()
+    });
+    throw new ConsumptionSubmissionError(
+      cause instanceof Error ? cause.message : 'No se pudo contactar al servidor.',
+      false,
+      false
+    );
+  }
+
+  const { data, error } = response;
 
   if (error) {
     const classification = classifySubmissionError(error.message);
     const failed: PendingConsumption = {
       ...pending,
       attempts,
-      status: classification.requiresLogin
-        ? 'pending'
-        : classification.needsReview
-          ? 'needs_review'
-          : online()
-            ? 'failed'
-            : 'pending',
-      error: error.message,
+      status: classification.needsReview ? 'needs_review' : 'pending',
+      error:
+        classification.needsReview || classification.requiresLogin
+          ? error.message
+          : RETRYABLE_CONSUMPTION_MESSAGE,
       updatedAt: nowIso()
     };
     await db.pendingConsumptions.put(failed);
@@ -203,10 +228,7 @@ export async function queueOrSubmitConsumption(
     }
     return {
       status: 'pending',
-      message:
-        error instanceof Error
-          ? `No se pudo confirmar ahora. Quedo pendiente: ${error.message}`
-          : 'No se pudo confirmar ahora. Quedo pendiente.'
+      message: RETRYABLE_CONSUMPTION_MESSAGE
     };
   }
 }
@@ -236,13 +258,13 @@ export async function retryReviewedConsumption(
           ? `La sesión venció; la compra sigue guardada: ${error.message}`
           : error.needsReview
             ? `La compra todavía requiere revisión: ${error.message}`
-            : `No se pudo confirmar ahora. Quedó pendiente: ${error.message}`,
+            : RETRYABLE_CONSUMPTION_MESSAGE,
         requiresLogin: error.requiresLogin
       };
     }
     return {
       status: 'pending',
-      message: error instanceof Error ? `No se pudo confirmar ahora: ${error.message}` : 'No se pudo confirmar ahora.'
+      message: RETRYABLE_CONSUMPTION_MESSAGE
     };
   }
 }

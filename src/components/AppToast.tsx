@@ -1,10 +1,11 @@
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from 'lucide-react';
 
-type ToastTone = 'success' | 'error' | 'warning' | 'info';
+export type ToastTone = 'success' | 'error' | 'warning' | 'info';
 
 export interface AppToastProps {
   message: string;
   onClose: () => void;
+  tone?: ToastTone;
 }
 
 const toneKeywords = {
@@ -69,8 +70,8 @@ function getToastTone(message: string): ToastTone {
   return 'info';
 }
 
-export function AppToast({ message, onClose }: AppToastProps) {
-  const tone = getToastTone(message);
+export function AppToast({ message, onClose, tone: explicitTone }: AppToastProps) {
+  const tone = explicitTone ?? getToastTone(message);
   const role = tone === 'error' ? 'alert' : 'status';
   const Icon =
     tone === 'success'

@@ -1,15 +1,28 @@
 import { useEffect, useState } from 'react';
 
+export const RECONNECT_SETTLE_MS = 2_500;
+
 export function useOnlineStatus(): boolean {
   const [online, setOnline] = useState(() => navigator.onLine);
 
   useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    window.addEventListener('online', update);
-    window.addEventListener('offline', update);
+    let reconnectTimer: number | undefined;
+
+    const handleOnline = () => {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = window.setTimeout(() => setOnline(navigator.onLine), RECONNECT_SETTLE_MS);
+    };
+    const handleOffline = () => {
+      window.clearTimeout(reconnectTimer);
+      setOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
     return () => {
-      window.removeEventListener('online', update);
-      window.removeEventListener('offline', update);
+      window.clearTimeout(reconnectTimer);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
