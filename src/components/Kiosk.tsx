@@ -617,7 +617,6 @@ function UserSession({
                           <Loader2
                             size={15}
                             className="pending-action-spinner"
-                            style={{ animation: 'checkout-spin 0.9s linear infinite' }}
                           />
                           Reintentando...
                         </>
@@ -634,7 +633,6 @@ function UserSession({
                           <Loader2
                             size={15}
                             className="pending-action-spinner"
-                            style={{ animation: 'checkout-spin 0.9s linear infinite' }}
                           />
                           Descartando...
                         </>
@@ -1378,26 +1376,17 @@ function UserSession({
               >
                 <span
                   className={`checkout-feedback-icon ${checkoutState === 'confirmed' ? 'success' : `is-${checkoutState}`}`}
-                  style={
-                    checkoutState === 'queued'
-                      ? { background: 'var(--warn-bg)', color: 'var(--warn-text)' }
-                      : checkoutState === 'needs_review'
-                        ? { background: '#fff8e8', color: '#b45309' }
-                        : checkoutState === 'failed'
-                          ? { background: 'var(--danger-soft)', color: 'var(--danger)' }
-                          : undefined
-                  }
                 >
                   {checkoutState === 'confirmed' ? (
                     <CheckCircle2 size={34} />
                   ) : checkoutState === 'submitting' ? (
                     <Loader2 size={34} />
                   ) : checkoutState === 'queued' ? (
-                    <CloudUpload size={34} style={{ animation: 'none' }} />
+                    <CloudUpload size={34} />
                   ) : checkoutState === 'needs_review' ? (
-                    <TriangleAlert size={34} style={{ animation: 'none' }} />
+                    <TriangleAlert size={34} />
                   ) : (
-                    <CircleX size={34} style={{ animation: 'none' }} />
+                    <CircleX size={34} />
                   )}
                 </span>
                 <strong>
