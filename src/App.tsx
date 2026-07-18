@@ -10,6 +10,7 @@ import type { AdminSnapshot, AppSession } from './domain/types';
 import { useAdminData } from './hooks/useAdminData';
 import { useCloudUserData } from './hooks/useCloudUserData';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useVisualViewport } from './hooks/useVisualViewport';
 import {
   changeCurrentPin,
   getStoredSession,
@@ -39,6 +40,7 @@ function authSessionFromAppSession(session: AppSession): AuthSession {
 }
 
 export function App() {
+  useVisualViewport();
   const online = useOnlineStatus();
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(null);

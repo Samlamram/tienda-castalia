@@ -606,27 +606,25 @@
   .confirm-action-sheet-backdrop,
   .modal-backdrop:has(> .admin-action-modal) {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: center;
     padding:
       max(16px, var(--safe-top))
-      0
-      0;
+      12px
+      max(16px, var(--safe-bottom));
   }
 
   .checkout-backdrop > .checkout-modal,
   .checkout-backdrop > .checkout-feedback-modal,
   .modal-backdrop > .admin-action-modal {
-    width: 100%;
+    width: min(100%, 560px);
     max-width: none;
-    max-height: min(94dvh, calc(100dvh - var(--safe-top) - 12px));
+    max-height: 100%;
     margin: 0;
     padding-top: 24px;
     padding-bottom: calc(18px + var(--safe-bottom));
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 28px 28px 0 0;
+    border: 1px solid var(--frost-highlight);
+    border-radius: 28px;
     animation: cv-sheet-in var(--cv-motion-sheet) var(--cv-ease-spring);
   }
 
