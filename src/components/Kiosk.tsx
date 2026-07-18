@@ -204,6 +204,7 @@ function UserSession({
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [headerFocused, setHeaderFocused] = useState(false);
   const [mobileChromeEnabled, setMobileChromeEnabled] = useState(
@@ -217,14 +218,17 @@ function UserSession({
   const [discardConfirmId, setDiscardConfirmId] = useState<string | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const syncButtonRef = useRef<HTMLButtonElement | null>(null);
+  const syncCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const discardTriggerRef = useRef<HTMLButtonElement | null>(null);
   const discardCancelRef = useRef<HTMLButtonElement | null>(null);
   const checkoutLogoutTimerRef = useRef<number | null>(null);
   const profileHeadingId = useId();
+  const syncHeadingId = useId();
   const checkoutHeadingId = useId();
   const discardHeadingId = useId();
   const discardDescriptionId = useId();
-  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || Boolean(discardConfirmId);
+  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || syncPanelOpen || Boolean(discardConfirmId);
   const { collapsed, offset: chromeOffset, settling: chromeSettling, rebaseline } = useCollapsibleChrome({
     scroller: 'window',
     enabled: mobileChromeEnabled,
@@ -285,6 +289,24 @@ function UserSession({
   }, [profileMenuOpen]);
 
   useEffect(() => {
+    if (!syncPanelOpen) return;
+
+    const focusFrame = window.requestAnimationFrame(() => syncCloseButtonRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setSyncPanelOpen(false);
+      window.requestAnimationFrame(() => syncButtonRef.current?.focus());
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [syncPanelOpen]);
+
+  useEffect(() => {
     if (!discardConfirmId) return;
 
     const focusFrame = window.requestAnimationFrame(() => discardCancelRef.current?.focus());
@@ -327,6 +349,7 @@ function UserSession({
   const pendingReviews = data.pendingConsumptions.filter(
     (entry) => entry.sessionUserId === user.id && entry.status === 'needs_review'
   );
+  const syncEntries = data.pendingConsumptions.filter((entry) => entry.sessionUserId === user.id);
   const accountBalance = user.accountId ? data.accountBalances.find((entry) => entry.accountId === user.accountId) : undefined;
   const accountUsers = user.accountId
     ? data.users.filter((entry) => entry.accountId === user.accountId && entry.status === 'active')
@@ -566,6 +589,23 @@ function UserSession({
                 </span>
               </button>
             </div>
+
+            <button
+              ref={syncButtonRef}
+              type="button"
+              className={`ghost icon sync-header-button ${syncEntries.length > 0 ? 'has-pending' : 'is-synced'}`}
+              onClick={() => setSyncPanelOpen(true)}
+              aria-label={
+                syncEntries.length > 0
+                  ? `Sincronizaci\u00f3n: ${countLabel(syncEntries.length, 'compra pendiente', 'compras pendientes')}`
+                  : 'Sincronizaci\u00f3n: todo al d\u00eda'
+              }
+              aria-haspopup="dialog"
+              aria-expanded={syncPanelOpen}
+            >
+              <CloudUpload size={21} aria-hidden="true" />
+              {syncEntries.length > 0 ? <span className="sync-badge">{syncEntries.length}</span> : null}
+            </button>
 
             <button
               ref={profileButtonRef}
@@ -1421,6 +1461,82 @@ function UserSession({
         </div>
       ) : null}
 
+
+      {syncPanelOpen ? (
+        <div className="modal-backdrop sync-panel-backdrop">
+          <section
+            className="modal sync-panel-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={syncHeadingId}
+            onKeyDown={trapFocusWithin}
+          >
+            <header className="sync-panel-header">
+              <span className={`sync-panel-icon ${syncEntries.length > 0 ? 'has-pending' : 'is-synced'}`} aria-hidden="true">
+                <CloudUpload size={24} />
+              </span>
+              <div>
+                <h2 id={syncHeadingId}>{'Sincronizaci\u00f3n'}</h2>
+                <p>
+                  {syncEntries.length > 0
+                    ? countLabel(syncEntries.length, 'compra por sincronizar', 'compras por sincronizar')
+                    : 'Todo est\u00e1 sincronizado'}
+                </p>
+              </div>
+              <button
+                ref={syncCloseButtonRef}
+                type="button"
+                className="account-close-button"
+                onClick={() => {
+                  setSyncPanelOpen(false);
+                  window.requestAnimationFrame(() => syncButtonRef.current?.focus());
+                }}
+                aria-label={'Cerrar sincronizaci\u00f3n'}
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            {syncEntries.length === 0 ? (
+              <div className="sync-empty-state" role="status">
+                <CheckCircle2 size={32} aria-hidden="true" />
+                <strong>No hay compras pendientes</strong>
+                <span>Las compras de este usuario ya fueron confirmadas por el servidor.</span>
+              </div>
+            ) : (
+              <div className="sync-entry-list" aria-live="polite">
+                {syncEntries.map((entry) => {
+                  const itemCount = entry.items.reduce((total, item) => total + item.quantity, 0);
+                  const statusLabel = entry.status === 'sending'
+                    ? 'Enviando ahora'
+                    : entry.status === 'failed'
+                      ? 'Esperando reintento'
+                      : entry.status === 'needs_review'
+                        ? 'Requiere revisi\u00f3n'
+                        : 'Guardada en este dispositivo';
+
+                  return (
+                    <article className={`sync-entry sync-entry-${entry.status}`} key={entry.id}>
+                      <div className="sync-entry-heading">
+                        <strong>{countLabel(itemCount, 'unidad', 'unidades')}</strong>
+                        <span>{statusLabel}</span>
+                      </div>
+                      <small>{new Date(entry.createdAt).toLocaleString('es-CO')}</small>
+                      {entry.error ? <p>{entry.error}</p> : null}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+            {syncEntries.length > 0 ? (
+              <p className="sync-panel-note">
+                {'Estas compras est\u00e1n guardadas en el dispositivo y se enviar\u00e1n autom\u00e1ticamente al recuperar la conexi\u00f3n.'}
+              </p>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
       {pinModalOpen ? (
         <div className="modal-backdrop">
           <div className="modal pin-modal" role="dialog" aria-modal="true" aria-label="Cambiar PIN">
