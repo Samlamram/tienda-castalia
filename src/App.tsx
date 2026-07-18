@@ -6,7 +6,7 @@ import { BrandLogo } from './components/BrandLogo';
 import { Kiosk } from './components/Kiosk';
 import { LoadingExperience } from './components/LoadingExperience';
 import { initializeLocalDatabase } from './data/db';
-import type { AppSession } from './domain/types';
+import type { AdminSnapshot, AppSession } from './domain/types';
 import { useAdminData } from './hooks/useAdminData';
 import { useCloudUserData } from './hooks/useCloudUserData';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -17,6 +17,7 @@ import {
   loginPin,
   logoutSession
 } from './services/auth';
+import { loadUserAccountActivity } from './services/accountActivity';
 import { refreshCatalog } from './services/catalog';
 import { requestPersistentLocalStorage } from './services/imageCache';
 import {
@@ -43,10 +44,20 @@ export function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const sessionRef = useRef<AuthSession | null>(null);
   const [message, setMessage] = useState('');
-  const cloudUserData = useCloudUserData(session?.role === 'user' ? session.cloudSession : null);
+  const [userActivityRefreshVersion, setUserActivityRefreshVersion] = useState(0);
+  const [userActivityState, setUserActivityState] = useState<{
+    token: string;
+    snapshot: AdminSnapshot;
+  } | null>(null);
+  const userSession = session?.role === 'user' ? session.cloudSession : null;
+  const userActivity = userActivityState && userSession?.token === userActivityState.token
+    ? userActivityState.snapshot
+    : null;
+  const cloudUserData = useCloudUserData(userSession, userActivity);
   const adminData = useAdminData(session?.role === 'admin' ? session.cloudSession : null, online);
   const logout = useCallback(() => {
     const cloudSession = sessionRef.current?.cloudSession;
+    setUserActivityState(null);
     setSession(null);
     void logoutSession(cloudSession).catch(() => undefined);
   }, []);
@@ -54,6 +65,38 @@ export function App() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    const activeSession = session?.role === 'user' ? session.cloudSession : null;
+    if (!activeSession) {
+      setUserActivityState(null);
+      return;
+    }
+    if (!online || !isSyncConfigured()) return;
+
+    let cancelled = false;
+    loadUserAccountActivity(activeSession)
+      .then((snapshot) => {
+        if (!cancelled) setUserActivityState({ token: activeSession.token, snapshot });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        if (isSessionAuthenticationError(error)) {
+          setMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.');
+          logout();
+          return;
+        }
+        setMessage(
+          error instanceof Error
+            ? `No se pudo actualizar tu historial: ${error.message}`
+            : 'No se pudo actualizar tu historial.'
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [logout, online, session?.cloudSession, session?.role, userActivityRefreshVersion]);
 
   // Update the status-bar / theme-color to match the current screen
   useEffect(() => {
@@ -123,6 +166,7 @@ export function App() {
           return;
         }
         await refreshCatalog(userSession);
+        setUserActivityRefreshVersion((current) => current + 1);
         if (result.submitted > 0) {
           setMessage(
             `${result.submitted} compra${result.submitted === 1 ? '' : 's'} pendiente${
@@ -204,6 +248,7 @@ export function App() {
       try {
         const refreshed = await refreshCatalog(userSession);
         setSession(authSessionFromAppSession(refreshed));
+        setUserActivityRefreshVersion((current) => current + 1);
       } catch (error) {
         if (isSessionAuthenticationError(error)) {
           setMessage('La compra quedó guardada, pero tu sesión venció. Inicia sesión nuevamente.');
@@ -232,6 +277,7 @@ export function App() {
       try {
         const refreshed = await refreshCatalog(userSession);
         setSession(authSessionFromAppSession(refreshed));
+        setUserActivityRefreshVersion((current) => current + 1);
       } catch (error) {
         if (isSessionAuthenticationError(error)) {
           setMessage('La compra se confirmó, pero tu sesión venció. Inicia sesión nuevamente.');

@@ -3190,35 +3190,56 @@ function AdminModalContainer({
                       <strong>{formatMoney(fixedPaymentBalance)}</strong>
                     </div>
                     <div className="payment-checkout-list">
-                      {paymentOpenConsumptions.map((consumption) => {
+                      {paymentOpenConsumptions.flatMap((consumption) => {
                         const consumptionItems = data.items.filter((item) => item.consumptionId === consumption.id);
-                        const firstItem = consumptionItems[0];
-                        const product = data.products.find((entry) => entry.id === firstItem?.productId);
-                        const productId = firstItem?.productId ?? consumption.id;
-                        const imageUrl = product?.imageUrl && !bulkFailedImages[productId] ? product.imageUrl : undefined;
-                        return (
-                          <div className="payment-checkout-row" key={consumption.id}>
-                            <span className="payment-checkout-thumbnail">
-                              {imageUrl ? (
-                                <img
-                                  src={imageUrl}
-                                  alt=""
-                                  onError={() => setBulkFailedImages((current) => ({ ...current, [productId]: true }))}
-                                />
-                              ) : (
-                                <span className="payment-checkout-placeholder">
-                                  <Package size={16} />
-                                </span>
-                              )}
-                            </span>
-                            <span className="payment-checkout-item-copy">
-                              <strong>{consumptionItems.map((item) => item.productName).join(', ') || 'Compra'}</strong>
-                              <small>{new Date(consumption.createdAt).toLocaleDateString('es-CO')}</small>
-                            </span>
-                            <span className="payment-checkout-qty">{consumptionItems.length} item{consumptionItems.length === 1 ? '' : 's'}</span>
-                            <strong>{formatMoney(consumption.openAmount)}</strong>
-                          </div>
-                        );
+                        if (consumptionItems.length === 0) {
+                          return [
+                            <div className="payment-checkout-row" key={consumption.id}>
+                              <span className="payment-checkout-thumbnail">
+                                <span className="payment-checkout-placeholder"><Package size={16} /></span>
+                              </span>
+                              <span className="payment-checkout-item-copy">
+                                <strong>Compra</strong>
+                                <small>{new Date(consumption.createdAt).toLocaleDateString('es-CO')}</small>
+                              </span>
+                              <span className="payment-checkout-qty">x1</span>
+                              <strong>{formatMoney(consumption.openAmount)}</strong>
+                            </div>
+                          ];
+                        }
+
+                        return consumptionItems.map((item) => {
+                          const product = data.products.find((entry) => entry.id === item.productId);
+                          const imageUrl = product?.imageUrl && !bulkFailedImages[item.productId]
+                            ? product.imageUrl
+                            : undefined;
+                          return (
+                            <div className="payment-checkout-row" key={item.id}>
+                              <span className="payment-checkout-thumbnail">
+                                {imageUrl ? (
+                                  <img
+                                    src={imageUrl}
+                                    alt=""
+                                    onError={() => setBulkFailedImages((current) => ({
+                                      ...current,
+                                      [item.productId]: true
+                                    }))}
+                                  />
+                                ) : (
+                                  <span className="payment-checkout-placeholder"><Package size={16} /></span>
+                                )}
+                              </span>
+                              <span className="payment-checkout-item-copy">
+                                <strong>{item.productName}</strong>
+                                <small>
+                                  {formatMoney(item.unitPrice)} c/u · {new Date(consumption.createdAt).toLocaleDateString('es-CO')}
+                                </small>
+                              </span>
+                              <span className="payment-checkout-qty">x{item.quantity}</span>
+                              <strong>{formatMoney(item.total)}</strong>
+                            </div>
+                          );
+                        });
                       })}
                       {paymentCarryoverBalance > 0 ? (
                         <div className="payment-checkout-row carryover">

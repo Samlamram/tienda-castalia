@@ -1,9 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../data/db';
-import type { AppSession, PendingConsumption, TiendaViewData } from '../domain/types';
+import type { AdminSnapshot, AppSession, PendingConsumption, TiendaViewData } from '../domain/types';
 import { cachedUserViewData } from '../domain/viewData';
 
-export function useCloudUserData(inputSession?: AppSession | null): TiendaViewData {
+export function useCloudUserData(inputSession?: AppSession | null, activity?: AdminSnapshot | null): TiendaViewData {
   const storedSession = useLiveQuery(() => db.appSessions.get('current'), [], inputSession ?? null);
   const catalogProducts = useLiveQuery(() => db.catalogProducts.orderBy('name').toArray(), [], []);
   const pendingConsumptions = useLiveQuery<PendingConsumption[], PendingConsumption[]>(
@@ -24,6 +24,7 @@ export function useCloudUserData(inputSession?: AppSession | null): TiendaViewDa
     session: storedSession ?? inputSession ?? null,
     products: catalogProducts,
     pendingConsumptions,
-    settings
+    settings,
+    activity
   });
 }

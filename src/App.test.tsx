@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   clearStoredSession: vi.fn(),
   changeCurrentPin: vi.fn(),
   refreshCatalog: vi.fn(),
+  loadUserAccountActivity: vi.fn(),
   queueOrSubmitConsumption: vi.fn(),
   syncPendingConsumptions: vi.fn(),
   adminRefresh: vi.fn(),
@@ -43,6 +44,10 @@ vi.mock('./services/auth', () => ({
   loginPin: mocks.loginPin,
   clearStoredSession: mocks.clearStoredSession,
   changeCurrentPin: mocks.changeCurrentPin
+}));
+
+vi.mock('./services/accountActivity', () => ({
+  loadUserAccountActivity: mocks.loadUserAccountActivity
 }));
 
 vi.mock('./services/catalog', () => ({
@@ -121,6 +126,7 @@ describe('App con Supabase como fuente oficial', () => {
     mocks.clearStoredSession.mockReset().mockResolvedValue(undefined);
     mocks.changeCurrentPin.mockReset().mockResolvedValue(undefined);
     mocks.refreshCatalog.mockReset().mockImplementation(async (value: AppSession) => value);
+    mocks.loadUserAccountActivity.mockReset().mockResolvedValue({ generatedAt: timestamp });
     mocks.queueOrSubmitConsumption.mockReset().mockResolvedValue({ status: 'confirmed', message: 'Compra confirmada.' });
     mocks.syncPendingConsumptions.mockReset().mockResolvedValue({ submitted: 0, failed: 0, pending: 0 });
     mocks.adminRefresh.mockReset().mockResolvedValue(undefined);

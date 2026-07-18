@@ -20,7 +20,13 @@ import {
 import { useEffect, useId, useRef, useState } from 'react';
 import { BrandLogo } from './BrandLogo';
 import { SearchFilterIsland } from './SearchFilterIsland';
-import type { CartItem, PersonUser, TiendaViewData } from '../domain/types';
+import type {
+  CartItem,
+  ConsumptionPaymentState,
+  PendingConsumptionStatus,
+  PersonUser,
+  TiendaViewData
+} from '../domain/types';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { useCollapsibleChrome } from '../hooks/useCollapsibleChrome';
 import { formatMoney } from '../utils/money';
@@ -108,6 +114,28 @@ function initials(name: string) {
 
 function countLabel(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+export function pendingStatusMeta(status: PendingConsumptionStatus) {
+  if (status === 'sending') return { label: 'Sincronizando', className: 'sync-sending' };
+  if (status === 'failed') return { label: 'Error de sincronización', className: 'sync-failed' };
+  if (status === 'needs_review') return { label: 'Requiere revisión', className: 'sync-review' };
+  if (status === 'confirmed') return { label: 'Sincronizada', className: 'sync-synced' };
+  return { label: 'Sin sincronizar', className: 'sync-pending' };
+}
+
+export function paymentStatusMeta(status: ConsumptionPaymentState) {
+  if (status === 'paid') return { label: 'Pagada', className: 'payment-paid' };
+  if (status === 'partial') return { label: 'Pago parcial', className: 'payment-partial' };
+  if (status === 'voided') return { label: 'Anulada', className: 'record-voided' };
+  return { label: 'Sin pagar', className: 'payment-unpaid' };
+}
+
+function PendingStatusIcon({ status }: { status: PendingConsumptionStatus }) {
+  if (status === 'sending') return <Loader2 size={13} className="is-spinning" aria-hidden="true" />;
+  if (status === 'failed' || status === 'needs_review') return <TriangleAlert size={13} aria-hidden="true" />;
+  if (status === 'confirmed') return <CheckCircle2 size={13} aria-hidden="true" />;
+  return <CloudUpload size={13} aria-hidden="true" />;
 }
 
 function trapFocusWithin(event: ReactKeyboardEvent<HTMLElement>) {
@@ -349,12 +377,12 @@ function UserSession({
   const pendingReviews = data.pendingConsumptions.filter(
     (entry) => entry.sessionUserId === user.id && entry.status === 'needs_review'
   );
-  const syncEntries = data.pendingConsumptions.filter((entry) => entry.sessionUserId === user.id);
   const accountBalance = user.accountId ? data.accountBalances.find((entry) => entry.accountId === user.accountId) : undefined;
   const accountUsers = user.accountId
     ? data.users.filter((entry) => entry.accountId === user.accountId && entry.status === 'active')
     : [user];
   const accountUserIds = new Set(accountUsers.map((entry) => entry.id));
+  const syncEntries = data.pendingConsumptions.filter((entry) => entry.sessionUserId === user.id);
   const categories = ['Todas', ...Array.from(new Set(data.products.map((product) => product.category))).sort()];
   const products = data.products
     .filter((product) => product.status === 'active')
@@ -377,12 +405,15 @@ function UserSession({
   const filteredHistory = accountHistory
     .filter((entry) => accountFilter === 'all' || entry.userId === accountFilter)
     .slice(0, 18);
+  const filteredSyncEntries = syncEntries
+    .filter(() => accountFilter === 'all' || accountFilter === user.id)
+    .slice(0, 18);
   const filteredPayments = accountPayments
     .filter((payment) => accountFilter === 'all' || payment.userId === accountFilter || payment.paidByUserId === accountFilter)
     .slice(0, 18);
   const groupedHistory = groupByDay(filteredHistory);
   const groupedPayments = groupByDay(filteredPayments);
-  const accountActivityAvailable = accountHistory.length > 0 || accountPayments.length > 0;
+  const accountActivityAvailable = accountHistory.length > 0 || accountPayments.length > 0 || syncEntries.length > 0;
 
   const selfBalance = data.userBalances.find((entry) => entry.userId === user.id)?.balance ?? 0;
   const currentBalance = accountBalance?.balance ?? selfBalance;
@@ -1084,7 +1115,7 @@ function UserSession({
 
             {!accountActivityAvailable ? (
               <p className="account-empty-state">
-                Este dispositivo conserva solo el catálogo y las compras pendientes. El historial oficial se consulta en administración.
+                Aún no hay compras ni pagos para mostrar en esta cuenta.
               </p>
             ) : null}
 
@@ -1093,7 +1124,7 @@ function UserSession({
                 className={accountDetailTab === 'history' ? 'active' : ''}
                 onClick={() => setAccountDetailTab('history')}
               >
-                Historial <span>{filteredHistory.length}</span>
+                Historial <span>{filteredHistory.length + filteredSyncEntries.length}</span>
               </button>
               <button
                 className={accountDetailTab === 'payments' ? 'active' : ''}
@@ -1105,6 +1136,81 @@ function UserSession({
 
             {accountActivityAvailable && accountDetailTab === 'history' ? (
               <div className="account-timeline">
+                {filteredSyncEntries.length > 0 ? (
+                  <section className="account-day-group pending-history-group">
+                    <div className="account-day-heading">
+                      <span>Pendientes del dispositivo</span>
+                      <small>{countLabel(filteredSyncEntries.length, 'compra', 'compras')}</small>
+                    </div>
+                    <div className="account-day-list">
+                      {filteredSyncEntries.map((entry) => {
+                        const status = pendingStatusMeta(entry.status);
+                        const displayItems = entry.displayItems?.length
+                          ? entry.displayItems
+                          : entry.items.map((item) => {
+                              const product = data.products.find((candidate) => candidate.id === item.productId);
+                              const unitPrice = product?.price ?? 0;
+                              return {
+                                productId: item.productId,
+                                productName: product?.name ?? 'Producto',
+                                quantity: item.quantity,
+                                unitPrice,
+                                total: item.quantity * unitPrice
+                              };
+                            });
+                        const estimatedTotal = entry.estimatedTotal
+                          ?? displayItems.reduce((sum, item) => sum + item.total, 0);
+                        return (
+                          <article className={`history-card is-local-pending ${status.className}`} key={entry.id}>
+                            <div className="history-card-header">
+                              <div className="history-person">
+                                <span className="account-avatar">{initials(user.name)}</span>
+                                <div>
+                                  <strong>{user.name}</strong>
+                                  <span>{formatMovementTime(entry.createdAt)}</span>
+                                </div>
+                              </div>
+                              <div className="history-statuses" aria-label={`Estado: ${status.label}`}>
+                                <span className={`history-status ${status.className}`}>
+                                  <PendingStatusIcon status={entry.status} />
+                                  {status.label}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="history-cart">
+                              {displayItems.map((item) => (
+                                <div className="history-cart-row" key={`${entry.id}-${item.productId}`}>
+                                  <span className="history-item-thumbnail">
+                                    <span className="history-item-placeholder"><Package size={16} /></span>
+                                  </span>
+                                  <span className="history-item-info">
+                                    <strong>{item.productName}</strong>
+                                    <small>{formatMoney(item.unitPrice)} c/u</small>
+                                  </span>
+                                  <span className="history-item-qty">
+                                    <small>Cant.</small>
+                                    <strong>x{item.quantity}</strong>
+                                  </span>
+                                  <span className="history-item-subtotal">
+                                    <small>Subtotal estimado</small>
+                                    <strong>{formatMoney(item.total)}</strong>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="history-card-footer">
+                              <span>Total estimado</span>
+                              <strong>{formatMoney(estimatedTotal)}</strong>
+                            </div>
+                            {entry.error ? <p className="history-card-note is-error">{entry.error}</p> : null}
+                            <p className="history-card-note">El total definitivo se confirmará al sincronizar.</p>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
+
                 {groupedHistory.map((group) => (
                   <section className="account-day-group" key={group.key}>
                     <div className="account-day-heading">
@@ -1116,6 +1222,10 @@ function UserSession({
                       {group.entries.map((entry) => {
                         const entryUser = data.users.find((item) => item.id === entry.userId);
                         const entryItems = data.items.filter((item) => item.consumptionId === entry.id);
+                        const paymentState = data.consumptionPaymentStatuses.find(
+                          (item) => item.consumptionId === entry.id
+                        );
+                        const paymentStatus = paymentState ? paymentStatusMeta(paymentState.status) : null;
                         const entryUserName = entryUser?.name ?? 'Usuario';
                         return (
                           <article className={entry.status === 'voided' ? 'history-card voided' : 'history-card'} key={entry.id}>
@@ -1126,6 +1236,23 @@ function UserSession({
                                   <strong>{entryUserName}</strong>
                                   <span>{formatMovementTime(entry.createdAt)}</span>
                                 </div>
+                              </div>
+                              <div className="history-statuses" aria-label="Estados de la compra">
+                                <span className="history-status sync-synced">
+                                  <CheckCircle2 size={13} aria-hidden="true" />
+                                  Sincronizada
+                                </span>
+                                {entry.status === 'voided' ? (
+                                  <span className="history-status record-voided">
+                                    <CircleX size={13} aria-hidden="true" />
+                                    Anulada
+                                  </span>
+                                ) : paymentStatus ? (
+                                  <span className={`history-status ${paymentStatus.className}`}>
+                                    {paymentStatus.label === 'Pagada' ? <CheckCircle2 size={13} aria-hidden="true" /> : null}
+                                    {paymentStatus.label}
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
 
@@ -1176,14 +1303,22 @@ function UserSession({
                               <strong>{formatMoney(entry.total)}</strong>
                             </div>
 
-                            {entry.status === 'voided' ? <small className="danger-text">Anulado</small> : null}
+                            {entry.status === 'voided' ? (
+                              <p className="history-card-note is-error">
+                                {entry.voidReason ? `Motivo: ${entry.voidReason}` : 'Esta compra fue anulada.'}
+                              </p>
+                            ) : paymentState && paymentState.openAmount > 0 ? (
+                              <p className="history-card-note history-open-amount">
+                                Pendiente por pagar: <strong>{formatMoney(paymentState.openAmount)}</strong>
+                              </p>
+                            ) : null}
                           </article>
                         );
                       })}
                     </div>
                   </section>
                 ))}
-                {filteredHistory.length === 0 ? <p className="account-empty-state">Sin consumos para este filtro.</p> : null}
+                {filteredHistory.length === 0 && filteredSyncEntries.length === 0 ? <p className="account-empty-state">Sin consumos para este filtro.</p> : null}
               </div>
             ) : null}
 

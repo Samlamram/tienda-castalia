@@ -19,6 +19,10 @@ const productImagesMigration = readFileSync(
   join(process.cwd(), 'supabase', 'migrations', '202607160001_product_images_storage.sql'),
   'utf8'
 );
+const userAccountActivityMigration = readFileSync(
+  join(process.cwd(), 'supabase', 'migrations', '202607180001_user_account_activity.sql'),
+  'utf8'
+);
 const sheetsWebhooks = readFileSync(
   join(process.cwd(), 'supabase', 'apps-script-webhooks.sql'),
   'utf8'
@@ -73,6 +77,7 @@ describe('contrato del esquema oficial', () => {
       'change_my_pin',
       'get_user_catalog',
       'create_consumption',
+      'get_user_account_activity',
       'admin_get_snapshot',
       'admin_command',
       'admin_get_audit_log',
@@ -132,9 +137,21 @@ describe('contrato del esquema oficial', () => {
     expect(schema).toMatch(/'pin_changed'/i);
   });
 
+  it('limita la actividad de usuario a su cuenta o a su propio usuario independiente', () => {
+    expect(userAccountActivityMigration).toMatch(/v_user\s*:=\s*public\.app_current_user\(p_session_token\)/i);
+    expect(userAccountActivityMigration).toMatch(/v_user\.account_id is not null and c\.account_id = v_user\.account_id/i);
+    expect(userAccountActivityMigration).toMatch(/v_user\.account_id is null and c\.user_id = v_user\.id/i);
+    expect(userAccountActivityMigration).toMatch(/v_user\.account_id is null and u\.id = v_user\.id/i);
+    expect(userAccountActivityMigration).toMatch(/consumptionPaymentStatuses/i);
+    expect(userAccountActivityMigration).not.toMatch(/pin_hash|pin_salt|token_hash/i);
+    expect(userAccountActivityMigration).toMatch(
+      /grant execute on function public\.get_user_account_activity\(text, integer\) to anon, authenticated/i
+    );
+  });
+
   it('mantiene la migracion reproducible sincronizada con schema.sql', () => {
     expect(schema.trim()).toBe(
-      `${migration.trim()}\n\n${financeMigration.trim()}\n\n${priceHistoryMigration.trim()}\n\n${productImagesMigration.trim()}`
+      `${migration.trim()}\n\n${financeMigration.trim()}\n\n${priceHistoryMigration.trim()}\n\n${productImagesMigration.trim()}\n\n${userAccountActivityMigration.trim()}`
     );
   });
 });

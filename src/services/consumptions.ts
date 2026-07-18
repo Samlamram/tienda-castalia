@@ -75,6 +75,18 @@ async function savePending(
 ): Promise<PendingConsumption> {
   const timestamp = nowIso();
   const clientOperationId = crypto.randomUUID();
+  const catalogProducts = await db.catalogProducts.bulkGet(cart.map((item) => item.productId));
+  const displayItems = cart.map((item, index) => {
+    const product = catalogProducts[index];
+    const unitPrice = product?.price ?? 0;
+    return {
+      productId: item.productId,
+      productName: product?.name ?? 'Producto',
+      quantity: item.quantity,
+      unitPrice,
+      total: item.quantity * unitPrice
+    };
+  });
   const pending: PendingConsumption = {
     id: clientOperationId,
     clientOperationId,
@@ -83,6 +95,8 @@ async function savePending(
     deviceId: session.deviceId,
     catalogVersion: await getCachedCatalogVersion(),
     items: normalizeCart(cart),
+    displayItems,
+    estimatedTotal: displayItems.reduce((sum, item) => sum + item.total, 0),
     status,
     attempts: 0,
     error,

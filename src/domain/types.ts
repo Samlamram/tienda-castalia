@@ -9,6 +9,14 @@ export type PendingConsumptionStatus =
   | 'confirmed'
   | 'failed'
   | 'needs_review';
+
+export interface PendingConsumptionDisplayItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
 export type FinancialMovementType =
   | 'payment'
   | 'adjustment'
@@ -270,6 +278,8 @@ export interface PendingConsumption {
   deviceId: string;
   catalogVersion: number;
   items: CartItem[];
+  displayItems?: PendingConsumptionDisplayItem[];
+  estimatedTotal?: number;
   status: PendingConsumptionStatus;
   attempts: number;
   error?: string;

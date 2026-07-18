@@ -130,6 +130,7 @@ export function cachedUserViewData(input: {
   products: CatalogProduct[];
   pendingConsumptions: PendingConsumption[];
   settings: Setting[];
+  activity?: AdminSnapshot | null;
 }): TiendaViewData {
   const { session } = input;
   const timestamp = session?.updatedAt ?? new Date().toISOString();
@@ -142,7 +143,8 @@ export function cachedUserViewData(input: {
     lastCost: 0,
     createdAt: product.updatedAt
   }));
-  const accounts = session?.accountId
+  const activityView = input.activity ? adminSnapshotToViewData(input.activity, input.settings) : null;
+  const fallbackAccounts = session?.accountId
     ? [{
         id: session.accountId,
         name: session.accountName ?? 'Cuenta',
@@ -152,7 +154,7 @@ export function cachedUserViewData(input: {
         version: 1
       }]
     : [];
-  const users = session
+  const fallbackUsers = session
     ? [{
         id: session.userId,
         accountId: session.accountId,
@@ -164,6 +166,8 @@ export function cachedUserViewData(input: {
         version: 1
       }]
     : [];
+  const accounts = activityView?.accounts.length ? activityView.accounts : fallbackAccounts;
+  const users = activityView?.users.length ? activityView.users : fallbackUsers;
   const balance = session?.balance ?? 0;
   const userBalances = session
     ? [{
@@ -187,27 +191,29 @@ export function cachedUserViewData(input: {
         users: userBalances
       }]
     : [];
+  const resolvedUserBalances = activityView?.userBalances.length ? activityView.userBalances : userBalances;
+  const resolvedAccountBalances = activityView?.accountBalances.length ? activityView.accountBalances : accountBalances;
 
   return {
     accounts,
     users,
     products,
-    consumptions: [],
-    items: [],
-    financialMovements: [],
-    payments: [],
-    applications: [],
+    consumptions: activityView?.consumptions ?? [],
+    items: activityView?.items ?? [],
+    financialMovements: activityView?.financialMovements ?? [],
+    payments: activityView?.payments ?? [],
+    applications: activityView?.applications ?? [],
     purchases: [],
     movements: [],
     financeEvents: [],
-    adjustments: [],
+    adjustments: activityView?.adjustments ?? [],
     fifoCostAllocations: [],
     auditLog: [],
     pendingSync,
     pendingConsumptions: input.pendingConsumptions,
     settings: input.settings,
-    accountBalances,
-    userBalances,
+    accountBalances: resolvedAccountBalances,
+    userBalances: resolvedUserBalances,
     productStocks: products.map((product) => ({
       productId: product.id,
       stock: 0,
@@ -215,6 +221,6 @@ export function cachedUserViewData(input: {
       isLow: false
     })),
     consumptionCosts: [],
-    consumptionPaymentStatuses: []
+    consumptionPaymentStatuses: activityView?.consumptionPaymentStatuses ?? []
   };
 }

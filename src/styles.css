@@ -10387,3 +10387,136 @@ body,
 .pending-sync-banner {
   display: none;
 }
+
+/* User account activity statuses */
+.history-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 58%;
+}
+
+.history-card-header .history-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin: 0;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.history-status.sync-synced {
+  color: #0f6b5b;
+  background: #e5f7f2;
+  border-color: #bce8dc;
+}
+
+.history-status.payment-paid {
+  color: #24630f;
+  background: #edf8e7;
+  border-color: #cde9bf;
+}
+
+.history-status.payment-partial,
+.history-status.sync-pending {
+  color: #8a5a08;
+  background: #fff6d8;
+  border-color: #f1d98a;
+}
+
+.history-status.payment-unpaid {
+  color: #9a430b;
+  background: #fff0e5;
+  border-color: #f4c9a8;
+}
+
+.history-status.sync-sending {
+  color: #1858a0;
+  background: #eaf3ff;
+  border-color: #bfd8f7;
+}
+
+.history-status.sync-review {
+  color: #7138a6;
+  background: #f5ecff;
+  border-color: #dbc2f2;
+}
+
+.history-status.sync-failed,
+.history-status.record-voided {
+  color: #a52323;
+  background: #fff0f0;
+  border-color: #efc1c1;
+}
+
+.history-status .is-spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+.pending-history-group {
+  padding: 12px;
+  border: 1px dashed #e2c66d;
+  border-radius: var(--radius-md);
+  background: #fffdf6;
+}
+
+.history-card.is-local-pending {
+  border-inline-start: 4px solid #e4bd3a;
+}
+
+.history-card.is-local-pending.sync-sending {
+  border-inline-start-color: #4f8ed0;
+}
+
+.history-card.is-local-pending.sync-review {
+  border-inline-start-color: #9560c5;
+}
+
+.history-card.is-local-pending.sync-failed {
+  border-inline-start-color: #cc4b4b;
+}
+
+.history-card-note {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.history-card-note.is-error {
+  color: #9f2727;
+  background: #fff1f1;
+}
+
+.history-open-amount {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #8a4a0a;
+  background: #fff7e8;
+}
+
+@media (max-width: 680px) {
+  .history-card-header {
+    flex-wrap: wrap;
+  }
+
+  .history-statuses {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .pending-history-group {
+    padding: 10px;
+  }
+}
