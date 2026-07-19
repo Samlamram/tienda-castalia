@@ -9228,15 +9228,6 @@ body,
     pointer-events: auto;
   }
 
-  .progressive-mobile-chrome {
-    transition: none !important;
-    will-change: transform;
-  }
-
-  .progressive-mobile-chrome.is-settling {
-    transition: transform 180ms var(--ease) !important;
-  }
-
   .kiosk-header-slot.chrome-collapsed > .kiosk-header-island,
   .admin-header-slot.chrome-collapsed > .kiosk-header-island {
     transform: translateY(calc(-100% - var(--safe-top) - 12px));
@@ -9380,14 +9371,6 @@ body,
   .admin-session .search-filter-island {
     position: sticky;
     top: calc(var(--safe-top) + 6px + var(--catalog-header-reveal, 0px));
-  }
-
-  .chrome-is-settling .catalog-search-filters {
-    will-change: top;
-    transition:
-      top 180ms var(--ease),
-      gap 180ms var(--ease),
-      box-shadow 180ms var(--ease);
   }
 
   .search-filter-chips {

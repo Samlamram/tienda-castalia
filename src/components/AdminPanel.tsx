@@ -570,17 +570,12 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   const chromePinned = Boolean(activeModal) || headerSyncing || profileOpen || headerFocused;
   const {
     collapsed: chromeCollapsed,
-    offset: chromeOffset,
-    settling: chromeSettling,
-    expand: expandChrome,
-    rebaseline: rebaselineChrome
+    expand: expandChrome
   } = useCollapsibleChrome({
     scroller: 'window',
     enabled: mobileChromeEnabled,
     pinned: chromePinned,
-    resetKey: activeSection,
-    progressive: true,
-    travel: 160
+    resetKey: activeSection
   });
 
   useBodyScrollLock(profileOpen);
@@ -1015,8 +1010,8 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
 
   return (
     <section
-      className={`admin-session ${chromeCollapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'} ${chromeSettling ? 'chrome-is-settling' : ''} ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}
-      style={mobileChromeEnabled ? { '--catalog-header-reveal': `${Math.max(0, 72 - chromeOffset)}px` } as CSSProperties : undefined}
+      className={`admin-session ${chromeCollapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'} ${activeSection === 'catalogo' && selectedProductIds.length > 0 ? 'has-bulk-bar' : ''}`}
+      style={mobileChromeEnabled ? { '--catalog-header-reveal': chromeCollapsed ? '0px' : '72px' } as CSSProperties : undefined}
     >
       <div
         className={`header-slot admin-header-slot ${
@@ -1024,13 +1019,9 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
         }`}
         aria-hidden={chromeCollapsed}
         inert={chromeCollapsed ? true : undefined}
-        onTransitionEnd={(event) => {
-          if (event.target === event.currentTarget && event.propertyName === 'height') rebaselineChrome();
-        }}
       >
       <header
-        className={`kiosk-header kiosk-header-island admin-kiosk-header progressive-mobile-chrome ${chromeSettling ? 'is-settling' : ''}`}
-        style={mobileChromeEnabled ? { transform: `translate3d(0, -${chromeOffset}px, 0)` } : undefined}
+        className="kiosk-header kiosk-header-island admin-kiosk-header"
         onFocusCapture={() => setHeaderFocused(true)}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeaderFocused(false);

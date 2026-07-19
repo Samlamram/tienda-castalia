@@ -23,11 +23,12 @@ export interface UseCollapsibleChromeResult {
 interface ScrollMetrics {
   top: number;
   maxTop: number;
-  hasOverflow: boolean;
+  canCollapse: boolean;
 }
 
 const ALWAYS_EXPANDED_TOP = 24;
 const MINIMUM_COLLAPSE_TOP = 64;
+const MINIMUM_COLLAPSIBLE_RANGE = 160;
 const COLLAPSE_DISTANCE = 32;
 const EXPAND_DISTANCE = 12;
 const JITTER_DISTANCE = 2;
@@ -64,7 +65,7 @@ function readScrollMetrics(scroller: CollapsibleChromeScroller): ScrollMetrics |
     return {
       top: clamp(rawTop, 0, maxTop),
       maxTop,
-      hasOverflow: maxTop > 0,
+      canCollapse: maxTop >= MINIMUM_COLLAPSIBLE_RANGE,
     };
   }
 
@@ -75,7 +76,7 @@ function readScrollMetrics(scroller: CollapsibleChromeScroller): ScrollMetrics |
   return {
     top: clamp(finiteOrZero(element.scrollTop), 0, maxTop),
     maxTop,
-    hasOverflow: maxTop > 0,
+    canCollapse: maxTop >= MINIMUM_COLLAPSIBLE_RANGE,
   };
 }
 
@@ -148,7 +149,7 @@ export function useCollapsibleChrome({
     const metrics = readScrollMetrics(scroller);
     resetTracking(metrics);
 
-    if (!metrics?.hasOverflow) {
+    if (!metrics?.canCollapse) {
       updateCollapsed(false);
     }
   }, [resetTracking, scroller, updateCollapsed]);
@@ -198,7 +199,7 @@ export function useCollapsibleChrome({
 
     const initialMetrics = readScrollMetrics(scroller);
     resetTracking(initialMetrics);
-    if (!initialMetrics?.hasOverflow) updateCollapsed(false);
+    if (!initialMetrics?.canCollapse) updateCollapsed(false);
 
     let animationFrame: number | null = null;
 
@@ -212,7 +213,7 @@ export function useCollapsibleChrome({
       // collapsed state. The settling timer rebaselines at the final layout.
       if (transitionActiveRef.current) return;
 
-      if (!metrics?.hasOverflow) {
+      if (!metrics?.canCollapse) {
         updateCollapsed(false);
         resetTracking(metrics);
         return;
@@ -299,7 +300,7 @@ export function useCollapsibleChrome({
 
     const initialMetrics = readScrollMetrics(scroller);
     lastTopRef.current = initialMetrics?.top ?? 0;
-    if (!initialMetrics?.hasOverflow) {
+    if (!initialMetrics?.canCollapse) {
       expand();
       return;
     }
@@ -322,7 +323,7 @@ export function useCollapsibleChrome({
     const processScroll = () => {
       animationFrame = null;
       const metrics = readScrollMetrics(scroller);
-      if (!metrics?.hasOverflow) {
+      if (!metrics?.canCollapse) {
         expand();
         return;
       }

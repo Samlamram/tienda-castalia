@@ -366,6 +366,24 @@ describe('useCollapsibleChrome', () => {
     expect(result.current.collapsed).toBe(false);
   });
 
+  it('no colapsa en paginas con menos de 160 px de recorrido', () => {
+    const fixture = createScroller({ scrollHeight: 350, clientHeight: 200 });
+    const scroller = { current: fixture.element };
+    const { result } = renderHook(() => useCollapsibleChrome({
+      scroller,
+      enabled: true,
+      pinned: false,
+      resetKey: 'pagina-corta',
+    }));
+
+    emitScroll(fixture, 64);
+    emitScroll(fixture, 96);
+    emitScroll(fixture, 150);
+
+    expect(result.current.collapsed).toBe(false);
+    expect(result.current.offset).toBe(0);
+  });
+
   it('sigue el scroll y resuelve a uno de dos estados en modo progresivo', () => {
     const fixture = createScroller();
     const scroller = { current: fixture.element };

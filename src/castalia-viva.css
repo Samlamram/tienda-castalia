@@ -1525,3 +1525,26 @@
     padding: 0;
   }
 }
+
+/* Stable mobile chrome: two states, compositor-only movement. */
+@media (max-width: 860px) {
+  .kiosk-session .catalog-search-filters,
+  .admin-session .catalog-search-filters,
+  .kiosk-session .search-filter-island,
+  .admin-session .search-filter-island {
+    top: calc(var(--safe-top) + 6px);
+    transform: translate3d(0, var(--catalog-header-reveal, 72px), 0);
+    backface-visibility: hidden;
+    will-change: transform;
+    transition:
+      transform 220ms var(--ease),
+      gap 180ms var(--ease),
+      box-shadow 180ms var(--ease);
+  }
+
+  .kiosk-header-slot > .kiosk-header-island,
+  .admin-header-slot > .kiosk-header-island {
+    backface-visibility: hidden;
+    transform-origin: top center;
+  }
+}

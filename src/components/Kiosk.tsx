@@ -258,13 +258,11 @@ function UserSession({
   const discardHeadingId = useId();
   const discardDescriptionId = useId();
   const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || syncPanelOpen || Boolean(discardConfirmId);
-  const { collapsed, offset: chromeOffset, settling: chromeSettling, rebaseline } = useCollapsibleChrome({
+  const { collapsed } = useCollapsibleChrome({
     scroller: 'window',
     enabled: mobileChromeEnabled,
     pinned: overlaysOpen || headerFocused || searchFocused,
-    resetKey: user.id,
-    progressive: true,
-    travel: 160
+    resetKey: user.id
   });
 
   useEffect(() => {
@@ -584,18 +582,14 @@ function UserSession({
 
   return (
     <section
-      className={`kiosk-session ${collapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'} ${chromeSettling ? 'chrome-is-settling' : ''}`}
-      style={mobileChromeEnabled ? { '--catalog-header-reveal': `${Math.max(0, 72 - chromeOffset)}px` } as CSSProperties : undefined}
+      className={`kiosk-session ${collapsed ? 'chrome-is-collapsed' : 'chrome-is-expanded'}`}
+      style={mobileChromeEnabled ? { '--catalog-header-reveal': collapsed ? '0px' : '72px' } as CSSProperties : undefined}
     >
       <div
         className={`kiosk-header-slot ${collapsed ? 'chrome-collapsed' : 'chrome-expanded'}`}
-        onTransitionEnd={(event) => {
-          if (event.target === event.currentTarget && event.propertyName === 'height') rebaseline();
-        }}
       >
         <header
-          className={`kiosk-header kiosk-header-island progressive-mobile-chrome ${chromeSettling ? 'is-settling' : ''}`}
-          style={mobileChromeEnabled ? { transform: `translate3d(0, -${chromeOffset}px, 0)` } : undefined}
+          className="kiosk-header kiosk-header-island"
           aria-hidden={collapsed}
           inert={collapsed ? true : undefined}
           onFocusCapture={() => setHeaderFocused(true)}
