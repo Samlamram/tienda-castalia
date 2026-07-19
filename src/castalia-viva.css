@@ -1242,6 +1242,19 @@
 }
 
 @media (min-width: 681px) {
+  .modal-backdrop,
+  .filter-sheet-backdrop,
+  .profile-sheet-backdrop {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding-top: max(clamp(20px, 6dvh, 56px), var(--safe-top));
+    padding-bottom: max(20px, var(--safe-bottom));
+  }
+
+  .modal-backdrop {
+    justify-items: center;
+  }
+
   .checkout-item-row {
     grid-template-columns: 60px minmax(0, 1fr) 108px 96px 36px;
     column-gap: 9px;
@@ -1430,5 +1443,85 @@
     padding: 16px 14px 10px;
     border-bottom: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.975);
+  }
+}
+
+/* Stripless dialog chrome: controls stay compact and belong to the card. */
+.admin-action-modal .admin-modal-title-row,
+.checkout-modal .checkout-modal-header {
+  position: relative;
+  top: auto;
+  margin: 0 0 12px;
+  padding: 0 42px 0 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.checkout-modal .checkout-modal-header {
+  padding-right: 0;
+}
+
+.admin-action-modal .close-btn {
+  top: 0;
+  right: 0;
+}
+
+.admin-action-modal .modal-actions,
+.checkout-modal .checkout-footer,
+.confirm-action-sheet-actions {
+  position: static;
+  bottom: auto;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.admin-action-modal .modal-actions {
+  justify-content: flex-end;
+}
+
+.checkout-modal .checkout-footer {
+  margin-top: 10px;
+  padding-bottom: calc(12px + var(--safe-bottom));
+}
+
+.account-modal-hero,
+.filter-sheet-header,
+.profile-sheet-header {
+  position: relative;
+  top: auto;
+  border-bottom: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 680px) {
+  .admin-action-modal .admin-modal-title-row,
+  .checkout-modal .checkout-modal-header {
+    margin: 0 0 10px;
+    padding: 0 40px 0 0;
+  }
+
+  .checkout-modal .checkout-modal-header {
+    padding-right: 0;
+  }
+
+  .admin-action-modal .modal-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+    margin-top: 10px;
+  }
+
+  .confirm-action-sheet-actions {
+    margin-top: 10px;
+  }
+
+  .filter-sheet-header,
+  .profile-sheet-header {
+    margin: 0 0 10px;
+    padding: 0;
   }
 }

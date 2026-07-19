@@ -2101,12 +2101,20 @@ function AdminModalContainer({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [operationId] = useState(() => crypto.randomUUID());
   const modalTitleId = useId();
+  const modalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const [detailAccountTab, setDetailAccountTab] = useState<AdminAccountDetailTab>('history');
   const [detailAccountFilter, setDetailAccountFilter] = useState('all');
 
   useEffect(() => () => {
     if (productPreviewObjectUrl.current) URL.revokeObjectURL(productPreviewObjectUrl.current);
   }, []);
+
+  useEffect(() => {
+    const focusFrame = window.requestAnimationFrame(() => {
+      modalCloseButtonRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [modal.type]);
   const bulkMode = modal.type === 'bulk-products' ? (modal.target?.mode as BulkProductAction | undefined) : undefined;
   const bulkProductIds = modal.type === 'bulk-products' && Array.isArray(modal.target?.productIds)
     ? (modal.target.productIds as string[])
@@ -2666,6 +2674,7 @@ function AdminModalContainer({
               </h2>
             </div>
             <button
+              ref={modalCloseButtonRef}
               type="button"
               className="close-btn"
               onClick={onClose}
@@ -2998,7 +3007,6 @@ function AdminModalContainer({
                   minLength={4}
                   maxLength={8}
                   required
-                  autoFocus
                 />
                 <label htmlFor="admin-new-pin">Nuevo PIN</label>
                 <input
@@ -3048,7 +3056,7 @@ function AdminModalContainer({
             {modal.type === 'create-account' && (
               <>
                 <label>Nombre de la cuenta</label>
-                <input name="name" placeholder="Nombre de familia o grupo" required autoFocus />
+                <input name="name" placeholder="Nombre de familia o grupo" required />
                 <label>Agregar usuarios (opcional)</label>
                 {unassignedUsers.length > 0 ? (
                   <div className="admin-choice-list">
@@ -3330,7 +3338,7 @@ function AdminModalContainer({
                   <span>Valor</span>
                   <label className="payment-amount-field">
                     <span>$</span>
-                    <input name="amount" inputMode="numeric" pattern="[0-9]+([.][0-9]{3})*" placeholder="Ej. 50.000" title="Escribe un valor como 50000 o 50.000" required autoFocus />
+                    <input name="amount" inputMode="numeric" pattern="[0-9]+([.][0-9]{3})*" placeholder="Ej. 50.000" title="Escribe un valor como 50000 o 50.000" required />
                   </label>
                 </div>
                 {modal.target?.eventType === 'owner_withdrawal' ? (
@@ -3374,7 +3382,6 @@ function AdminModalContainer({
                   placeholder="Ej. pago registrado por error"
                   minLength={3}
                   required
-                  autoFocus
                 />
                 <p className="muted">Se conservará el pago original y se crearán movimientos inversos auditables.</p>
               </>
@@ -3393,7 +3400,6 @@ function AdminModalContainer({
                   placeholder="Ej. ajuste registrado por error"
                   minLength={3}
                   required
-                  autoFocus
                 />
                 <p className="muted">El ajuste original se conserva y se crea un movimiento inverso enlazado.</p>
               </>
@@ -3410,7 +3416,6 @@ function AdminModalContainer({
                   name="reason"
                   placeholder="Ej. compra registrada por error"
                   required
-                  autoFocus
                 />
               </>
             )}
@@ -3427,7 +3432,6 @@ function AdminModalContainer({
                   placeholder="Ej. compra de inventario registrada por error"
                   minLength={3}
                   required
-                  autoFocus
                 />
               </>
             )}
@@ -3514,7 +3518,7 @@ function AdminModalContainer({
             {modal.type === 'create-product' && (
               <>
                 <label>Nombre</label>
-                <input name="name" placeholder="Nombre del producto" required autoFocus />
+                <input name="name" placeholder="Nombre del producto" required />
                 <label>Categoría</label>
                 <div className="product-category-pills">
                   {PRODUCT_CATEGORIES.map((category) => (
@@ -3572,7 +3576,7 @@ function AdminModalContainer({
             {modal.type === 'edit-user' && (
               <>
                 <label>Nombre</label>
-                <input name="name" defaultValue={modal.target.name} required autoFocus />
+                <input name="name" defaultValue={modal.target.name} required />
                 <label>Usuario para iniciar sesión</label>
                 <input name="username" defaultValue={modal.target.username ?? ''} autoComplete="off" />
                 <label>Nuevo PIN (opcional)</label>
