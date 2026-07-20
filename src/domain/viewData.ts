@@ -24,6 +24,7 @@ export const EMPTY_ADMIN_SNAPSHOT: AdminSnapshot = {
   userBalances: [],
   accountBalances: [],
   consumptionPaymentStatuses: [],
+  consumptionVoidRequests: [],
   catalogVersion: 0,
   generatedAt: ''
 };
@@ -121,7 +122,8 @@ export function adminSnapshotToViewData(
     userBalances: snapshot.userBalances,
     productStocks: snapshot.productStocks,
     consumptionCosts: snapshot.consumptionCosts,
-    consumptionPaymentStatuses: snapshot.consumptionPaymentStatuses
+    consumptionPaymentStatuses: snapshot.consumptionPaymentStatuses,
+    consumptionVoidRequests: snapshot.consumptionVoidRequests
   };
 }
 
@@ -221,6 +223,7 @@ export function cachedUserViewData(input: {
       isLow: false
     })),
     consumptionCosts: [],
-    consumptionPaymentStatuses: activityView?.consumptionPaymentStatuses ?? []
+    consumptionPaymentStatuses: activityView?.consumptionPaymentStatuses ?? [],
+    consumptionVoidRequests: activityView?.consumptionVoidRequests ?? []
   };
 }

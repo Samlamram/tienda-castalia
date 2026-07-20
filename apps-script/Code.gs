@@ -25,6 +25,7 @@ const ALLOWED_TABLES = new Set([
   'product_price_history',
   'consumptions',
   'consumption_items',
+  'consumption_void_requests',
   'financial_movements',
   'payment_applications',
   'inventory_movements',

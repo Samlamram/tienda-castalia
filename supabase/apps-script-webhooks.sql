@@ -64,6 +64,10 @@ drop trigger if exists backup_consumption_items_to_sheets on public.consumption_
 create trigger backup_consumption_items_to_sheets after insert or update or delete on public.consumption_items
 for each row execute function public.app_backup_to_sheets();
 
+drop trigger if exists backup_consumption_void_requests_to_sheets on public.consumption_void_requests;
+create trigger backup_consumption_void_requests_to_sheets after insert or update or delete on public.consumption_void_requests
+for each row execute function public.app_backup_to_sheets();
+
 drop trigger if exists backup_financial_movements_to_sheets on public.financial_movements;
 create trigger backup_financial_movements_to_sheets after insert or update or delete on public.financial_movements
 for each row execute function public.app_backup_to_sheets();

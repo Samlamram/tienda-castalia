@@ -170,6 +170,7 @@ interface KioskProps {
   onConfirmConsumption: (userId: string, cart: CartItem[]) => Promise<ConfirmConsumptionResult>;
   onRetryPendingConsumption?: (pendingId: string) => Promise<ConfirmConsumptionResult>;
   onDiscardPendingConsumption?: (pendingId: string) => Promise<void>;
+  onRequestConsumptionVoid: (consumptionId: string, reason: string) => Promise<void>;
 }
 
 export function Kiosk({
@@ -181,7 +182,8 @@ export function Kiosk({
   onChangePin,
   onConfirmConsumption,
   onRetryPendingConsumption,
-  onDiscardPendingConsumption
+  onDiscardPendingConsumption,
+  onRequestConsumptionVoid
 }: KioskProps) {
   return (
     <UserSession
@@ -194,6 +196,7 @@ export function Kiosk({
       onConfirmConsumption={onConfirmConsumption}
       onRetryPendingConsumption={onRetryPendingConsumption}
       onDiscardPendingConsumption={onDiscardPendingConsumption}
+      onRequestConsumptionVoid={onRequestConsumptionVoid}
     />
   );
 }
@@ -208,6 +211,7 @@ interface UserSessionProps {
   onConfirmConsumption: (userId: string, cart: CartItem[]) => Promise<ConfirmConsumptionResult>;
   onRetryPendingConsumption?: (pendingId: string) => Promise<ConfirmConsumptionResult>;
   onDiscardPendingConsumption?: (pendingId: string) => Promise<void>;
+  onRequestConsumptionVoid: (consumptionId: string, reason: string) => Promise<void>;
 }
 
 function UserSession({
@@ -219,7 +223,8 @@ function UserSession({
   onChangePin,
   onConfirmConsumption,
   onRetryPendingConsumption,
-  onDiscardPendingConsumption
+  onDiscardPendingConsumption,
+  onRequestConsumptionVoid
 }: UserSessionProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [productQuery, setProductQuery] = useState('');
@@ -245,19 +250,26 @@ function UserSession({
   const [pinSubmitting, setPinSubmitting] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [discardConfirmId, setDiscardConfirmId] = useState<string | null>(null);
+  const [voidRequestConsumptionId, setVoidRequestConsumptionId] = useState<string | null>(null);
+  const [voidRequestError, setVoidRequestError] = useState<string | null>(null);
+  const [voidRequestSubmitting, setVoidRequestSubmitting] = useState(false);
+  const [locallyRequestedVoidIds, setLocallyRequestedVoidIds] = useState<string[]>([]);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const syncButtonRef = useRef<HTMLButtonElement | null>(null);
   const syncCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const discardTriggerRef = useRef<HTMLButtonElement | null>(null);
   const discardCancelRef = useRef<HTMLButtonElement | null>(null);
+  const voidRequestCancelRef = useRef<HTMLButtonElement | null>(null);
   const checkoutLogoutTimerRef = useRef<number | null>(null);
   const profileHeadingId = useId();
   const syncHeadingId = useId();
   const checkoutHeadingId = useId();
   const discardHeadingId = useId();
   const discardDescriptionId = useId();
-  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || syncPanelOpen || Boolean(discardConfirmId);
+  const voidRequestHeadingId = useId();
+  const voidRequestDescriptionId = useId();
+  const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || syncPanelOpen || Boolean(discardConfirmId) || Boolean(voidRequestConsumptionId);
   const { collapsed } = useCollapsibleChrome({
     scroller: 'window',
     enabled: mobileChromeEnabled,
@@ -352,6 +364,31 @@ function UserSession({
   }, [discardConfirmId]);
 
   useEffect(() => {
+    if (!voidRequestConsumptionId) return;
+    setVoidRequestError(null);
+    const focusFrame = window.requestAnimationFrame(() => voidRequestCancelRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || voidRequestSubmitting) return;
+      event.preventDefault();
+      setVoidRequestConsumptionId(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [voidRequestConsumptionId, voidRequestSubmitting]);
+
+  useEffect(() => {
+    setLocallyRequestedVoidIds((current) => {
+      const next = current.filter((consumptionId) =>
+        !data.consumptionVoidRequests.some((request) => request.consumptionId === consumptionId)
+      );
+      return next.length === current.length ? current : next;
+    });
+  }, [data.consumptionVoidRequests]);
+
+  useEffect(() => {
     setProductQuery('');
     setCategory('Todas');
     setAccountFilter('all');
@@ -373,6 +410,9 @@ function UserSession({
   }, [user.id]);
 
   const account = user.accountId ? data.accounts.find((entry) => entry.id === user.accountId) : undefined;
+  const voidRequestTarget = voidRequestConsumptionId
+    ? data.consumptions.find((entry) => entry.id === voidRequestConsumptionId)
+    : undefined;
   const pendingReviews = data.pendingConsumptions.filter(
     (entry) => entry.sessionUserId === user.id && entry.status === 'needs_review'
   );
@@ -532,6 +572,27 @@ function UserSession({
     setDiscardConfirmId(null);
     if (restoreFocus) {
       window.requestAnimationFrame(() => discardTriggerRef.current?.focus());
+    }
+  }
+
+  async function handleVoidRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!voidRequestConsumptionId || voidRequestSubmitting) return;
+    const form = new FormData(event.currentTarget);
+    const reason = String(form.get('reason') ?? '').trim();
+    setVoidRequestError(null);
+    setVoidRequestSubmitting(true);
+    try {
+      await onRequestConsumptionVoid(voidRequestConsumptionId, reason);
+      setLocallyRequestedVoidIds((current) => current.includes(voidRequestConsumptionId) ? current : [...current, voidRequestConsumptionId]);
+      onMessage('Solicitud de anulacion enviada al administrador.', 'success');
+      setVoidRequestConsumptionId(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo enviar la solicitud de anulacion.';
+      setVoidRequestError(message);
+      onMessage(message, 'error');
+    } finally {
+      setVoidRequestSubmitting(false);
     }
   }
 
@@ -1057,7 +1118,7 @@ function UserSession({
         </div>
       ) : null}
 
-      {accountDetailOpen ? (
+      {accountDetailOpen && !voidRequestConsumptionId ? (
         <div className="modal-backdrop">
           <div className="modal account-modal" role="dialog" aria-modal="true" aria-label="Estado de cuenta">
             <div className="account-modal-hero">
@@ -1234,6 +1295,12 @@ function UserSession({
                         );
                         const paymentStatus = paymentState ? paymentStatusMeta(paymentState.status) : null;
                         const entryUserName = entryUser?.name ?? 'Usuario';
+                        const latestVoidRequest = data.consumptionVoidRequests.find(
+                          (request) => request.consumptionId === entry.id
+                        );
+                        const voidRequestPending = latestVoidRequest?.status === 'pending'
+                          || locallyRequestedVoidIds.includes(entry.id);
+                        const canRequestVoid = entry.userId === user.id && entry.status === 'confirmed' && !voidRequestPending;
                         return (
                           <article className={entry.status === 'voided' ? 'history-card voided' : 'history-card'} key={entry.id}>
                             <div className="history-card-header">
@@ -1319,9 +1386,28 @@ function UserSession({
                                 Pendiente por pagar: <strong>{formatMoney(paymentState.openAmount)}</strong>
                               </p>
                             ) : null}
+
+                            {entry.userId === user.id && voidRequestPending ? (
+                              <p className="history-card-note void-request-pending" role="status">
+                                Anulacion solicitada. La compra sigue vigente hasta que el administrador decida.
+                              </p>
+                            ) : null}
+                            {entry.userId === user.id && latestVoidRequest?.status === 'rejected' ? (
+                              <p className="history-card-note is-error">
+                                Solicitud rechazada: {latestVoidRequest.decisionReason ?? 'sin motivo informado'}
+                              </p>
+                            ) : null}
+                            {canRequestVoid ? (
+                              <button
+                                type="button"
+                                className="ghost small danger history-void-request-action"
+                                onClick={() => setVoidRequestConsumptionId(entry.id)}
+                              >
+                                {latestVoidRequest?.status === 'rejected' ? 'Volver a solicitar anulacion' : 'Solicitar anulacion'}
+                              </button>
+                            ) : null}
                           </article>
-                        );
-                      })}
+                        );                      })}
                     </div>
                   </section>
                 ))}
@@ -1372,6 +1458,67 @@ function UserSession({
         </div>
       ) : null}
 
+      {voidRequestTarget ? (
+        <div
+          className="modal-backdrop confirm-action-sheet-backdrop void-request-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !voidRequestSubmitting) setVoidRequestConsumptionId(null);
+          }}
+        >
+          <section
+            className="modal pin-modal confirm-action-sheet void-request-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={voidRequestHeadingId}
+            aria-describedby={voidRequestDescriptionId}
+            onKeyDown={trapFocusWithin}
+          >
+            <div className="pin-modal-header">
+              <h2 id={voidRequestHeadingId}>Solicitar anulacion</h2>
+              <button
+                type="button"
+                className="account-close-button"
+                onClick={() => setVoidRequestConsumptionId(null)}
+                aria-label="Cerrar solicitud"
+                disabled={voidRequestSubmitting}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p id={voidRequestDescriptionId} className="admin-confirm-copy">
+              La compra de <strong>{formatMoney(voidRequestTarget.total)}</strong> seguira vigente hasta que un administrador revise la solicitud.
+            </p>
+            <form className="form-grid" onSubmit={handleVoidRequest}>
+              <label htmlFor="void-request-reason">Motivo de la solicitud</label>
+              <textarea
+                id="void-request-reason"
+                name="reason"
+                placeholder="Ej. esta compra se registro por error"
+                minLength={3}
+                maxLength={500}
+                required
+                autoFocus
+                disabled={voidRequestSubmitting}
+              />
+              {voidRequestError ? <p className="admin-submit-error" role="alert">{voidRequestError}</p> : null}
+              <div className="modal-actions confirm-action-sheet-actions">
+                <button
+                  ref={voidRequestCancelRef}
+                  type="button"
+                  className="ghost"
+                  onClick={() => setVoidRequestConsumptionId(null)}
+                  disabled={voidRequestSubmitting}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="primary" disabled={voidRequestSubmitting}>
+                  {voidRequestSubmitting ? 'Enviando...' : 'Enviar solicitud'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
       {discardConfirmId ? (
         <div
           className="modal-backdrop confirm-action-sheet-backdrop"

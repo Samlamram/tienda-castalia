@@ -78,7 +78,7 @@ function adminModalSection(type: string): string {
   if (['purchase', 'stock-adjustment', 'reverse-inventory', 'inventory-history', 'bulk-products'].includes(type)) {
     return 'Inventario';
   }
-  if (['payment', 'adjustment', 'reverse-payment', 'reverse-adjustment', 'void-consumption', 'history'].includes(type)) {
+  if (['payment', 'adjustment', 'reverse-payment', 'reverse-adjustment', 'void-consumption', 'history', 'void-requests', 'approve-void-request', 'reject-void-request'].includes(type)) {
     return 'Cobros y movimientos';
   }
   if (type === 'finance-event') return 'Finanzas';
@@ -86,7 +86,7 @@ function adminModalSection(type: string): string {
 }
 
 function isDestructiveAdminModal(type: string, target?: any): boolean {
-  if (['reverse-payment', 'reverse-adjustment', 'void-consumption', 'reverse-inventory', 'remove-user-account'].includes(type)) {
+  if (['reverse-payment', 'reverse-adjustment', 'void-consumption', 'reverse-inventory', 'remove-user-account', 'approve-void-request'].includes(type)) {
     return true;
   }
 
@@ -604,6 +604,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
   const activeAccountsCount = data.accounts.filter((a) => a.status === 'active').length;
   const activeProductsCount = data.products.filter((p) => p.status === 'active').length;
   const totalProductsCount = data.products.length;
+  const pendingVoidRequests = data.consumptionVoidRequests.filter((request) => request.status === 'pending');
   const inventorySummary = data.products.reduce(
     (summary, product) => {
       const stockProjection = data.productStocks.find((entry) => entry.productId === product.id);
@@ -1409,6 +1410,15 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                     <Users size={16} /> Usuarios
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  className={`secondary small admin-void-requests-button ${pendingVoidRequests.length > 0 ? 'has-pending' : ''}`}
+                  onClick={() => setActiveModal({ type: 'void-requests' })}
+                >
+                  <History size={16} /> Solicitudes
+                  {pendingVoidRequests.length > 0 ? <span className="sync-badge">{pendingVoidRequests.length}</span> : null}
+                </button>
               </div>
 
               <SearchFilterIsland
@@ -1427,7 +1437,6 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 compact={chromeCollapsed && !accountQuery.trim() && !searchFocused}
                 onFocusChange={setSearchFocused}
               />
-
               <div className={`admin-smart-list admin-accounts-grid ${accountView === 'users' ? 'admin-users-list' : ''}`}>
                 {accountView === 'accounts' ? (
                   <>
@@ -1983,6 +1992,15 @@ function AdminModalContainer({
 
   const activeAccounts = data.accounts.filter((a) => a.status === 'active');
   const activeUsers = data.users.filter((u) => u.role === 'user' && u.status === 'active');
+  const targetVoidRequest = modal.type === 'approve-void-request' || modal.type === 'reject-void-request'
+    ? data.consumptionVoidRequests.find((request) => request.id === String(modal.target?.id ?? ''))
+    : undefined;
+  const targetVoidConsumption = targetVoidRequest
+    ? data.consumptions.find((consumption) => consumption.id === targetVoidRequest.consumptionId)
+    : undefined;
+  const targetVoidItems = targetVoidRequest
+    ? data.items.filter((item) => item.consumptionId === targetVoidRequest.consumptionId)
+    : [];
   const unassignedUsers = activeUsers.filter((u) => !u.accountId);
   const modalTargetId = typeof modal.target?.id === 'string' ? modal.target.id : '';
   const modalTargetIsUser = data.users.some((entry) => entry.role === 'user' && entry.id === modalTargetId);
@@ -2283,6 +2301,27 @@ function AdminModalContainer({
           onMessage('Consumo anulado y existencias restauradas.');
           break;
 
+        case 'approve-void-request':
+          await adminApi.reviewConsumptionVoidRequest(
+            String(modal.target?.id ?? ''),
+            'approved',
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey(`approve-void-request-${String(modal.target?.id ?? '')}`)
+          );
+          onMessage('Solicitud aprobada. La compra fue anulada y el inventario restaurado.');
+          break;
+
+        case 'reject-void-request':
+          await adminApi.reviewConsumptionVoidRequest(
+            String(modal.target?.id ?? ''),
+            'rejected',
+            String(form.get('reason') ?? ''),
+            adminSession,
+            requestKey(`reject-void-request-${String(modal.target?.id ?? '')}`)
+          );
+          onMessage('Solicitud de anulacion rechazada. La compra sigue vigente.');
+          break;
         case 'adjustment':
           const adjustmentUser = adjScope === 'user'
             ? activeUsers.find((user) => user.id === String(form.get('userId') ?? adjUserId))
@@ -2620,7 +2659,7 @@ function AdminModalContainer({
         className={
           modal.type === 'account-detail'
             ? 'modal account-modal admin-account-detail-modal'
-            : `modal admin-action-modal ${modal.type === 'bulk-products' ? 'wide admin-bulk-modal' : ''} ${modal.type === 'payment' ? 'admin-payment-modal' : ''}`
+            : `modal admin-action-modal ${modal.type === 'bulk-products' ? 'wide admin-bulk-modal' : ''} ${modal.type === 'void-requests' ? 'wide admin-void-requests-modal' : ''} ${modal.type === 'payment' ? 'admin-payment-modal' : ''}`
         }
       >
         {modal.type !== 'account-detail' ? (
@@ -2638,6 +2677,9 @@ function AdminModalContainer({
                 {modal.type === 'reverse-payment' && 'Reversar pago'}
                 {modal.type === 'reverse-adjustment' && 'Reversar ajuste'}
                 {modal.type === 'void-consumption' && 'Anular consumo'}
+                {modal.type === 'void-requests' && 'Solicitudes de anulacion'}
+                {modal.type === 'approve-void-request' && 'Aprobar y anular compra'}
+                {modal.type === 'reject-void-request' && 'Rechazar solicitud'}
                 {modal.type === 'reverse-inventory' && 'Reversar movimiento de inventario'}
                 {modal.type === 'assign-user' && 'Agregar usuario a cuenta'}
                 {modal.type === 'adjustment' && 'Realizar ajuste manual'}
@@ -2912,6 +2954,63 @@ function AdminModalContainer({
             ) : null}
 
           </>
+        ) : modal.type === 'void-requests' ? (
+          <div className="admin-history-modal-body admin-void-requests-body">
+            <div className="admin-void-requests-summary">
+              <strong>{data.consumptionVoidRequests.filter((request) => request.status === 'pending').length} pendientes</strong>
+              <span>Aprobar ejecuta la reversion; rechazar conserva la compra vigente.</span>
+            </div>
+            <div className="table-list">
+              {data.consumptionVoidRequests.map((request) => {
+                const consumption = data.consumptions.find((entry) => entry.id === request.consumptionId);
+                const account = data.accounts.find((entry) => entry.id === consumption?.accountId);
+                const requestItems = data.items.filter((item) => item.consumptionId === request.consumptionId);
+                return (
+                  <article className={`history-row void-request-row request-${request.status}`} key={request.id}>
+                    <div className="void-request-copy">
+                      <div className="void-request-title-line">
+                        <strong>{request.requestedByName ?? 'Usuario'}</strong>
+                        <span>{consumption ? formatMoney(consumption.total) : 'Compra no disponible'}</span>
+                      </div>
+                      <p>{account?.name ?? 'Sin cuenta'} · {new Date(request.createdAt).toLocaleString('es-CO')}</p>
+                      <small>{requestItems.map((item) => `${item.productName} x${item.quantity}`).join(', ') || 'Sin detalle de productos'}</small>
+                      <blockquote>{request.reason}</blockquote>
+                      {request.status !== 'pending' ? (
+                        <small className={request.status === 'rejected' ? 'danger-text' : 'status-pill ok'}>
+                          {request.status === 'approved' ? 'Aprobada' : 'Rechazada'} por {request.reviewedByName ?? 'Administrador'}
+                          {request.decisionReason ? `: ${request.decisionReason}` : ''}
+                        </small>
+                      ) : null}
+                    </div>
+                    <span className={request.status === 'pending' ? 'status-pill warn' : request.status === 'approved' ? 'status-pill ok' : 'status-pill muted'}>
+                      {request.status === 'pending' ? 'Pendiente' : request.status === 'approved' ? 'Aprobada' : 'Rechazada'}
+                    </span>
+                    {request.status === 'pending' ? (
+                      <div className="void-request-actions">
+                        <button
+                          type="button"
+                          className="ghost small"
+                          onClick={() => onSwitchModal?.({ type: 'reject-void-request', target: request })}
+                        >
+                          Rechazar
+                        </button>
+                        <button
+                          type="button"
+                          className="primary small danger"
+                          onClick={() => onSwitchModal?.({ type: 'approve-void-request', target: request })}
+                        >
+                          Aprobar y anular
+                        </button>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+              {data.consumptionVoidRequests.length === 0 ? (
+                <p className="admin-empty-state">No hay solicitudes de anulacion.</p>
+              ) : null}
+            </div>
+          </div>
         ) : modal.type === 'history' ? (
           <div className="admin-history-modal-body">
             <div className="table-list">
@@ -3411,10 +3510,40 @@ function AdminModalContainer({
               </>
             )}
 
+            {(modal.type === 'approve-void-request' || modal.type === 'reject-void-request') && targetVoidRequest && (
+              <>
+                <div className="void-request-review-card">
+                  <strong>
+                    {targetVoidRequest.requestedByName ?? 'Usuario'} · {targetVoidConsumption ? formatMoney(targetVoidConsumption.total) : 'Compra no disponible'}
+                  </strong>
+                  <small>{targetVoidItems.map((item) => `${item.productName} x${item.quantity}`).join(', ') || 'Sin detalle de productos'}</small>
+                  <blockquote>{targetVoidRequest.reason}</blockquote>
+                </div>
+                {modal.type === 'approve-void-request' ? (
+                  <p className="admin-confirm-copy">
+                    Se anulara la compra, se restaurara el inventario y se revertiran sus aplicaciones de pago. El registro original se conserva.
+                  </p>
+                ) : (
+                  <p className="admin-confirm-copy">La compra seguira vigente y el usuario vera el motivo del rechazo.</p>
+                )}
+                <label htmlFor="void-request-decision-reason">
+                  {modal.type === 'approve-void-request' ? 'Nota del administrador (opcional)' : 'Motivo del rechazo'}
+                </label>
+                <textarea
+                  id="void-request-decision-reason"
+                  name="reason"
+                  placeholder={modal.type === 'approve-void-request' ? 'Observacion adicional' : 'Explica por que se rechaza'}
+                  minLength={modal.type === 'reject-void-request' ? 3 : undefined}
+                  maxLength={500}
+                  required={modal.type === 'reject-void-request'}
+                />
+              </>
+            )}
+
             {modal.type === 'reverse-inventory' && (
               <>
                 <p className="muted">
-                  Se conservará el movimiento original y se registrará su inverso sin recalcular el historial previo.
+                  Se conservarÃ¡ el movimiento original y se registrarÃ¡ su inverso sin recalcular el historial previo.
                 </p>
                 <label htmlFor="reverse-inventory-reason">Motivo del reverso</label>
                 <textarea
@@ -3426,7 +3555,6 @@ function AdminModalContainer({
                 />
               </>
             )}
-
             {modal.type === 'adjustment' && (
               <>
                 <label>Alcance</label>
@@ -3778,7 +3906,11 @@ function AdminModalContainer({
                 modal.type === 'remove-user-account' ||
                 modal.type === 'bulk-products'
                   ? 'Confirmar'
-                  : 'Guardar'}
+                  : modal.type === 'approve-void-request'
+                    ? 'Aprobar y anular'
+                    : modal.type === 'reject-void-request'
+                      ? 'Rechazar solicitud'
+                      : 'Guardar'}
               </button>
             </div>
           </form>

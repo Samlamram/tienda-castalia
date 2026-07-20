@@ -15,6 +15,7 @@ import type {
   ConsumptionCost,
   ConsumptionItem,
   ConsumptionPaymentStatus,
+  ConsumptionVoidRequest,
   FifoCostAllocation,
   FinancialMovement,
   FinancialMovementType,
@@ -224,6 +225,24 @@ function mapConsumptionItem(input: unknown): ConsumptionItem {
     costTotal: numberValue(item, ['costTotal', 'cost_total']),
     pendingCostQuantity: numberValue(item, ['pendingCostQuantity', 'pending_cost_quantity']),
     costStatus: costStatus === 'final' ? 'final' : 'pending_inventory',
+    createdAt: textValue(item, ['createdAt', 'created_at'])
+  };
+}
+
+export function mapConsumptionVoidRequest(input: unknown): ConsumptionVoidRequest {
+  const item = row(input);
+  const status = value(item, 'status');
+  return {
+    id: textValue(item, ['id']),
+    consumptionId: textValue(item, ['consumptionId', 'consumption_id']),
+    requestedByUserId: textValue(item, ['requestedByUserId', 'requested_by_user_id']),
+    requestedByName: optionalText(item, ['requestedByName', 'requested_by_name']),
+    reason: textValue(item, ['reason']),
+    status: status === 'approved' || status === 'rejected' ? status : 'pending',
+    reviewedByUserId: optionalText(item, ['reviewedByUserId', 'reviewed_by_user_id']),
+    reviewedByName: optionalText(item, ['reviewedByName', 'reviewed_by_name']),
+    reviewedAt: optionalText(item, ['reviewedAt', 'reviewed_at']),
+    decisionReason: optionalText(item, ['decisionReason', 'decision_reason']),
     createdAt: textValue(item, ['createdAt', 'created_at'])
   };
 }
@@ -516,6 +535,11 @@ export function mapAdminSnapshot(input: unknown): AdminSnapshot {
     userBalances,
     accountBalances,
     consumptionPaymentStatuses,
+    consumptionVoidRequests: arrayValue(
+      payload,
+      'consumptionVoidRequests',
+      'consumption_void_requests'
+    ).map(mapConsumptionVoidRequest),
     catalogVersion: numberValue(payload, ['catalogVersion', 'catalog_version']),
     generatedAt: textValue(payload, ['generatedAt', 'generated_at'], new Date().toISOString())
   };
@@ -555,9 +579,10 @@ export async function loadAdminSnapshot(session: AppSession | undefined): Promis
   const activeSession = requireAdminOnline(session);
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase no esta configurado.');
-  const [{ data, error }, financeResult] = await Promise.all([
+  const [{ data, error }, financeResult, voidRequestsResult] = await Promise.all([
     supabase.rpc('admin_get_snapshot', { p_session_token: activeSession.token }),
-    supabase.rpc('admin_get_finance_events', { p_session_token: activeSession.token })
+    supabase.rpc('admin_get_finance_events', { p_session_token: activeSession.token }),
+    supabase.rpc('get_consumption_void_requests', { p_session_token: activeSession.token })
   ]);
   if (error) throw new Error(error.message);
   const snapshot = mapAdminSnapshot(data);
@@ -566,7 +591,10 @@ export async function loadAdminSnapshot(session: AppSession | undefined): Promis
     // Keep the existing admin usable while the additive finance migration is being deployed.
     financeEvents: financeResult.error
       ? []
-      : arrayValue(row(financeResult.data), 'items', 'financeEvents', 'finance_events').map(mapStoreFinanceEvent)
+      : arrayValue(row(financeResult.data), 'items', 'financeEvents', 'finance_events').map(mapStoreFinanceEvent),
+    consumptionVoidRequests: voidRequestsResult.error
+      ? []
+      : arrayValue(row(voidRequestsResult.data), 'items', 'requests').map(mapConsumptionVoidRequest)
   };
 }
 
@@ -750,6 +778,29 @@ export async function applyBulkProductOperation(
 export async function voidConsumption(consumptionId: string, reason: string, session?: AppSession, idempotencyKey?: string): Promise<void> {
   if (!reason.trim()) throw new Error('El motivo de anulación es obligatorio.');
   await adminCommand(session, 'void_consumption', { consumptionId, reason: reason.trim() }, idempotencyKey);
+}
+
+export async function reviewConsumptionVoidRequest(
+  requestId: string,
+  decision: 'approved' | 'rejected',
+  reason: string,
+  session?: AppSession,
+  idempotencyKey?: string
+): Promise<void> {
+  const activeSession = requireAdminOnline(session);
+  if (decision === 'rejected' && reason.trim().length < 3) {
+    throw new Error('Escribe un motivo de rechazo de al menos 3 caracteres.');
+  }
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase no esta configurado.');
+  const { error } = await supabase.rpc('admin_review_consumption_void_request', {
+    p_session_token: activeSession.token,
+    p_idempotency_key: idempotencyKey ?? crypto.randomUUID(),
+    p_request_id: requestId,
+    p_decision: decision,
+    p_reason: reason.trim() || null
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function independizeUser(

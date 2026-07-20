@@ -31,6 +31,7 @@ drop table if exists public.fifo_cost_allocations cascade;
 drop table if exists public.inventory_movements cascade;
 drop table if exists public.payment_applications cascade;
 drop table if exists public.financial_movements cascade;
+drop table if exists public.consumption_void_requests cascade;
 drop table if exists public.consumption_items cascade;
 drop table if exists public.consumptions cascade;
 drop table if exists public.products cascade;

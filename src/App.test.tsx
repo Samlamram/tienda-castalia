@@ -119,6 +119,7 @@ async function submitLogin(username: string, pin: string): Promise<void> {
 describe('App con Supabase como fuente oficial', () => {
   beforeEach(() => {
     mocks.online = true;
+    window.sessionStorage.clear();
     setNavigatorOnline(true);
     mocks.initializeLocalDatabase.mockReset().mockResolvedValue(undefined);
     mocks.getStoredSession.mockReset().mockResolvedValue(null);
@@ -142,6 +143,48 @@ describe('App con Supabase como fuente oficial', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllTimers();
+  });
+
+  it('conserva el usuario escrito y mueve el foco al PIN con Enter', async () => {
+    const firstRender = render(<App />);
+    const username = await screen.findByPlaceholderText('Usuario');
+    const password = screen.getByPlaceholderText(/PIN de acceso/i);
+
+    expect(username).toHaveFocus();
+
+    fireEvent.change(username, { target: { value: 'Papa' } });
+    fireEvent.keyDown(username, { key: 'Enter', code: 'Enter' });
+
+    expect(password).toHaveFocus();
+    expect(window.sessionStorage.getItem('castalia.login.username')).toBe('Papa');
+
+    firstRender.unmount();
+    render(<App />);
+
+    expect(await screen.findByPlaceholderText('Usuario')).toHaveValue('Papa');
+  });
+
+  it('mantiene el usuario y devuelve el foco al PIN cuando falla el acceso', async () => {
+    mocks.loginPin.mockRejectedValue(new Error('Credenciales invalidas.'));
+    render(<App />);
+
+    const username = await screen.findByPlaceholderText('Usuario');
+    const password = screen.getByPlaceholderText(/PIN de acceso/i);
+
+    fireEvent.change(username, { target: { value: 'Papa' } });
+    fireEvent.change(password, { target: { value: '9999' } });
+    username.focus();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+      await Promise.resolve();
+    });
+
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts.every((alert) => alert.textContent?.includes('Credenciales invalidas.'))).toBe(true);
+    expect(password).toHaveFocus();
+    expect(username).toHaveValue('Papa');
+    expect(window.sessionStorage.getItem('castalia.login.username')).toBe('Papa');
   });
 
   it('autentica un usuario online, refresca catalogo y abre el kiosco cacheable', async () => {

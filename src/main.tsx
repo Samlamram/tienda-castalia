@@ -2,11 +2,17 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './App';
+import { publishAppUpdate } from './services/appUpdate';
 import './styles.css';
 import './castalia-viva.css';
 
 if (import.meta.env.PROD) {
-  registerSW({ immediate: true });
+  registerSW({
+    immediate: true,
+    onNeedReload: () => {
+      publishAppUpdate(() => window.location.reload());
+    }
+  });
 } else if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     registrations.forEach((registration) => void registration.unregister());

@@ -461,6 +461,46 @@ select:focus {
   }
 }
 
+.app-update-prompt {
+  position: fixed;
+  right: max(24px, var(--safe-right));
+  bottom: calc(24px + var(--safe-bottom));
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(460px, calc(100vw - 48px));
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-xl);
+  animation: toast-in 0.35s var(--ease);
+}
+
+.app-update-prompt span {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.app-update-prompt button {
+  min-height: 38px;
+  flex: 0 0 auto;
+  padding: 0 14px;
+}
+
+@media (max-width: 480px) {
+  .app-update-prompt {
+    right: max(16px, var(--safe-right));
+    bottom: calc(16px + var(--safe-bottom));
+    left: max(16px, var(--safe-left));
+    max-width: none;
+    justify-content: space-between;
+  }
+}
+
 /* ── Page Layouts ── */
 .page-grid,
 .admin-layout,
@@ -2434,7 +2474,7 @@ select:focus {
 
 .login-screen {
   height: auto;
-  min-height: 100dvh;
+  min-height: var(--visual-viewport-height);
   display: grid;
   place-items: center;
   padding: calc(24px + var(--safe-top)) max(24px, var(--safe-right)) calc(24px + var(--safe-bottom)) max(24px, var(--safe-left));
@@ -2447,7 +2487,7 @@ select:focus {
 .app-shell:has(.login-screen) {
   position: relative;
   width: 100%;
-  min-height: 100dvh;
+  min-height: var(--visual-viewport-height);
   height: auto;
   padding: 0;
   background: var(--brand-evergreen);
@@ -2571,6 +2611,7 @@ select:focus {
   min-height: 52px;
   border-radius: 14px;
   border: 1px solid rgba(157, 204, 120, 0.18);
+  scroll-margin-block: 20px;
 }
 
 .login-inputs-group input::placeholder {
@@ -10510,5 +10551,130 @@ body,
 
   .pending-history-group {
     padding: 10px;
+  }
+}
+/* Consumption void requests */
+.admin-void-requests-button {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.admin-void-requests-button.has-pending {
+  color: #8a4a0a;
+  background: #fff7e8;
+  border-color: #efc777;
+}
+
+.history-card-note.void-request-pending {
+  color: #74500d;
+  background: #fff7df;
+}
+
+.history-void-request-action {
+  justify-self: end;
+  margin-top: 2px;
+}
+
+.void-request-sheet textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.admin-void-requests-modal {
+  width: min(880px, calc(100vw - 28px));
+}
+
+.admin-void-requests-body {
+  display: grid;
+  gap: 14px;
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  padding: 2px 4px 4px;
+}
+
+.admin-void-requests-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+}
+
+.admin-void-requests-summary strong {
+  color: var(--text-primary);
+}
+
+.void-request-row {
+  align-items: start;
+}
+
+.void-request-copy,
+.void-request-review-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.void-request-title-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.void-request-copy blockquote,
+.void-request-review-card blockquote {
+  margin: 2px 0 0;
+  padding: 9px 11px;
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+  background: var(--surface);
+  font-size: 0.86rem;
+}
+
+.void-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.void-request-actions .primary.danger {
+  color: #fff;
+  background: var(--danger);
+}
+
+.void-request-review-card {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+@media (max-width: 700px) {
+  .admin-void-requests-button {
+    justify-self: stretch;
+    justify-content: center;
+  }
+
+  .admin-void-requests-summary,
+  .void-request-title-line {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .void-request-row {
+    grid-template-columns: 1fr;
+  }
+
+  .void-request-actions {
+    justify-content: stretch;
+  }
+
+  .void-request-actions button {
+    flex: 1 1 140px;
   }
 }

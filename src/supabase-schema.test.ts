@@ -23,6 +23,10 @@ const userAccountActivityMigration = readFileSync(
   join(process.cwd(), 'supabase', 'migrations', '202607180001_user_account_activity.sql'),
   'utf8'
 );
+const consumptionVoidRequestsMigration = readFileSync(
+  join(process.cwd(), 'supabase', 'migrations', '202607190001_consumption_void_requests.sql'),
+  'utf8'
+);
 const sheetsWebhooks = readFileSync(
   join(process.cwd(), 'supabase', 'apps-script-webhooks.sql'),
   'utf8'
@@ -35,13 +39,14 @@ function capturedNames(pattern: RegExp): string[] {
 }
 
 describe('contrato del esquema oficial', () => {
-  it('mantiene exactamente las 13 tablas y las 5 vistas aprobadas', () => {
+  it('mantiene exactamente las 14 tablas y las 5 vistas aprobadas', () => {
     expect(capturedNames(/create table public\.([a-z_]+)/gi)).toEqual([
       'accounts',
       'app_sessions',
       'app_users',
       'audit_log',
       'consumption_items',
+      'consumption_void_requests',
       'consumptions',
       'fifo_cost_allocations',
       'financial_movements',
@@ -78,6 +83,9 @@ describe('contrato del esquema oficial', () => {
       'get_user_catalog',
       'create_consumption',
       'get_user_account_activity',
+      'request_consumption_void',
+      'get_consumption_void_requests',
+      'admin_review_consumption_void_request',
       'admin_get_snapshot',
       'admin_command',
       'admin_get_audit_log',
@@ -151,7 +159,7 @@ describe('contrato del esquema oficial', () => {
 
   it('mantiene la migracion reproducible sincronizada con schema.sql', () => {
     expect(schema.trim()).toBe(
-      `${migration.trim()}\n\n${financeMigration.trim()}\n\n${priceHistoryMigration.trim()}\n\n${productImagesMigration.trim()}\n\n${userAccountActivityMigration.trim()}`
+      `${migration.trim()}\n\n${financeMigration.trim()}\n\n${priceHistoryMigration.trim()}\n\n${productImagesMigration.trim()}\n\n${userAccountActivityMigration.trim()}\n\n${consumptionVoidRequestsMigration.trim()}`
     );
   });
 });

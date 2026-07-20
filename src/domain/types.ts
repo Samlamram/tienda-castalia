@@ -1,5 +1,6 @@
 export type EntityStatus = 'active' | 'inactive';
 export type ConsumptionStatus = 'confirmed' | 'voided';
+export type ConsumptionVoidRequestStatus = 'pending' | 'approved' | 'rejected';
 export type CostStatus = 'final' | 'pending_inventory';
 export type AppRole = 'admin' | 'user';
 export type DeviceMode = 'personal' | 'shared';
@@ -138,6 +139,20 @@ export interface ConsumptionItem {
  * Immutable financial entry. Payment amounts reduce debt; adjustment amounts are
  * signed debt changes. A reversal is another entry linked through reversalOfId.
  */
+export interface ConsumptionVoidRequest {
+  id: string;
+  consumptionId: string;
+  requestedByUserId: string;
+  requestedByName?: string;
+  reason: string;
+  status: ConsumptionVoidRequestStatus;
+  reviewedByUserId?: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+  decisionReason?: string;
+  createdAt: string;
+}
+
 export interface FinancialMovement {
   id: string;
   accountId?: string;
@@ -353,6 +368,7 @@ export interface AdminSnapshot {
   userBalances: UserBalance[];
   accountBalances: AccountBalance[];
   consumptionPaymentStatuses: ConsumptionPaymentStatus[];
+  consumptionVoidRequests: ConsumptionVoidRequest[];
   catalogVersion: number;
   generatedAt: string;
 }
@@ -418,4 +434,5 @@ export interface TiendaViewData {
   productStocks: ProductStock[];
   consumptionCosts: ConsumptionCost[];
   consumptionPaymentStatuses: ConsumptionPaymentStatus[];
+  consumptionVoidRequests: ConsumptionVoidRequest[];
 }

@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
 import { AppToast, type ToastTone } from './components/AppToast';
@@ -28,7 +28,9 @@ import {
   RETRYABLE_CONSUMPTION_MESSAGE,
   syncPendingConsumptions
 } from './services/consumptions';
+import { subscribeToAppUpdate, type ApplyAppUpdate } from './services/appUpdate';
 import { isSyncConfigured } from './services/sync';
+import { requestConsumptionVoid } from './services/voidRequests';
 
 const SYNC_IDLE_INTERVAL_MS = 30_000;
 const SYNC_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000] as const;
@@ -51,6 +53,7 @@ export function App() {
   const sessionRef = useRef<AuthSession | null>(null);
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<ToastTone>();
+  const [availableUpdate, setAvailableUpdate] = useState<ApplyAppUpdate | null>(null);
   const [userActivityRefreshVersion, setUserActivityRefreshVersion] = useState(0);
   const [userActivityState, setUserActivityState] = useState<{
     token: string;
@@ -80,6 +83,10 @@ export function App() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => subscribeToAppUpdate((applyUpdate) => {
+    setAvailableUpdate(() => applyUpdate);
+  }), []);
 
   useEffect(() => {
     const activeSession = session?.role === 'user' ? session.cloudSession : null;
@@ -380,6 +387,12 @@ export function App() {
     await discardReviewedConsumption(session.userId, pendingId);
   }
 
+  async function handleRequestConsumptionVoid(consumptionId: string, reason: string) {
+    const userSession = session?.role === 'user' ? session.cloudSession : undefined;
+    await requestConsumptionVoid(userSession, consumptionId, reason);
+    setUserActivityRefreshVersion((current) => current + 1);
+  }
+
   if (!ready) {
     return (
       <LoadingExperience
@@ -396,6 +409,15 @@ export function App() {
         session?.role === 'user' ? 'app-shell user-shell' : session?.role === 'admin' ? 'app-shell admin-shell' : 'app-shell'
       }
     >
+      {availableUpdate ? (
+        <aside className="app-update-prompt" role="status" aria-live="polite">
+          <span>Hay una nueva version disponible.</span>
+          <button type="button" onClick={availableUpdate}>
+            Actualizar ahora
+          </button>
+        </aside>
+      ) : null}
+
       {message ? <AppToast message={message} tone={messageTone} onClose={closeMessage} /> : null}
 
       {!session ? <LoginScreen onLogin={handleAuthenticatedSession} onMessage={showMessage} /> : null}
@@ -411,6 +433,7 @@ export function App() {
           onConfirmConsumption={handleConfirmConsumption}
           onRetryPendingConsumption={handleRetryPendingConsumption}
           onDiscardPendingConsumption={handleDiscardPendingConsumption}
+          onRequestConsumptionVoid={handleRequestConsumptionVoid}
         />
       ) : null}
 
@@ -497,13 +520,48 @@ function normalizeLogin(value: string): string {
   return value.trim().toLowerCase();
 }
 
+const LOGIN_USERNAME_DRAFT_KEY = 'castalia.login.username';
+
+function readLoginUsernameDraft(): string {
+  if (typeof window === 'undefined') return '';
+
+  try {
+    return window.sessionStorage.getItem(LOGIN_USERNAME_DRAFT_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function storeLoginUsernameDraft(value: string): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (value) {
+      window.sessionStorage.setItem(LOGIN_USERNAME_DRAFT_KEY, value);
+    } else {
+      window.sessionStorage.removeItem(LOGIN_USERNAME_DRAFT_KEY);
+    }
+  } catch {
+    // El login sigue funcionando aunque el navegador bloquee sessionStorage.
+  }
+}
+
 function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(readLoginUsernameDraft);
   const [password, setPassword] = useState('');
   const [personalDevice, setPersonalDevice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [helpMessage, setHelpMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const input = usernameInputRef.current;
+    if (input && document.activeElement === document.body) {
+      input.focus({ preventScroll: true });
+    }
+  }, []);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -515,12 +573,15 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
         deviceMode: personalDevice ? 'personal' : 'shared'
       });
       await onLogin(appSession);
+      storeLoginUsernameDraft('');
       setUsername('');
       setPassword('');
     } catch (error) {
       const loginError = error instanceof Error ? error.message : 'El usuario o el PIN no coinciden. Intentalo de nuevo.';
       setError(loginError);
       onMessage(loginError);
+      passwordInputRef.current?.focus({ preventScroll: true });
+      passwordInputRef.current?.select();
       if ('vibrate' in navigator) {
         navigator.vibrate([100, 50, 100]);
       }
@@ -531,8 +592,16 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
 
   function handleUsernameChange(value: string) {
     setUsername(value);
+    storeLoginUsernameDraft(value);
     if (error) setError(null);
     if (helpMessage) setHelpMessage(null);
+  }
+
+  function handleUsernameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing || !normalizeLogin(username)) return;
+
+    event.preventDefault();
+    passwordInputRef.current?.focus({ preventScroll: true });
   }
 
   function handlePasswordChange(value: string) {
@@ -555,13 +624,18 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
           <label className="login-field">
             <span>Usuario</span>
             <input
+              ref={usernameInputRef}
               id="username"
               name="username"
               type="text"
               value={username}
               onChange={(event) => handleUsernameChange(event.target.value)}
+              onKeyDown={handleUsernameKeyDown}
               placeholder="Usuario"
               autoComplete="username"
+              autoCapitalize="none"
+              enterKeyHint="next"
+              spellCheck={false}
               required
               className={error ? 'input-error' : ''}
             />
@@ -569,6 +643,7 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
           <label className="login-field">
             <span>PIN de acceso</span>
             <input
+              ref={passwordInputRef}
               id="password"
               name="password"
               value={password}
@@ -576,6 +651,7 @@ function LoginScreen({ onLogin, onMessage }: LoginScreenProps) {
               placeholder="PIN de acceso"
               type="password"
               inputMode="numeric"
+              enterKeyHint="go"
               autoComplete="current-password"
               required
               className={error ? 'input-error' : ''}

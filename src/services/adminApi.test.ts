@@ -87,6 +87,17 @@ describe('mapper del snapshot administrativo', () => {
           request_id: '00000000-0000-4000-8000-000000000010',
           created_at: '2026-07-14T09:00:00.000Z'
         }
+      ],
+      consumption_void_requests: [
+        {
+          id: '00000000-0000-4000-8000-000000000011',
+          consumption_id: '00000000-0000-4000-8000-000000000004',
+          requested_by_user_id: '00000000-0000-4000-8000-000000000002',
+          requested_by_name: 'Papa',
+          reason: 'Compra registrada por error',
+          status: 'pending',
+          created_at: '2026-07-14T14:00:00.000Z'
+        }
       ]
     });
 
@@ -99,6 +110,12 @@ describe('mapper del snapshot administrativo', () => {
       paid: 60,
       openAmount: 40,
       status: 'partial'
+    });
+    expect(snapshot.consumptionVoidRequests[0]).toMatchObject({
+      consumptionId: '00000000-0000-4000-8000-000000000004',
+      requestedByName: 'Papa',
+      reason: 'Compra registrada por error',
+      status: 'pending'
     });
   });
 
