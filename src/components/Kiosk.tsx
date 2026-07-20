@@ -270,10 +270,13 @@ function UserSession({
   const voidRequestHeadingId = useId();
   const voidRequestDescriptionId = useId();
   const overlaysOpen = checkout || accountDetailOpen || pinModalOpen || profileMenuOpen || syncPanelOpen || Boolean(discardConfirmId) || Boolean(voidRequestConsumptionId);
+  const chromePinned = accountDetailOpen || pinModalOpen || profileMenuOpen || syncPanelOpen || Boolean(discardConfirmId) || Boolean(voidRequestConsumptionId);
   const { collapsed } = useCollapsibleChrome({
     scroller: 'window',
     enabled: mobileChromeEnabled,
-    pinned: overlaysOpen || headerFocused || searchFocused,
+    // Checkout must preserve the chrome exactly as the user left it. Other
+    // overlays still pin it open because they are launched from the header.
+    pinned: chromePinned || headerFocused || searchFocused,
     resetKey: user.id
   });
 

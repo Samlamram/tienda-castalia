@@ -1532,7 +1532,7 @@
   .admin-session .catalog-search-filters,
   .kiosk-session .search-filter-island,
   .admin-session .search-filter-island {
-    top: calc(var(--safe-top) + 6px);
+    top: calc(var(--safe-top) + 6px + var(--catalog-header-reveal, 0px));
     /* The mobile workspace already reserves the expanded header height.
        Translating this island by that height again left the intended slot
        empty and painted the controls over the first catalog row. */
