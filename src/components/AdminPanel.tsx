@@ -1413,11 +1413,19 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
 
                 <button
                   type="button"
-                  className={`secondary small admin-void-requests-button ${pendingVoidRequests.length > 0 ? 'has-pending' : ''}`}
+                  className={`secondary admin-void-requests-button ${pendingVoidRequests.length > 0 ? 'has-pending' : ''}`}
                   onClick={() => setActiveModal({ type: 'void-requests' })}
                 >
-                  <History size={16} /> Solicitudes
-                  {pendingVoidRequests.length > 0 ? <span className="sync-badge">{pendingVoidRequests.length}</span> : null}
+                  <span className="admin-void-requests-button-icon" aria-hidden="true">
+                    <History size={18} />
+                  </span>
+                  <span className="admin-void-requests-button-copy">
+                    <strong>Solicitudes pendientes</strong>
+                    <small>Revisar anulaciones</small>
+                  </span>
+                  <span className="admin-void-requests-count" aria-label={`${pendingVoidRequests.length} pendientes`}>
+                    {pendingVoidRequests.length}
+                  </span>
                 </button>
               </div>
 
@@ -2002,6 +2010,10 @@ function AdminModalContainer({
     ? data.items.filter((item) => item.consumptionId === targetVoidRequest.consumptionId)
     : [];
   const unassignedUsers = activeUsers.filter((u) => !u.accountId);
+  const sortedVoidRequests = [...data.consumptionVoidRequests]
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const pendingModalVoidRequests = sortedVoidRequests.filter((request) => request.status === 'pending');
+  const reviewedVoidRequests = sortedVoidRequests.filter((request) => request.status !== 'pending');
   const modalTargetId = typeof modal.target?.id === 'string' ? modal.target.id : '';
   const modalTargetIsUser = data.users.some((entry) => entry.role === 'user' && entry.id === modalTargetId);
   const modalTargetIsAccount = data.accounts.some((entry) => entry.id === modalTargetId);
@@ -2677,7 +2689,7 @@ function AdminModalContainer({
                 {modal.type === 'reverse-payment' && 'Reversar pago'}
                 {modal.type === 'reverse-adjustment' && 'Reversar ajuste'}
                 {modal.type === 'void-consumption' && 'Anular consumo'}
-                {modal.type === 'void-requests' && 'Solicitudes de anulacion'}
+                {modal.type === 'void-requests' && 'Solicitudes de anulaci\u00f3n'}
                 {modal.type === 'approve-void-request' && 'Aprobar y anular compra'}
                 {modal.type === 'reject-void-request' && 'Rechazar solicitud'}
                 {modal.type === 'reverse-inventory' && 'Reversar movimiento de inventario'}
@@ -2956,60 +2968,142 @@ function AdminModalContainer({
           </>
         ) : modal.type === 'void-requests' ? (
           <div className="admin-history-modal-body admin-void-requests-body">
-            <div className="admin-void-requests-summary">
-              <strong>{data.consumptionVoidRequests.filter((request) => request.status === 'pending').length} pendientes</strong>
-              <span>Aprobar ejecuta la reversion; rechazar conserva la compra vigente.</span>
-            </div>
-            <div className="table-list">
-              {data.consumptionVoidRequests.map((request) => {
-                const consumption = data.consumptions.find((entry) => entry.id === request.consumptionId);
-                const account = data.accounts.find((entry) => entry.id === consumption?.accountId);
-                const requestItems = data.items.filter((item) => item.consumptionId === request.consumptionId);
-                return (
-                  <article className={`history-row void-request-row request-${request.status}`} key={request.id}>
-                    <div className="void-request-copy">
-                      <div className="void-request-title-line">
-                        <strong>{request.requestedByName ?? 'Usuario'}</strong>
-                        <span>{consumption ? formatMoney(consumption.total) : 'Compra no disponible'}</span>
-                      </div>
-                      <p>{account?.name ?? 'Sin cuenta'} · {new Date(request.createdAt).toLocaleString('es-CO')}</p>
-                      <small>{requestItems.map((item) => `${item.productName} x${item.quantity}`).join(', ') || 'Sin detalle de productos'}</small>
-                      <blockquote>{request.reason}</blockquote>
-                      {request.status !== 'pending' ? (
-                        <small className={request.status === 'rejected' ? 'danger-text' : 'status-pill ok'}>
-                          {request.status === 'approved' ? 'Aprobada' : 'Rechazada'} por {request.reviewedByName ?? 'Administrador'}
-                          {request.decisionReason ? `: ${request.decisionReason}` : ''}
-                        </small>
-                      ) : null}
-                    </div>
-                    <span className={request.status === 'pending' ? 'status-pill warn' : request.status === 'approved' ? 'status-pill ok' : 'status-pill muted'}>
-                      {request.status === 'pending' ? 'Pendiente' : request.status === 'approved' ? 'Aprobada' : 'Rechazada'}
-                    </span>
-                    {request.status === 'pending' ? (
-                      <div className="void-request-actions">
-                        <button
-                          type="button"
-                          className="ghost small"
-                          onClick={() => onSwitchModal?.({ type: 'reject-void-request', target: request })}
-                        >
-                          Rechazar
-                        </button>
-                        <button
-                          type="button"
-                          className="primary small danger"
-                          onClick={() => onSwitchModal?.({ type: 'approve-void-request', target: request })}
-                        >
-                          Aprobar y anular
-                        </button>
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })}
-              {data.consumptionVoidRequests.length === 0 ? (
-                <p className="admin-empty-state">No hay solicitudes de anulacion.</p>
-              ) : null}
-            </div>
+            <section className="void-request-section" aria-labelledby="pending-void-requests-heading">
+              <header className="void-request-section-heading">
+                <span className="void-request-section-icon is-pending" aria-hidden="true">
+                  <History size={20} />
+                </span>
+                <span className="void-request-section-copy">
+                  <small>POR REVISAR</small>
+                  <strong id="pending-void-requests-heading">Pendientes</strong>
+                </span>
+                <span className="void-request-section-count">{pendingModalVoidRequests.length}</span>
+              </header>
+
+              {pendingModalVoidRequests.length > 0 ? (
+                <div className="void-request-checkout-list">
+                  {pendingModalVoidRequests.map((request) => {
+                    const consumption = data.consumptions.find((entry) => entry.id === request.consumptionId);
+                    const account = data.accounts.find((entry) => entry.id === consumption?.accountId);
+                    const requestItems = data.items.filter((item) => item.consumptionId === request.consumptionId);
+                    return (
+                      <article className="void-request-card request-pending" key={request.id}>
+                        <header className="void-request-card-header">
+                          <span className="void-request-requester-icon" aria-hidden="true">
+                            <User size={19} />
+                          </span>
+                          <span className="void-request-card-title">
+                            <strong>{request.requestedByName ?? 'Usuario'}</strong>
+                            <small>
+                              {account?.name ?? 'Sin cuenta'} · {new Date(request.createdAt).toLocaleString('es-CO')}
+                            </small>
+                          </span>
+                          <span className="void-request-total">
+                            <small>Total</small>
+                            <strong>{consumption ? formatMoney(consumption.total) : 'No disponible'}</strong>
+                          </span>
+                        </header>
+
+                        <div className="void-request-products" aria-label="Productos de la compra">
+                          {requestItems.map((item) => (
+                            <div className="void-request-product-row" key={item.id}>
+                              <span className="void-request-product-icon" aria-hidden="true">
+                                <Package size={17} />
+                              </span>
+                              <span className="void-request-product-copy">
+                                <strong>{item.productName}</strong>
+                                <small>{formatMoney(item.unitPrice)} c/u</small>
+                              </span>
+                              <span className="void-request-product-quantity">×{item.quantity}</span>
+                              <strong>{formatMoney(item.total)}</strong>
+                            </div>
+                          ))}
+                          {requestItems.length === 0 ? (
+                            <span className="void-request-products-empty">Sin detalle de productos</span>
+                          ) : null}
+                        </div>
+
+                        <div className="void-request-reason">
+                          <ReceiptText size={17} aria-hidden="true" />
+                          <span>
+                            <small>Motivo de la solicitud</small>
+                            <p>{request.reason}</p>
+                          </span>
+                        </div>
+
+                        <footer className="void-request-actions">
+                          <button
+                            type="button"
+                            className="ghost small void-request-reject-action"
+                            onClick={() => onSwitchModal?.({ type: 'reject-void-request', target: request })}
+                          >
+                            <X size={16} /> Rechazar
+                          </button>
+                          <button
+                            type="button"
+                            className="primary small danger"
+                            onClick={() => onSwitchModal?.({ type: 'approve-void-request', target: request })}
+                          >
+                            <CircleCheck size={16} /> Aprobar anulación
+                          </button>
+                        </footer>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="void-request-empty-state">
+                  <span aria-hidden="true"><CircleCheck size={24} /></span>
+                  <strong>Todo al día</strong>
+                  <p>No hay solicitudes pendientes por revisar.</p>
+                </div>
+              )}
+            </section>
+
+            {reviewedVoidRequests.length > 0 ? (
+              <section className="void-request-section is-history" aria-labelledby="reviewed-void-requests-heading">
+                <header className="void-request-section-heading is-history">
+                  <span className="void-request-section-icon" aria-hidden="true">
+                    <CircleCheck size={20} />
+                  </span>
+                  <span className="void-request-section-copy">
+                    <small>RESUELTAS</small>
+                    <strong id="reviewed-void-requests-heading">Historial</strong>
+                  </span>
+                  <span className="void-request-section-count">{reviewedVoidRequests.length}</span>
+                </header>
+
+                <div className="void-request-history-list">
+                  {reviewedVoidRequests.map((request) => {
+                    const consumption = data.consumptions.find((entry) => entry.id === request.consumptionId);
+                    const account = data.accounts.find((entry) => entry.id === consumption?.accountId);
+                    const requestItems = data.items.filter((item) => item.consumptionId === request.consumptionId);
+                    return (
+                      <article className={`void-request-history-card request-${request.status}`} key={request.id}>
+                        <span className="void-request-history-status" aria-hidden="true">
+                          {request.status === 'approved' ? <CircleCheck size={18} /> : <X size={18} />}
+                        </span>
+                        <span className="void-request-history-copy">
+                          <span>
+                            <strong>{request.requestedByName ?? 'Usuario'}</strong>
+                            <small>{account?.name ?? 'Sin cuenta'} · {new Date(request.createdAt).toLocaleDateString('es-CO')}</small>
+                          </span>
+                          <small>{requestItems.map((item) => `${item.productName} ×${item.quantity}`).join(', ') || 'Sin detalle de productos'}</small>
+                          {request.decisionReason ? <p>{request.decisionReason}</p> : null}
+                        </span>
+                        <span className="void-request-history-result">
+                          <span className={request.status === 'approved' ? 'status-pill ok' : 'status-pill muted'}>
+                            {request.status === 'approved' ? 'Aprobada' : 'Rechazada'}
+                          </span>
+                          <strong>{consumption ? formatMoney(consumption.total) : 'No disponible'}</strong>
+                          <small>por {request.reviewedByName ?? 'Administrador'}</small>
+                        </span>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
           </div>
         ) : modal.type === 'history' ? (
           <div className="admin-history-modal-body">
