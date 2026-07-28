@@ -126,6 +126,30 @@ body {
   overscroll-behavior: none;
 }
 
+html:has(.login-screen),
+body:has(.login-screen),
+#root:has(.login-screen),
+.app-shell:has(.login-screen) {
+  background: var(--brand-evergreen) !important;
+  overscroll-behavior: none;
+  overflow-x: hidden;
+}
+
+.login-screen {
+  width: 100%;
+  min-height: 100dvh;
+  min-height: var(--visual-viewport-height, 100dvh);
+  display: grid;
+  place-items: center;
+  place-content: center;
+  padding: calc(16px + var(--safe-top)) max(16px, var(--safe-right)) calc(16px + var(--safe-bottom)) max(16px, var(--safe-left));
+  background: var(--brand-evergreen);
+  color: #eef6df;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  box-sizing: border-box;
+}
+
 html.modal-scroll-locked,
 body.modal-scroll-locked {
   overflow: hidden;
@@ -2472,8 +2496,6 @@ select:focus {
 }
 
 .login-screen {
-  height: auto;
-  min-height: var(--visual-viewport-height);
   display: grid;
   place-items: center;
   padding: calc(24px + var(--safe-top)) max(24px, var(--safe-right)) calc(24px + var(--safe-bottom)) max(24px, var(--safe-left));
@@ -2728,41 +2750,7 @@ select:focus {
 
 @media (max-width: 480px) {
   .login-screen {
-    padding: calc(18px + var(--safe-top)) max(18px, var(--safe-right)) calc(18px + var(--safe-bottom)) max(18px, var(--safe-left));
-  }
-
-  .login-form-integrated {
-    padding: 18px 0;
-  }
-
-  .login-brand {
-    gap: 14px;
-    margin-bottom: 24px;
-  }
-
-  .login-logo-clean {
-    width: 112px;
-    height: 112px;
-  }
-
-  .login-title {
-    font-size: 1.45rem;
-  }
-
-  .demo-help {
-    margin-top: 20px;
-    font-size: 0.82rem;
-  }
-}
-
-@media (max-height: 700px) {
-  .login-screen {
-    place-items: start center;
-  }
-
-  .login-brand {
-    gap: 10px;
-    margin-bottom: 18px;
+    padding: calc(14px + var(--safe-top)) max(14px, var(--safe-right)) calc(14px + var(--safe-bottom)) max(14px, var(--safe-left));
   }
 
   .login-logo-clean {
@@ -2771,13 +2759,87 @@ select:focus {
   }
 
   .login-title {
-    font-size: 1.3rem;
+    font-size: 1.4rem;
   }
 
   .demo-help {
-    margin-top: 14px;
+    margin-top: 16px;
+    font-size: 0.8rem;
   }
 }
+
+@media (max-height: 720px) {
+  .login-screen {
+    padding: calc(10px + var(--safe-top)) max(12px, var(--safe-right)) calc(10px + var(--safe-bottom)) max(12px, var(--safe-left));
+    place-items: center;
+    place-content: center;
+  }
+
+  .login-form-integrated {
+    padding: 6px 0;
+  }
+
+  .login-brand {
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .login-logo-clean {
+    width: 80px;
+    height: 80px;
+  }
+
+  .login-title {
+    font-size: 1.25rem;
+  }
+
+  .login-inputs-group {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .login-inputs-group input {
+    min-height: 44px;
+    border-radius: 12px;
+  }
+
+  .login-submit-btn {
+    min-height: 44px;
+    border-radius: 12px;
+    margin-top: 4px;
+  }
+
+  .login-device-option {
+    margin-bottom: 4px;
+    min-height: 32px;
+    font-size: 0.82rem;
+  }
+
+  .login-forgot-button {
+    margin-top: 4px;
+    min-height: 30px;
+    font-size: 0.82rem;
+  }
+
+  .demo-help {
+    margin-top: 10px;
+    font-size: 0.76rem;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 .pin-modal {
   width: min(420px, calc(100vw - 32px));
@@ -8786,9 +8848,9 @@ select:focus {
 /* Edge-to-edge islands and collapsible mobile chrome                          */
 /* ========================================================================== */
 
-html,
-body,
-#root,
+html:not(:has(.login-screen)),
+body:not(:has(.login-screen)),
+#root:not(:has(.login-screen)),
 .app-shell.user-shell,
 .app-shell.admin-shell,
 .kiosk-session,
