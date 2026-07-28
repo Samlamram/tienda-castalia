@@ -141,8 +141,7 @@ body:has(.login-screen),
   min-height: var(--visual-viewport-height, 100dvh);
   display: grid;
   place-items: center;
-  place-content: center;
-  padding: calc(16px + var(--safe-top)) max(16px, var(--safe-right)) calc(16px + var(--safe-bottom)) max(16px, var(--safe-left));
+  padding: calc(24px + var(--safe-top)) max(24px, var(--safe-right)) calc(24px + var(--safe-bottom)) max(24px, var(--safe-left));
   background: var(--brand-evergreen);
   color: #eef6df;
   overflow-y: auto;
@@ -2495,26 +2494,6 @@ select:focus {
   place-items: center;
 }
 
-.login-screen {
-  display: grid;
-  place-items: center;
-  padding: calc(24px + var(--safe-top)) max(24px, var(--safe-right)) calc(24px + var(--safe-bottom)) max(24px, var(--safe-left));
-  background: var(--brand-evergreen);
-  color: #eef6df;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-}
-
-.app-shell:has(.login-screen) {
-  position: relative;
-  width: 100%;
-  min-height: var(--visual-viewport-height);
-  height: auto;
-  padding: 0;
-  background: var(--brand-evergreen);
-  overflow: visible;
-}
-
 .loading-screen {
   animation: fade-in 0.5s var(--ease);
 }
@@ -2720,6 +2699,35 @@ select:focus {
   background: rgba(54, 12, 12, 0.58);
 }
 
+@media (max-width: 480px) {
+  .login-screen {
+    padding: calc(18px + var(--safe-top)) max(18px, var(--safe-right)) calc(18px + var(--safe-bottom)) max(18px, var(--safe-left));
+  }
+
+  .login-form-integrated {
+    padding: 18px 0;
+  }
+
+  .login-brand {
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .login-logo-clean {
+    width: 112px;
+    height: 112px;
+  }
+
+  .login-title {
+    font-size: 1.45rem;
+  }
+
+  .demo-help {
+    margin-top: 20px;
+    font-size: 0.82rem;
+  }
+}
+
 .login-inputs-group input.input-error:focus {
   box-shadow: 0 0 0 3px var(--danger-glow);
 }
@@ -2748,9 +2756,15 @@ select:focus {
   animation: fade-in 0.2s var(--ease);
 }
 
-@media (max-width: 480px) {
+
+@media (max-height: 700px) {
   .login-screen {
-    padding: calc(14px + var(--safe-top)) max(14px, var(--safe-right)) calc(14px + var(--safe-bottom)) max(14px, var(--safe-left));
+    place-items: start center;
+  }
+
+  .login-brand {
+    gap: 10px;
+    margin-bottom: 18px;
   }
 
   .login-logo-clean {
@@ -2759,77 +2773,13 @@ select:focus {
   }
 
   .login-title {
-    font-size: 1.4rem;
+    font-size: 1.3rem;
   }
 
   .demo-help {
-    margin-top: 16px;
-    font-size: 0.8rem;
+    margin-top: 14px;
   }
 }
-
-@media (max-height: 720px) {
-  .login-screen {
-    padding: calc(10px + var(--safe-top)) max(12px, var(--safe-right)) calc(10px + var(--safe-bottom)) max(12px, var(--safe-left));
-    place-items: center;
-    place-content: center;
-  }
-
-  .login-form-integrated {
-    padding: 6px 0;
-  }
-
-  .login-brand {
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-
-  .login-logo-clean {
-    width: 80px;
-    height: 80px;
-  }
-
-  .login-title {
-    font-size: 1.25rem;
-  }
-
-  .login-inputs-group {
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .login-inputs-group input {
-    min-height: 44px;
-    border-radius: 12px;
-  }
-
-  .login-submit-btn {
-    min-height: 44px;
-    border-radius: 12px;
-    margin-top: 4px;
-  }
-
-  .login-device-option {
-    margin-bottom: 4px;
-    min-height: 32px;
-    font-size: 0.82rem;
-  }
-
-  .login-forgot-button {
-    margin-top: 4px;
-    min-height: 30px;
-    font-size: 0.82rem;
-  }
-
-  .demo-help {
-    margin-top: 10px;
-    font-size: 0.76rem;
-  }
-}
-
-
-
-
 
 
 
