@@ -215,6 +215,38 @@ describe('App con Supabase como fuente oficial', () => {
     expect(screen.queryByTestId('admin-panel')).not.toBeInTheDocument();
   });
 
+  it('revalida la cuenta cacheada al volver a enfocar la app', async () => {
+    const userSession = session({ deviceMode: 'personal' });
+    mocks.getStoredSession.mockResolvedValue(userSession);
+    mocks.userData = {
+      users: [
+        {
+          id: userSession.userId,
+          accountId: userSession.accountId,
+          name: userSession.userName,
+          role: 'user',
+          status: 'active',
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          version: 1
+        }
+      ],
+      products: [{ name: 'Agua' }]
+    };
+    render(<App />);
+
+    expect(await screen.findByTestId('kiosk')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.loadUserAccountActivity).toHaveBeenCalled());
+    mocks.refreshCatalog.mockClear();
+    mocks.loadUserAccountActivity.mockClear();
+
+    window.dispatchEvent(new Event('focus'));
+    window.dispatchEvent(new Event('focus'));
+
+    await waitFor(() => expect(mocks.refreshCatalog).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.loadUserAccountActivity).toHaveBeenCalledTimes(1));
+  });
+
   it('abre el panel en memoria para un administrador online', async () => {
     const adminSession = session({
       role: 'admin',

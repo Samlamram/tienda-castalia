@@ -4,15 +4,17 @@ Cada `INSERT`, `UPDATE` o `DELETE` confirmado en las 12 tablas oficiales se env�
 
 - `_eventos`: historial técnico deduplicado por SHA-256.
 - una pestaña oculta por tabla: espejo del estado más reciente.
-- `Resumen`, `Ventas`, `Cobros`, `Compras_Gastos`, `Finanzas` e `Inventario`: vistas simples para análisis financiero.
+- `Consumos`: usuario, cantidad, producto consumido, fecha, precio y estado de cobro.
+- `Compras`: listado básico de compras de inventario.
+- `Caja`: inversión, cobros, compras, gastos, retiros y saldo de caja, con un listado sencillo de movimientos.
 
 Los campos cuyo nombre contiene `pin`, `token`, `hash`, `salt`, `secret` o `password` se reemplazan por `[REDACTED]` antes de escribirlos.
 
 ## Uso diario
 
-La información base llega casi en tiempo real. Después de recargar la hoja, el menú superior **🔄 Actualizar → Actualizar reporte ahora** recalcula todos los reportes. El menú **Tienda → Actualizar reporte** queda como alternativa técnica. En escritorio también puede usarse una imagen o dibujo con la función `refreshReportsFromButton` asignada.
+La información base llega casi en tiempo real. El menú superior **Tienda → Actualizar listados** vuelve a generar las tres pestañas de uso diario. Las tablas técnicas del respaldo permanecen ocultas y pueden mostrarse desde el mismo menú cuando sea necesario revisar el respaldo.
 
-El dashboard se organiza como un estado financiero: ventas, costo FIFO, utilidad bruta, gastos y utilidad neta del mes. También muestra la evolución de todos los meses, caja, waterfall financiero, rankings de productos, cuentas y usuarios, y alertas operativas. Inversión, gastos y retiros permanecen separados para no mezclar caja con utilidad.
+La hoja está pensada para operación diaria, no para análisis contable avanzado. Las pestañas antiguas de reportes complejos se ocultan automáticamente al actualizar.
 
 ## Instalación reproducible
 

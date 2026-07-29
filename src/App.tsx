@@ -34,6 +34,7 @@ import { requestConsumptionVoid } from './services/voidRequests';
 
 const SYNC_IDLE_INTERVAL_MS = 30_000;
 const SYNC_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000] as const;
+const USER_REVALIDATION_THROTTLE_MS = 2_000;
 
 type AuthSession =
   | { role: 'admin'; cloudSession?: AppSession }
@@ -54,6 +55,8 @@ export function App() {
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<ToastTone>();
   const [availableUpdate, setAvailableUpdate] = useState<ApplyAppUpdate | null>(null);
+  const userRevalidationInFlightRef = useRef<Promise<void> | null>(null);
+  const lastUserRevalidationAtRef = useRef(0);
   const [userActivityRefreshVersion, setUserActivityRefreshVersion] = useState(0);
   const [userActivityState, setUserActivityState] = useState<{
     token: string;
@@ -119,7 +122,69 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [logout, online, session?.cloudSession, session?.role, showMessage, userActivityRefreshVersion]);
+  }, [logout, online, session?.cloudSession?.token, session?.role, showMessage, userActivityRefreshVersion]);
+
+  useEffect(() => {
+    const activeSession = session?.role === 'user' ? session.cloudSession : null;
+    if (!activeSession || !online || !isSyncConfigured()) return;
+
+    let cancelled = false;
+
+    const revalidateUserData = () => {
+      const now = Date.now();
+      if (
+        userRevalidationInFlightRef.current ||
+        now - lastUserRevalidationAtRef.current < USER_REVALIDATION_THROTTLE_MS
+      ) {
+        return;
+      }
+      lastUserRevalidationAtRef.current = now;
+
+      const request = refreshCatalog(activeSession)
+        .then((refreshed) => {
+          if (cancelled) return;
+          setSession((current) =>
+            current?.role === 'user' && current.cloudSession?.token === refreshed.token
+              ? authSessionFromAppSession(refreshed)
+              : current
+          );
+          setUserActivityRefreshVersion((current) => current + 1);
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          if (isSessionAuthenticationError(error)) {
+            showMessage('Tu sesión ya no es válida. Inicia sesión nuevamente.', 'error');
+            logout();
+            return;
+          }
+          showMessage(
+            error instanceof Error
+              ? `No se pudieron actualizar tus datos: ${error.message}`
+              : 'No se pudieron actualizar tus datos.',
+            'warning'
+          );
+        })
+        .finally(() => {
+          if (userRevalidationInFlightRef.current === request) {
+            userRevalidationInFlightRef.current = null;
+          }
+        });
+
+      userRevalidationInFlightRef.current = request;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') revalidateUserData();
+    };
+
+    window.addEventListener('focus', revalidateUserData);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', revalidateUserData);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [logout, online, session?.cloudSession?.token, session?.role, showMessage]);
 
   // Update the status-bar / theme-color to match the current screen
   useEffect(() => {
@@ -227,8 +292,13 @@ export function App() {
           consecutiveFailures = 0;
         }
 
-        await refreshCatalog(userSession);
+        const refreshed = await refreshCatalog(userSession);
         if (cancelled) return;
+        setSession((current) =>
+          current?.role === 'user' && current.cloudSession?.token === refreshed.token
+            ? authSessionFromAppSession(refreshed)
+            : current
+        );
         setUserActivityRefreshVersion((current) => current + 1);
 
         if (submitted > 0) {
@@ -275,7 +345,7 @@ export function App() {
       cancelled = true;
       window.clearTimeout(retryTimer);
     };
-  }, [logout, online, session, showMessage]);
+  }, [logout, online, session?.cloudSession?.token, session?.role, showMessage]);
 
   useEffect(() => {
     if (session?.role !== 'admin' || !adminData.error || !isSessionAuthenticationError(adminData.error)) return;

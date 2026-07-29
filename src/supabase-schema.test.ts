@@ -116,24 +116,22 @@ describe('contrato del esquema oficial', () => {
     expect(appsScript).toMatch(/const EVENT_SHEET = '_eventos'/);
   });
 
-  it('incluye inversion, gastos y retiros en los reportes financieros', () => {
+  it('genera listados operativos simples para consumos, compras y caja', () => {
     expect(reportsScript).toMatch(/readRawTable_\(spreadsheet, 'store_finance_events'\)/);
-    expect(reportsScript).toMatch(/'Finanzas'/);
-    expect(reportsScript).toMatch(/capital_contribution:\s*'INVERSIÓN'/);
-    expect(reportsScript).toMatch(/owner_withdrawal:\s*'RETIRO'/);
-    expect(reportsScript).toMatch(/writeKpiCard_\([\s\S]*?'Gastos del mes'/);
-    expect(reportsScript).toMatch(/'Utilidad neta'/);
-    expect(reportsScript).toMatch(/'Flujo neto del mes'/);
-    expect(reportsScript).toMatch(/function createDashboardCharts_/);
-    expect(reportsScript).toMatch(/'Alertas de inventario'/);
-    expect(reportsScript).toMatch(/Charts\.ChartType\.WATERFALL/);
-    expect(reportsScript).toMatch(/'Top productos'/);
-    expect(reportsScript).toMatch(/'Top cuentas'/);
-    expect(reportsScript).toMatch(/'Top usuarios'/);
+    expect(reportsScript).toMatch(/REPORT_SHEETS\s*=\s*\['Consumos', 'Compras', 'Caja'\]/);
+    expect(reportsScript).toMatch(
+      /\['Usuario', 'Cantidad', 'Qué comió', 'Fecha', 'Precio', 'Cobrado'\]/
+    );
+    expect(reportsScript).toMatch(
+      /\['Fecha', 'Producto', 'Cantidad', 'Precio unitario', 'Total'\]/
+    );
+    expect(reportsScript).toMatch(/capital_contribution:\s*'Inversión'/);
+    expect(reportsScript).toMatch(/owner_withdrawal:\s*'Retiro'/);
+    expect(reportsScript).toMatch(/'Caja actual'/);
+    expect(reportsScript).toMatch(/paymentStatus = 'SÍ'/);
     expect(reportsScript).toMatch(/function refreshReportsFromButton\(\)/);
-    expect(reportsScript).toMatch(/assignScript\('refreshReportsFromButton'\)/);
-    expect(reportsScript).toMatch(/'Estado de resultados · '/);
-    expect(reportsScript).toMatch(/'Evolución mensual'/);
+    expect(reportsScript).not.toMatch(/Charts\.ChartType/);
+    expect(reportsScript).not.toMatch(/writeKpiCard_/);
   });
 
   it('conserva idempotencia offline y elimina secretos de la auditoria', () => {
