@@ -12810,3 +12810,126 @@ body.kiosk-mode {
   color: #34d399 !important;
   border-color: rgba(16, 185, 129, 0.50) !important;
 }
+
+
+/* ============================================================
+   FIX COMPLETO: Pendiente por Pagar Oscuro + Tarjeta Más Ancha + Nombres y Encabezados Claros
+   ============================================================ */
+
+/* ── 1. Ancho amplio para el modal de saldo (.account-modal) ── */
+.kiosk-session .account-modal {
+  width: min(720px, 100%) !important;
+  max-width: 720px !important;
+  padding: 24px !important;
+  border-radius: 24px !important;
+  background: rgba(8, 18, 13, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65) !important;
+  color: #ffffff !important;
+}
+
+/* ── 2. "Pendiente por pagar" y Notas en Tarjetas (Cero Blanco) ── */
+.kiosk-session .history-card-note {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  border-radius: 10px !important;
+  padding: 9px 12px !important;
+}
+
+.kiosk-session .history-open-amount {
+  background: rgba(245, 158, 11, 0.14) !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+  color: rgba(255, 255, 255, 0.90) !important;
+}
+
+.kiosk-session .history-open-amount strong {
+  color: #fbbf24 !important;
+  font-weight: 800 !important;
+}
+
+.kiosk-session .history-card-note.is-error {
+  background: rgba(239, 68, 68, 0.14) !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+  color: #fca5a5 !important;
+}
+
+.kiosk-session .history-card-note.void-request-pending {
+  background: rgba(245, 158, 11, 0.14) !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+  color: #fbbf24 !important;
+}
+
+/* ── 3. Encabezado de Tarjetas e Iconos de Avatar Unificados ── */
+.kiosk-session .history-card-header {
+  background: rgba(0, 0, 0, 0.30) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 11px 14px !important;
+}
+
+.kiosk-session .history-person strong {
+  color: #ffffff !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+}
+
+.kiosk-session .history-person span {
+  color: rgba(255, 255, 255, 0.60) !important;
+  font-size: 0.78rem !important;
+}
+
+.kiosk-session .history-person .account-avatar,
+.kiosk-session .account-balance-row .account-avatar {
+  background: rgba(16, 185, 129, 0.20) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+/* ── 4. Encabezado Principal del Modal (Saldo Personal) Unificado ── */
+.kiosk-session .account-modal-hero {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  margin: 0 0 20px 0 !important;
+  padding: 4px 4px 0 4px !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.kiosk-session .account-modal-title span {
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 0.74rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+}
+
+.kiosk-session .account-modal-title h2 {
+  color: #ffffff !important;
+  font-size: 1.55rem !important;
+  font-weight: 800 !important;
+  margin: 4px 0 5px !important;
+}
+
+.kiosk-session .account-modal-title p {
+  color: rgba(255, 255, 255, 0.75) !important;
+  font-size: 0.88rem !important;
+}
+
+.kiosk-session .account-close-button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  border-radius: 12px !important;
+}
+
+.kiosk-session .account-close-button:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
