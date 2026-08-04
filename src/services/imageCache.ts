@@ -8,11 +8,22 @@ function cacheableUrl(value: string | undefined): value is string {
   return Boolean(value && /^https?:\/\//i.test(value));
 }
 
+const decodedMemoryCache = new Set<string>();
+
 async function cacheOne(cache: Cache, url: string): Promise<void> {
-  if (await cache.match(url)) return;
-  const response = await fetch(url, { cache: 'no-cache' });
-  if (!response.ok && response.type !== 'opaque') throw new Error(`No se pudo guardar ${url}`);
-  await cache.put(url, response);
+  if (!await cache.match(url)) {
+    const response = await fetch(url, { cache: 'force-cache' });
+    if (!response.ok && response.type !== 'opaque') throw new Error(`No se pudo guardar ${url}`);
+    await cache.put(url, response);
+  }
+
+  if (typeof Image !== 'undefined' && !decodedMemoryCache.has(url)) {
+    decodedMemoryCache.add(url);
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = url;
+    await img.decode().catch(() => undefined);
+  }
 }
 
 async function prune(cache: Cache): Promise<void> {

@@ -796,7 +796,7 @@ function UserSession({
             placeholder="Buscar producto..."
             searchLabel="Buscar producto"
             filtersLabel="Categorías"
-            compact={collapsed && !productQuery.trim() && !searchFocused}
+            compact={false}
             onFocusChange={setSearchFocused}
           />
           <div className="product-grid catalog-grid">
@@ -841,6 +841,7 @@ function UserSession({
                           src={product.imageUrl}
                           alt=""
                           loading="lazy"
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           onError={() => {
                             setFailedImages((prev) => ({ ...prev, [product.id]: true }));

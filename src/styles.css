@@ -67,6 +67,15 @@
 
   /* Edge-to-edge mobile chrome */
   --brand-evergreen: #052319;
+  /* Frost & Overlay Surfaces */
+  --frost-bg: rgba(255, 255, 255, 0.94);
+  --frost-bg-strong: rgba(248, 248, 246, 0.97);
+  --frost-muted: rgba(245, 245, 243, 0.95);
+  --frost-modal: #ffffff;
+  --frost-modal-muted: #f4f6f4;
+  --frost-modal-chrome: #ffffff;
+  --frost-overlay: rgba(15, 23, 20, 0.55);
+  --frost-highlight: rgba(0, 0, 0, 0.08);
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -77,16 +86,6 @@
   --control-height: 48px;
   --tap-min: 44px;
   --island-radius: 22px;
-
-  /* Frost — lightweight translucent surfaces (no backdrop-filter) */
-  --frost-bg: rgba(255, 255, 255, 0.94);
-  --frost-bg-strong: rgba(248, 248, 246, 0.97);
-  --frost-muted: rgba(245, 245, 243, 0.95);
-  --frost-modal: rgba(255, 255, 255, 0.94);
-  --frost-modal-muted: rgba(248, 248, 246, 0.94);
-  --frost-modal-chrome: rgba(255, 255, 255, 0.9);
-  --frost-overlay: rgba(26, 26, 26, 0.44);
-  --frost-highlight: rgba(255, 255, 255, 0.72);
 
   /* Transitions */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
@@ -1950,6 +1949,8 @@ select:focus {
   height: var(--visual-viewport-height);
   z-index: 80;
   background: var(--frost-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: grid;
   place-items: center;
   padding:
@@ -8915,12 +8916,12 @@ body:not(:has(.login-screen)),
   gap: 8px;
   width: 100%;
   margin: 0 0 12px;
-  padding: 8px;
-  border: 1px solid rgba(5, 35, 25, 0.07);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 28px rgba(5, 35, 25, 0.09);
-  transition: gap 180ms var(--ease), box-shadow 180ms var(--ease);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: gap 180ms var(--ease);
 }
 
 /* Keep catalog search as a non-shrinking sticky row in both sessions so it
@@ -11277,5 +11278,33 @@ body:has(.kiosk-session),
   background: rgba(13, 20, 16, 0.6) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* GPU-Accelerated Collapsible Chrome (0-Reflow, 60-120 FPS) */
+.kiosk-header-slot {
+  will-change: transform;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s var(--ease);
+}
+
+.kiosk-header-slot.chrome-collapsed {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Render Containment & Off-Screen Optimization for 120FPS Scroll */
+.product-tile {
+  content-visibility: auto;
+  contain-intrinsic-size: 260px;
+  contain: layout style paint;
+}
+
+.catalog-grid {
+  contain: layout style;
+}
+
+.product-media img {
+  will-change: opacity;
+  transform: translateZ(0);
 }
 

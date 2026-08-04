@@ -1270,7 +1270,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                 options={PRODUCT_FILTER_OPTIONS}
                 activeValue={productFilter}
                 onActiveValueChange={(value) => setProductFilter(value as ProductFilter)}
-                compact={chromeCollapsed && !productQuery.trim() && !searchFocused}
+                compact={false}
                 onFocusChange={setSearchFocused}
               />
 
@@ -1312,6 +1312,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                               src={product.imageUrl}
                               alt=""
                               loading="lazy"
+                              decoding="async"
                               referrerPolicy="no-referrer"
                               onError={() => setFailedImages((prev) => ({ ...prev, [product.id]: true }))}
                             />
@@ -1442,7 +1443,7 @@ export function AdminPanel({ data, onMessage, onLogout, online, adminSession, on
                   if (accountView === 'accounts') setAccountFilter(value as AccountFilter);
                   else setUserFilter(value as UserFilter);
                 }}
-                compact={chromeCollapsed && !accountQuery.trim() && !searchFocused}
+                compact={false}
                 onFocusChange={setSearchFocused}
               />
               <div className={`admin-smart-list admin-accounts-grid ${accountView === 'users' ? 'admin-users-list' : ''}`}>
