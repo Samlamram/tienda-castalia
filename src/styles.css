@@ -1024,6 +1024,201 @@ select:focus {
 
 .category-pill.active {
   background: var(--accent-gradient);
+  font-weight: 600;
+  line-height: 1.05;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-summary-copy > strong {
+  color: var(--accent-hover);
+  font-size: 1.075rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/* ── Logout Button ── */
+.logout-button {
+  justify-self: end;
+  align-self: center;
+  min-height: 52px;
+  height: auto;
+  width: 50px;
+  color: #dc2626;
+  background: #fee2e2;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.kiosk-header-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.kiosk-header.admin-kiosk-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.admin-header-actions {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.pin-action-button {
+  justify-self: end;
+  align-self: center;
+  min-height: 52px;
+  height: auto;
+  width: 50px;
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.logout-button:hover {
+  background: #fecaca;
+  color: #b91c1c;
+  transform: none;
+  box-shadow: none;
+}
+
+.pin-action-button:hover {
+  background: rgba(5, 150, 105, 0.14);
+  color: var(--accent-hover);
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── Catalog Layout ── */
+.kiosk-workspace {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 24px;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+  min-height: calc(100dvh - 76px);
+  overflow: visible;
+  box-sizing: border-box;
+  flex: 1;
+}
+
+.catalog-area {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  padding-right: 6px;
+}
+
+.catalog-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 0;
+  padding: 2px 2px var(--catalog-search-gap);
+  background: transparent;
+  position: sticky;
+  top: var(--catalog-sticky-top);
+  z-index: 12;
+  transform: translateY(0);
+  opacity: 1;
+  transition:
+    transform 180ms var(--ease),
+    opacity 160ms var(--ease);
+  will-change: transform, opacity;
+}
+
+.catalog-toolbar::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--catalog-sticky-gap)) 0 0;
+  z-index: 0;
+  background: var(--frost-bg-strong);
+  pointer-events: none;
+}
+
+.kiosk-session.catalog-search-hidden .catalog-toolbar {
+  transform: translateY(calc(-1 * var(--catalog-search-block)));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.catalog-search {
+  position: relative;
+  z-index: 1;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 46px;
+  box-sizing: border-box;
+  background: var(--frost-bg);
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-xs);
+}
+
+/* Category Pills */
+.category-pills {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 12px;
+  margin-bottom: 16px;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+  -webkit-overflow-scrolling: touch;
+}
+
+.catalog-filter-bar {
+  position: sticky;
+  top: var(--catalog-filter-top);
+  z-index: 10;
+  background: var(--frost-bg-strong);
+  box-shadow: 0 calc(-1 * var(--catalog-sticky-gap)) 0 0 var(--frost-bg-strong);
+  transition: top 180ms var(--ease);
+}
+
+.category-pills::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.category-pill {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 16px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+  box-shadow: var(--shadow-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.category-pill:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.category-pill.active {
+  background: var(--accent-gradient);
   color: #ffffff;
   border-color: transparent;
   box-shadow: 0 4px 10px var(--accent-glow);
@@ -1052,18 +1247,19 @@ select:focus {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  transition: all var(--duration) var(--ease);
+  transition: transform var(--duration) var(--ease),
+              box-shadow var(--duration) var(--ease),
+              border-color var(--duration) var(--ease);
   box-sizing: border-box;
   overflow: hidden;
   cursor: pointer;
-  /* Force clipping on rounded corners for child elements */
   -webkit-backface-visibility: hidden;
-  -webkit-transform: translate3d(0, 0, 0);
+  transform: translateZ(0);
   isolation: isolate;
 }
 
 .product-tile:hover {
-  transform: translateY(-3px);
+  transform: translateY(-3px) translateZ(0);
   box-shadow: var(--shadow-hover);
   border-color: #94a3b8;
 }
@@ -1075,7 +1271,7 @@ select:focus {
 
 .product-tile.in-cart:hover {
   box-shadow: 0 6px 16px rgba(5, 150, 105, 0.1), 0 0 0 1px rgba(5, 150, 105, 0.22);
-  transform: translateY(-3px);
+  transform: translateY(-3px) translateZ(0);
 }
 
 /* ── Product Media ── */
@@ -1086,7 +1282,7 @@ select:focus {
   width: 100%;
   aspect-ratio: 3 / 4;
   border-radius: 0;
-  background: #ffffff;
+  background: #1a1a1a;
   cursor: pointer;
   border-bottom: 0;
   transition: opacity var(--duration) var(--ease);
@@ -1105,7 +1301,7 @@ select:focus {
   display: block;
   width: 100%;
   height: 100%;
-  background: #ffffff;
+  background: #1a1a1a;
 }
 
 .product-image-slot img {
@@ -1114,6 +1310,8 @@ select:focus {
   display: block;
   object-fit: cover;
   padding: 0;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 /* ── Product Details (Glass Overlay) ── */
