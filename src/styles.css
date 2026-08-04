@@ -13463,3 +13463,39 @@ body.kiosk-mode {
   justify-content: space-between !important;
   gap: 12px !important;
 }
+
+
+/* ============================================================
+   FIX: Insignia de Cantidad (xN) Circular Amplia y Elegante
+   ============================================================ */
+
+.kiosk-session .history-item-qty {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  font-size: 0.88rem !important;
+  font-weight: 800 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.20) !important;
+  justify-self: center !important;
+  align-self: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.kiosk-session .history-item-qty small {
+  display: none !important;
+}
+
+.kiosk-session .history-item-qty strong {
+  color: #ffffff !important;
+  font-size: 0.88rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+}
