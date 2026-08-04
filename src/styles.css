@@ -13384,3 +13384,82 @@ body.kiosk-mode {
   padding: 14px 16px !important;
   color: #ffffff !important;
 }
+
+
+/* ============================================================
+   CARD UNIFORM BACKGROUND & MINIMAL MODAL PADDING
+   ============================================================ */
+
+/* ── 1. Spacing mínimo a los lados del modal solo para las tarjetas ── */
+.kiosk-session .account-modal {
+  width: min(780px, 100%) !important;
+  max-width: 780px !important;
+  padding: 24px 12px 20px 12px !important;
+  border-radius: 24px !important;
+  background: rgba(8, 18, 13, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65) !important;
+  color: #ffffff !important;
+}
+
+/* Conservar el margen adecuado para el header del modal */
+.kiosk-session .account-modal-hero {
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  margin-bottom: 20px !important;
+}
+
+.kiosk-session .account-tabs,
+.kiosk-session .account-balance-stack,
+.kiosk-session .account-day-heading {
+  margin-left: 4px !important;
+  margin-right: 4px !important;
+}
+
+/* ── 2. Fondo 100% UNIFORME en toda la tarjeta (Header, Items, Footer y Barra de Acciones) ── */
+.kiosk-session .history-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  margin-bottom: 14px !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25) !important;
+}
+
+.kiosk-session .history-card-header {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 14px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+.kiosk-session .history-cart {
+  padding: 10px 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  background: transparent !important;
+}
+
+.kiosk-session .history-card-footer {
+  background: transparent !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 12px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.kiosk-session .history-card-actions-bar {
+  background: transparent !important;
+  border-top: 1px dashed rgba(255, 255, 255, 0.10) !important;
+  padding: 10px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
