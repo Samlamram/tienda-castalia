@@ -13189,3 +13189,198 @@ body.kiosk-mode {
   justify-content: space-between !important;
   gap: 16px !important;
 }
+
+
+/* ============================================================
+   HISTORY CARD UNIFIED FLOW & PAGOS TAB FIX
+   ============================================================ */
+
+/* ── 1. Ancho Amplio del Modal de Saldo ── */
+.kiosk-session .account-modal {
+  width: min(780px, 100%) !important;
+  max-width: 780px !important;
+  padding: 24px !important;
+  border-radius: 24px !important;
+  background: rgba(8, 18, 13, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65) !important;
+  color: #ffffff !important;
+}
+
+/* ── 2. Estructura Unificada de Tarjetas de Historial ── */
+.kiosk-session .history-card {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  margin-bottom: 14px !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25) !important;
+}
+
+.kiosk-session .history-card-header {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 12px 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+.kiosk-session .history-cart {
+  padding: 10px 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  background: transparent !important;
+}
+
+.kiosk-session .history-cart-row {
+  display: grid !important;
+  grid-template-columns: 36px minmax(0, 1fr) auto auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 8px 12px !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.kiosk-session .history-cart-row:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.kiosk-session .history-item-thumbnail {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 8px !important;
+  background: rgba(0, 0, 0, 0.40) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.kiosk-session .history-item-info strong {
+  color: #ffffff !important;
+  font-size: 0.88rem !important;
+}
+
+.kiosk-session .history-item-info small {
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 0.76rem !important;
+}
+
+.kiosk-session .history-item-qty strong {
+  color: rgba(255, 255, 255, 0.90) !important;
+  font-size: 0.86rem !important;
+}
+
+.kiosk-session .history-item-subtotal strong {
+  color: #34d399 !important;
+  font-size: 0.90rem !important;
+  font-weight: 700 !important;
+}
+
+.kiosk-session .history-card-footer {
+  background: rgba(0, 0, 0, 0.20) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 12px 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.kiosk-session .history-card-footer span {
+  color: rgba(255, 255, 255, 0.70) !important;
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+}
+
+.kiosk-session .history-card-footer strong {
+  color: #ffffff !important;
+  font-size: 1.15rem !important;
+  font-weight: 800 !important;
+}
+
+/* ── 3. Barra de Acciones y Pendiente (Advertencia + Anulación al lado) ── */
+.kiosk-session .history-card-actions-bar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 10px 18px !important;
+  background: rgba(0, 0, 0, 0.35) !important;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12) !important;
+}
+
+.kiosk-session .history-pending-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 5px 12px !important;
+  border-radius: 8px !important;
+  background: rgba(245, 158, 11, 0.16) !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+  color: #fbbf24 !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+}
+
+.kiosk-session .history-pending-badge svg {
+  color: #fbbf24 !important;
+  flex-shrink: 0 !important;
+}
+
+.kiosk-session .history-pending-badge strong {
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+.kiosk-session .history-void-request-action {
+  background: rgba(239, 68, 68, 0.14) !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+  color: #fca5a5 !important;
+  border-radius: 8px !important;
+  padding: 6px 14px !important;
+  font-size: 0.80rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  margin: 0 !important;
+}
+
+.kiosk-session .history-void-request-action:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+  border-color: rgba(239, 68, 68, 0.55) !important;
+  color: #ffffff !important;
+}
+
+/* ── 4. Pestaña Pagos Oscura Completa (Cero Blanco) ── */
+.kiosk-session .account-empty-state {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  border-radius: 14px !important;
+  padding: 24px !important;
+  text-align: center !important;
+  margin: 12px 0 !important;
+}
+
+.kiosk-session .account-day-heading span {
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+.kiosk-session .account-day-heading small {
+  color: rgba(255, 255, 255, 0.60) !important;
+}
+
+.kiosk-session .payment-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 14px !important;
+  padding: 14px 16px !important;
+  color: #ffffff !important;
+}

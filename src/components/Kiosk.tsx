@@ -1403,15 +1403,11 @@ function UserSession({
                               <p className="history-card-note is-error">
                                 {entry.voidReason ? `Motivo: ${entry.voidReason}` : 'Esta compra fue anulada.'}
                               </p>
-                            ) : paymentState && paymentState.openAmount > 0 ? (
-                              <p className="history-card-note history-open-amount">
-                                Pendiente por pagar: <strong>{formatMoney(paymentState.openAmount)}</strong>
-                              </p>
                             ) : null}
 
                             {entry.userId === user.id && voidRequestPending ? (
                               <p className="history-card-note void-request-pending" role="status">
-                                Anulacion solicitada. La compra sigue vigente hasta que el administrador decida.
+                                Anulación solicitada. La compra sigue vigente hasta que el administrador decida.
                               </p>
                             ) : null}
                             {entry.userId === user.id && latestVoidRequest?.status === 'rejected' ? (
@@ -1419,14 +1415,25 @@ function UserSession({
                                 Solicitud rechazada: {latestVoidRequest.decisionReason ?? 'sin motivo informado'}
                               </p>
                             ) : null}
-                            {canRequestVoid ? (
-                              <button
-                                type="button"
-                                className="ghost small danger history-void-request-action"
-                                onClick={() => setVoidRequestConsumptionId(entry.id)}
-                              >
-                                {latestVoidRequest?.status === 'rejected' ? 'Volver a solicitar anulacion' : 'Solicitar anulacion'}
-                              </button>
+
+                            {(paymentState && paymentState.openAmount > 0) || canRequestVoid ? (
+                              <div className="history-card-actions-bar">
+                                {paymentState && paymentState.openAmount > 0 ? (
+                                  <span className="history-pending-badge">
+                                    <TriangleAlert size={14} />
+                                    <span>Pendiente: <strong>{formatMoney(paymentState.openAmount)}</strong></span>
+                                  </span>
+                                ) : <span />}
+                                {canRequestVoid ? (
+                                  <button
+                                    type="button"
+                                    className="ghost small danger history-void-request-action"
+                                    onClick={() => setVoidRequestConsumptionId(entry.id)}
+                                  >
+                                    {latestVoidRequest?.status === 'rejected' ? 'Volver a solicitar anulación' : 'Solicitar anulación'}
+                                  </button>
+                                ) : null}
+                              </div>
                             ) : null}
                           </article>
                         );                      })}
