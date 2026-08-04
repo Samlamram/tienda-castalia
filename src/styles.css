@@ -12540,7 +12540,7 @@ body.kiosk-mode {
 
 /* ── 1. Mejor Spacing para la cabecera del modal de saldo ── */
 .kiosk-session .account-modal {
-  padding: 26px 24px 22px !important;
+  padding: 20px !important;
   border-radius: 24px !important;
 }
 
@@ -12673,4 +12673,140 @@ body.kiosk-mode {
   background: rgba(239, 68, 68, 0.18) !important;
   color: #fca5a5 !important;
   border: 1px solid rgba(239, 68, 68, 0.40) !important;
+}
+
+
+/* ============================================================
+   FIX: Iconos de Sinc y Cobro Más Grandes + Cart Sidebar Oscuro + Verdes Unificados
+   ============================================================ */
+
+/* ── 1. Iconos de Sincronización y Cobro más grandes ── */
+.kiosk-session .history-icon-badge {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 50% !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+}
+
+.kiosk-session .history-icon-badge svg {
+  width: 19px !important;
+  height: 19px !important;
+}
+
+/* ── 2. Carrito y lateral de compra (.cart-sidebar) — Cero blanco debajo del total ── */
+.kiosk-session .cart-sidebar {
+  background: rgba(8, 18, 13, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .cart-sidebar-header {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+.kiosk-session .cart-sidebar-header h2 {
+  color: #ffffff !important;
+}
+
+.kiosk-session .cart-sidebar-header .cart-count {
+  background: rgba(16, 185, 129, 0.20) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .cart-sidebar-item {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .cart-sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(16, 185, 129, 0.30) !important;
+}
+
+.kiosk-session .cart-sidebar-thumbnail {
+  background: rgba(0, 0, 0, 0.40) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.kiosk-session .cart-sidebar-placeholder {
+  background: transparent !important;
+  color: #34d399 !important;
+}
+
+.kiosk-session .cart-item-name {
+  color: #ffffff !important;
+}
+
+.kiosk-session .cart-item-price {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .cart-item-total {
+  color: #34d399 !important;
+  font-weight: 800 !important;
+}
+
+.kiosk-session .cart-sidebar-summary {
+  background: rgba(0, 0, 0, 0.45) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.kiosk-session .cart-sidebar-btn {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.40) !important;
+  font-weight: 700 !important;
+}
+
+.kiosk-session .cart-sidebar-btn:hover {
+  background: linear-gradient(135deg, #047857, #059669) !important;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.55) !important;
+}
+
+/* ── 3. Unificación Armónica de Tonos Verdes (#34d399) ── */
+.kiosk-session .account-avatar {
+  background: rgba(16, 185, 129, 0.22) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .account-balance-copy strong,
+.kiosk-session .history-person strong,
+.kiosk-session .profile-summary-copy > strong,
+.kiosk-session .kiosk-brand-copy strong {
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-balance-amount,
+.kiosk-session .product-price,
+.kiosk-session .history-total strong,
+.kiosk-session .checkout-subtotal-value,
+.kiosk-session .summary-row.balance-projection .positive,
+.kiosk-session .payment-amount {
+  color: #34d399 !important;
+  font-weight: 800 !important;
+}
+
+.kiosk-session .account-balance-row.active {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border: 1px solid rgba(16, 185, 129, 0.40) !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.15) !important;
+}
+
+.kiosk-session .account-balance-row.active .account-avatar {
+  background: rgba(16, 185, 129, 0.30) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.50) !important;
 }

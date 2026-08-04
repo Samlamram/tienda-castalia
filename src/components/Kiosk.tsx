@@ -1256,13 +1256,13 @@ function UserSession({
                               <div className="history-statuses-compact" aria-label={`Estado: ${status.label}`}>
                                 <span className={`history-icon-badge ${status.className}`} title={`Sincronización: ${status.label}`}>
                                   {entry.status === 'sending' ? (
-                                    <Loader2 size={15} className="is-spinning" />
+                                    <Loader2 size={19} className="is-spinning" />
                                   ) : (
-                                    <CloudUpload size={15} />
+                                    <CloudUpload size={19} />
                                   )}
                                 </span>
                                 <span className="history-icon-badge payment-unpaid" title="Pago: Sin pagar">
-                                  <Banknote size={15} />
+                                  <Banknote size={19} />
                                 </span>
                               </div>
                             </div>
@@ -1338,15 +1338,15 @@ function UserSession({
                               </div>
                               <div className="history-statuses-compact" aria-label="Estados de la compra">
                                 <span className="history-icon-badge sync-synced" title="Sincronización: Sincronizada">
-                                  <CloudCheck size={15} />
+                                  <CloudCheck size={19} />
                                 </span>
                                 {entry.status === 'voided' ? (
                                   <span className="history-icon-badge record-voided" title="Compra anulada">
-                                    <CircleX size={15} />
+                                    <CircleX size={19} />
                                   </span>
                                 ) : paymentStatus ? (
                                   <span className={`history-icon-badge ${paymentStatus.className}`} title={`Pago: ${paymentStatus.label}`}>
-                                    <Banknote size={15} />
+                                    <Banknote size={19} />
                                   </span>
                                 ) : null}
                               </div>
