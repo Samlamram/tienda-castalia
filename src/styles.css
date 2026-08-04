@@ -12933,3 +12933,259 @@ body.kiosk-mode {
   border-color: rgba(255, 255, 255, 0.22) !important;
   color: #ffffff !important;
 }
+
+
+/* ============================================================
+   AUDIT FIX: Override oscuro para todas las clases con fondo claro
+   ============================================================ */
+
+/* ── PRIORIDAD ALTA: Checkout ── */
+
+.kiosk-session .checkout-feedback-modal {
+  background: rgba(8, 18, 13, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .checkout-feedback-icon {
+  background: rgba(16, 185, 129, 0.18) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .checkout-feedback-icon.is-failed,
+.kiosk-session .checkout-feedback-icon.is-needs_review {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #fca5a5 !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+.kiosk-session .checkout-feedback-icon.is-submitting {
+  background: rgba(59, 130, 246, 0.18) !important;
+  color: #93c5fd !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+.kiosk-session .checkout-item-thumbnail {
+  background: rgba(0, 0, 0, 0.40) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.kiosk-session .checkout-item-placeholder {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.40) !important;
+}
+
+.kiosk-session .checkout-qty-btn {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+.kiosk-session .checkout-qty-btn:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(16, 185, 129, 0.40) !important;
+  color: #34d399 !important;
+}
+
+/* ── PRIORIDAD ALTA: PIN Input ── */
+
+.kiosk-session .pin-input {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  caret-color: #34d399 !important;
+}
+
+.kiosk-session .pin-input:focus {
+  border-color: rgba(16, 185, 129, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── PRIORIDAD ALTA: Account Total Balance ── */
+
+.kiosk-session .account-total-balance {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  color: #ffffff !important;
+}
+
+/* ── PRIORIDAD MEDIA: Void Request (Solicitud de Anulación) ── */
+
+.kiosk-session .void-request-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  border-radius: 14px !important;
+}
+
+.kiosk-session .void-request-products {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+}
+
+.kiosk-session .void-request-product-row + .void-request-product-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.kiosk-session .void-request-product-icon {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.kiosk-session .void-request-product-quantity {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.70) !important;
+}
+
+.kiosk-session .void-request-products-empty {
+  color: rgba(255, 255, 255, 0.50) !important;
+}
+
+.kiosk-session .void-request-reason {
+  color: rgba(255, 255, 255, 0.70) !important;
+}
+
+.kiosk-session .void-request-actions {
+  border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+.kiosk-session .void-request-reject-action {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .void-request-reject-action:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.kiosk-session .void-request-history-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  color: #ffffff !important;
+  border-radius: 12px !important;
+}
+
+.kiosk-session .void-request-history-status {
+  color: rgba(255, 255, 255, 0.60) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.kiosk-session .void-request-review-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .void-request-section-count {
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.70) !important;
+}
+
+
+/* ============================================================
+   ALIGNMENT PERFECTING: Alineación vertical perfecta en filas y cabeceras
+   ============================================================ */
+
+/* ── 1. Cabecera del historial: Centrado vertical perfecto ── */
+.kiosk-session .history-card-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 12px 14px !important;
+}
+
+.kiosk-session .history-person {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.kiosk-session .history-person > div {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  line-height: 1.2 !important;
+}
+
+.kiosk-session .history-statuses-compact {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+}
+
+.kiosk-session .history-icon-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+}
+
+/* ── 2. Filas de Desglose de Productos (history-cart-row): Centrado vertical ── */
+.kiosk-session .history-cart-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 10px 12px !important;
+}
+
+.kiosk-session .history-item-info {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+.kiosk-session .history-item-qty,
+.kiosk-session .history-item-subtotal {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  text-align: right !important;
+  flex-shrink: 0 !important;
+}
+
+/* ── 3. Tarjetas de Pago (.payment-card): Alineación en fila ── */
+.kiosk-session .payment-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  padding: 14px 16px !important;
+}
+
+.kiosk-session .payment-card-copy {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+.kiosk-session .payment-amount {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  flex-shrink: 0 !important;
+}
+
+/* ── 4. Cabecera Principal del Modal (account-modal-hero) ── */
+.kiosk-session .account-modal-hero {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+}
