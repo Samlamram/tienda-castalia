@@ -13638,3 +13638,34 @@ body.kiosk-mode {
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18) !important;
   background: rgba(0, 0, 0, 0.55) !important;
 }
+
+
+/* ============================================================
+   FIX: Eliminar el cuadro verde más claro (var(--frost-modal-chrome)) en account-modal-hero
+   ============================================================ */
+
+.kiosk-session .account-modal-hero {
+  position: relative !important;
+  top: auto !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  margin: 0 0 20px 0 !important;
+  padding: 4px 12px 0 12px !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+}
+
+.kiosk-session .account-modal-title {
+  position: relative !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
