@@ -281,6 +281,15 @@ function UserSession({
   });
 
   useEffect(() => {
+    document.documentElement.classList.add('kiosk-mode');
+    document.body.classList.add('kiosk-mode');
+    return () => {
+      document.documentElement.classList.remove('kiosk-mode');
+      document.body.classList.remove('kiosk-mode');
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isSharedDevice || data.pendingSync > 0) return;
     const events = ['click', 'keydown', 'touchstart'];
     let timeout = window.setTimeout(onLogout, 90_000);

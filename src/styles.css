@@ -11333,10 +11333,14 @@ body:not(:has(.login-screen)),
    ═══════════════════════════════════════════════════════ */
 
 /* 1. Main Background for User Catalog */
+html.kiosk-mode,
+body.kiosk-mode,
+html.kiosk-mode body,
 .kiosk-session,
 html:has(.kiosk-session),
 body:has(.kiosk-session),
 #root:has(.kiosk-session) {
+  background-color: #040c09 !important;
   background: radial-gradient(circle at 50% -10%, #0e2a1e 0%, #081812 50%, #040c09 100%) !important;
   color: #f1f7f4 !important;
   min-height: 100dvh;
@@ -11394,9 +11398,9 @@ body:has(.kiosk-session),
   gap: 10px !important;
 }
 
-/* La barra de búsqueda sí tiene su propio fondo — flotando sola */
+/* La barra de búsqueda con relleno oscuro sólido (más dark) */
 .kiosk-session .search-filter-field {
-  background: rgba(10, 16, 20, 0.80) !important;
+  background: rgba(6, 12, 9, 0.94) !important;
   border: 1px solid rgba(255, 255, 255, 0.13) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
@@ -11432,20 +11436,39 @@ body:has(.kiosk-session),
   color: #ffffff !important;
 }
 
-/* Chips de categoría: sueltos debajo, sin contenedor padre visible */
+/* Chips de categoría: se esconden al hacer scroll igual que el header */
 .kiosk-session .search-filter-chips {
   padding: 2px 0 4px !important;
   gap: 7px !important;
-  /* Se ocultan suavemente al hacer scroll (controlado por JS en useCollapsibleChrome) */
+  max-height: 60px;
+  opacity: 1;
+  transform: translateY(0);
+  transition: max-height 240ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 180ms var(--ease),
+              transform 200ms var(--ease),
+              padding 240ms var(--ease),
+              margin 240ms var(--ease) !important;
   overflow: hidden !important;
 }
 
+/* Ocultar chips al scrollear (cuando chrome-is-collapsed está activo) */
+.kiosk-session.chrome-is-collapsed .search-filter-chips {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  transform: translateY(-8px) !important;
+  pointer-events: none !important;
+}
+
 .kiosk-session .search-filter-chip {
-  background: rgba(255, 255, 255, 0.07) !important;
-  border: 1px solid rgba(255, 255, 255, 0.11) !important;
-  color: rgba(255, 255, 255, 0.72) !important;
+  background: rgba(12, 22, 17, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
   backdrop-filter: none !important;
-  box-shadow: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
 }
 
 .kiosk-session .search-filter-chip:hover {
@@ -11534,11 +11557,11 @@ body:has(.kiosk-session),
 
 
 /* ============================================================
-   KIOSK DARK GLASS THEME � Subtotal Bar + Modales + Paneles
+   KIOSK DARK GLASS THEME � Subtotal Bar + Modales + Paneles
    Mismo estilo que el header: rgba oscuro + blur + borde sutil
    ============================================================ */
 
-/* -- Subtotal Bar (barra inferior m�vil) -- */
+/* -- Subtotal Bar (barra inferior m�vil) -- */
 .kiosk-session .subtotal-bar {
   background: rgba(10, 22, 17, 0.88) !important;
   border: 1px solid rgba(255, 255, 255, 0.13) !important;
@@ -11562,7 +11585,7 @@ body:has(.kiosk-session),
   font-weight: 800 !important;
 }
 
-/* Bot�n del subtotal: acento verde igual que en el header */
+/* Bot�n del subtotal: acento verde igual que en el header */
 .kiosk-session .subtotal-bar button {
   background: linear-gradient(135deg, #059669, #10b981) !important;
   color: #ffffff !important;
@@ -11632,7 +11655,7 @@ body:has(.kiosk-session),
   background: rgba(0, 0, 0, 0.60) !important;
 }
 
-/* L�neas divisoras dentro de modales */
+/* L�neas divisoras dentro de modales */
 .kiosk-session .modal hr,
 .kiosk-session .modal [class*="line"],
 .kiosk-session .modal [class*="divider"] {
@@ -11692,10 +11715,10 @@ body:has(.kiosk-session),
 }
 
 .kiosk-session .checkout-subtotal-value {
-  color: #34d399 !important;  /* verde claro � buen contraste sobre oscuro */
+  color: #34d399 !important;  /* verde claro � buen contraste sobre oscuro */
 }
 
-/* Bot�n confirmar compra */
+/* Bot�n confirmar compra */
 .kiosk-session .checkout-modal button[class*="primary"],
 .kiosk-session .checkout-primary-action {
   background: linear-gradient(135deg, #059669, #10b981) !important;
@@ -11770,7 +11793,7 @@ body:has(.kiosk-session),
   color: rgba(255, 255, 255, 0.85) !important;
 }
 
-/* -- Botones de acci�n secundaria dentro de modales kiosk -- */
+/* -- Botones de acci�n secundaria dentro de modales kiosk -- */
 .kiosk-session .modal button.ghost,
 .kiosk-session .checkout-secondary-action {
   background: rgba(255, 255, 255, 0.07) !important;
@@ -11796,4 +11819,334 @@ body:has(.kiosk-session),
 .kiosk-session .modal button.danger:hover {
   background: rgba(220, 38, 38, 0.30) !important;
   color: #ffffff !important;
+}
+
+
+/* ============================================================
+   KIOSK DARK THEME OVERRIDES: Perfil, Mi Saldo (Cuenta) y Sync
+   Zero white elements, high contrast text & emerald accents
+   ============================================================ */
+
+/* ── PERFIL (.profile-sheet) ── */
+.kiosk-session .profile-sheet-backdrop {
+  background: rgba(2, 8, 6, 0.78) !important;
+  backdrop-filter: blur(14px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(160%) !important;
+}
+
+.kiosk-session .profile-sheet {
+  background: rgba(8, 18, 13, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .profile-sheet-header span {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.kiosk-session .profile-sheet-header h2 {
+  color: #ffffff !important;
+}
+
+.kiosk-session .profile-sheet-close {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .profile-sheet-close:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .profile-sheet-summary {
+  background: rgba(16, 185, 129, 0.14) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .profile-sheet-summary:hover {
+  background: rgba(16, 185, 129, 0.22) !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+}
+
+.kiosk-session .profile-summary-icon {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #34d399 !important;
+}
+
+.kiosk-session .profile-sheet-summary .profile-summary-copy > span {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .profile-sheet-summary .profile-summary-copy > strong {
+  color: #34d399 !important;
+}
+
+.kiosk-session .profile-sheet-actions > button {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .profile-sheet-actions > button:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .profile-sheet-actions > button.danger {
+  background: rgba(220, 38, 38, 0.18) !important;
+  border-color: rgba(220, 38, 38, 0.35) !important;
+  color: #fca5a5 !important;
+}
+
+.kiosk-session .profile-sheet-actions > button.danger:hover {
+  background: rgba(220, 38, 38, 0.30) !important;
+  color: #ffffff !important;
+}
+
+/* ── MI SALDO / CUENTA (.account-modal) ── */
+.kiosk-session .account-modal {
+  background: rgba(8, 18, 13, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-modal-title span {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.kiosk-session .account-modal-title h2 {
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-modal-title p {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+.kiosk-session .account-close-button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-close-button:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-balance-stack {
+  background: rgba(0, 0, 0, 0.40) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.kiosk-session .account-balance-heading span {
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-balance-heading small {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.kiosk-session .account-balance-row {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-balance-row:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.kiosk-session .account-balance-row.active {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .account-avatar {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .account-balance-copy strong {
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-balance-copy small {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.kiosk-session .account-balance-amount {
+  color: #34d399 !important;
+}
+
+.kiosk-session .account-empty-state {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .account-tabs {
+  background: rgba(0, 0, 0, 0.45) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.kiosk-session .account-tabs button {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.kiosk-session .account-tabs button span {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-tabs button.active {
+  background: rgba(16, 185, 129, 0.22) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.kiosk-session .account-day-heading span {
+  color: #ffffff !important;
+}
+
+.kiosk-session .account-day-heading small {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.kiosk-session .history-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .history-card:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.kiosk-session .history-person strong {
+  color: #ffffff !important;
+}
+
+.kiosk-session .history-person span {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.kiosk-session .history-total span {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.kiosk-session .history-total strong {
+  color: #34d399 !important;
+}
+
+.kiosk-session .history-cart-row {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .history-cart-row span {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.kiosk-session .history-cart-row small {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .history-cart-row strong {
+  color: #ffffff !important;
+}
+
+.kiosk-session .history-card-note {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.kiosk-session .payment-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .payment-icon {
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: #34d399 !important;
+}
+
+/* ── SINCRONIZACIÓN (.sync-panel-modal) ── */
+.kiosk-session .sync-panel-modal {
+  background: rgba(8, 18, 13, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .sync-panel-header h2 {
+  color: #ffffff !important;
+}
+
+.kiosk-session .sync-panel-header p,
+.kiosk-session .sync-panel-note {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .sync-panel-icon {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.kiosk-session .sync-panel-icon.has-pending {
+  background: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+.kiosk-session .sync-panel-icon.is-synced {
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .sync-empty-state {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .sync-empty-state span {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .sync-empty-state > svg {
+  color: #34d399 !important;
+}
+
+.kiosk-session .sync-entry {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .sync-entry small {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.kiosk-session .sync-entry p {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.kiosk-session .sync-entry-heading span {
+  background: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+.kiosk-session .sync-entry-needs_review {
+  background: rgba(180, 83, 9, 0.25) !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
 }
