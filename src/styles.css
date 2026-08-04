@@ -9635,6 +9635,15 @@ body:not(:has(.login-screen)),
     border-radius: 18px;
   }
 
+  /* Kiosk: sin caja visible aunque el island tenga padding en otras sesiones */
+  .kiosk-session .search-filter-island {
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
   .search-filter-field {
     min-height: 44px;
   }
@@ -11372,25 +11381,34 @@ body:has(.kiosk-session),
 }
 
 /* 3. Search Bar & Category Chips: "Dark Black Transparent" */
+/* â”€â”€ Kiosk: Search bar separada de los filtros, sin contenedor visible â”€â”€ */
 .kiosk-session .user-catalog-search-filters,
 .kiosk-session .search-filter-island {
-  background: rgba(8, 12, 16, 0.72) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  backdrop-filter: blur(20px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(190%) !important;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  /* Island completamente transparente â€” sin caja, sin borde */
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  gap: 10px !important;
 }
 
+/* La barra de bÃºsqueda sÃ­ tiene su propio fondo â€” flotando sola */
 .kiosk-session .search-filter-field {
-  background: rgba(0, 0, 0, 0.45) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(10, 16, 20, 0.80) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35) !important;
+  border-radius: 14px !important;
   color: #ffffff !important;
 }
 
 .kiosk-session .search-filter-field:focus-within {
-  background: rgba(0, 0, 0, 0.7) !important;
+  background: rgba(5, 10, 14, 0.92) !important;
   border-color: rgba(16, 185, 129, 0.6) !important;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22), 0 4px 18px rgba(0,0,0,0.35) !important;
 }
 
 .kiosk-session .search-filter-field input {
@@ -11398,32 +11416,41 @@ body:has(.kiosk-session),
 }
 
 .kiosk-session .search-filter-field input::placeholder {
-  color: rgba(255, 255, 255, 0.45) !important;
+  color: rgba(255, 255, 255, 0.42) !important;
 }
 
 .kiosk-session .search-filter-field svg {
-  color: rgba(255, 255, 255, 0.55) !important;
+  color: rgba(255, 255, 255, 0.50) !important;
 }
 
 .kiosk-session .search-clear-button {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: rgba(255, 255, 255, 0.55) !important;
 }
 
 .kiosk-session .search-clear-button:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.10) !important;
   color: #ffffff !important;
 }
 
-/* Category Filter Chips */
+/* Chips de categorÃ­a: sueltos debajo, sin contenedor padre visible */
+.kiosk-session .search-filter-chips {
+  padding: 2px 0 4px !important;
+  gap: 7px !important;
+  /* Se ocultan suavemente al hacer scroll (controlado por JS en useCollapsibleChrome) */
+  overflow: hidden !important;
+}
+
 .kiosk-session .search-filter-chip {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: rgba(255, 255, 255, 0.75) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
 }
 
 .kiosk-session .search-filter-chip:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(16, 185, 129, 0.3) !important;
+  background: rgba(255, 255, 255, 0.13) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
   color: #ffffff !important;
 }
 
@@ -11431,12 +11458,12 @@ body:has(.kiosk-session),
   background: linear-gradient(135deg, #059669, #10b981) !important;
   border-color: transparent !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35) !important;
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.30) !important;
 }
 
 .kiosk-session .search-filter-chip small {
-  background: rgba(0, 0, 0, 0.3) !important;
-  color: rgba(255, 255, 255, 0.9) !important;
+  background: rgba(0, 0, 0, 0.28) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
 }
 
 /* 4. Product Tiles (Modern Dark Glass Cards) */
@@ -11505,3 +11532,268 @@ body:has(.kiosk-session),
   transform: translateZ(0);
 }
 
+
+/* ============================================================
+   KIOSK DARK GLASS THEME — Subtotal Bar + Modales + Paneles
+   Mismo estilo que el header: rgba oscuro + blur + borde sutil
+   ============================================================ */
+
+/* -- Subtotal Bar (barra inferior móvil) -- */
+.kiosk-session .subtotal-bar {
+  background: rgba(10, 22, 17, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  backdrop-filter: blur(18px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+  box-shadow: 0 -6px 32px rgba(0, 0, 0, 0.55), 0 14px 36px rgba(0, 0, 0, 0.4) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .subtotal-bar span {
+  color: rgba(255, 255, 255, 0.60) !important;
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+}
+
+.kiosk-session .subtotal-bar strong {
+  color: #ffffff !important;
+  font-size: 1.15rem !important;
+  font-weight: 800 !important;
+}
+
+/* Botón del subtotal: acento verde igual que en el header */
+.kiosk-session .subtotal-bar button {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.40) !important;
+  font-weight: 700 !important;
+}
+
+.kiosk-session .subtotal-bar button:hover {
+  background: linear-gradient(135deg, #047857, #059669) !important;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.55) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* -- Modal Backdrop -- */
+.kiosk-session .modal-backdrop {
+  background: rgba(2, 8, 6, 0.78) !important;
+  backdrop-filter: blur(14px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(160%) !important;
+}
+
+/* -- Todos los modales del Kiosk -- */
+.kiosk-session .modal {
+  background: rgba(8, 18, 13, 0.90) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  color: #ffffff !important;
+}
+
+/* Headings y texto dentro de modales */
+.kiosk-session .modal h2,
+.kiosk-session .modal h3,
+.kiosk-session .modal strong {
+  color: #ffffff !important;
+}
+
+.kiosk-session .modal p,
+.kiosk-session .modal span:not(.badge):not(.tag) {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.kiosk-session .modal label {
+  color: rgba(255, 255, 255, 0.80) !important;
+  font-weight: 600 !important;
+}
+
+/* Inputs dentro de modales */
+.kiosk-session .modal input,
+.kiosk-session .modal textarea,
+.kiosk-session .modal select {
+  background: rgba(0, 0, 0, 0.45) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .modal input::placeholder,
+.kiosk-session .modal textarea::placeholder {
+  color: rgba(255, 255, 255, 0.38) !important;
+}
+
+.kiosk-session .modal input:focus,
+.kiosk-session .modal textarea:focus {
+  border-color: rgba(16, 185, 129, 0.60) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.20) !important;
+  background: rgba(0, 0, 0, 0.60) !important;
+}
+
+/* Líneas divisoras dentro de modales */
+.kiosk-session .modal hr,
+.kiosk-session .modal [class*="line"],
+.kiosk-session .modal [class*="divider"] {
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+/* -- Checkout Modal -- */
+.kiosk-session .checkout-modal {
+  background: rgba(6, 14, 10, 0.93) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  backdrop-filter: blur(22px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(180%) !important;
+}
+
+.kiosk-session .checkout-modal-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+.kiosk-session .checkout-modal h2 {
+  color: #ffffff !important;
+}
+
+.kiosk-session .checkout-footer {
+  background: rgba(4, 10, 7, 0.96) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+.kiosk-session .checkout-total span {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.kiosk-session .checkout-total strong {
+  color: #ffffff !important;
+}
+
+/* Filas de items en checkout */
+.kiosk-session .checkout-item-row {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+}
+
+.kiosk-session .checkout-item-row:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.kiosk-session .checkout-item-name {
+  color: #ffffff !important;
+}
+
+.kiosk-session .checkout-item-price-each {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.kiosk-session .checkout-subtotal-label {
+  color: rgba(255, 255, 255, 0.50) !important;
+}
+
+.kiosk-session .checkout-subtotal-value {
+  color: #34d399 !important;  /* verde claro — buen contraste sobre oscuro */
+}
+
+/* Botón confirmar compra */
+.kiosk-session .checkout-modal button[class*="primary"],
+.kiosk-session .checkout-primary-action {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.40) !important;
+}
+
+.kiosk-session .checkout-close-button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.70) !important;
+}
+
+.kiosk-session .checkout-close-button:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+
+/* -- Profile / Cuenta Panel -- */
+.kiosk-session .profile-panel,
+.kiosk-session [class*="profile-menu"],
+.kiosk-session [class*="account-modal"] {
+  background: rgba(8, 18, 13, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(22px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(180%) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.60) !important;
+  color: #ffffff !important;
+}
+
+/* Tabs de cuenta */
+.kiosk-session .account-tabs {
+  background: rgba(0, 0, 0, 0.35) !important;
+}
+
+.kiosk-session .account-tabs button {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.kiosk-session .account-tabs button.active {
+  background: rgba(16, 185, 129, 0.18) !important;
+  color: #34d399 !important;
+}
+
+/* Historial / history cards */
+.kiosk-session .history-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.kiosk-session .history-card:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+}
+
+.kiosk-session .history-cart-row {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.80) !important;
+}
+
+/* -- Sync Panel -- */
+.kiosk-session .sync-panel-modal {
+  background: rgba(8, 18, 13, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(22px) !important;
+  -webkit-backdrop-filter: blur(22px) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .sync-panel-header h2,
+.kiosk-session .sync-panel-header p {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* -- Botones de acción secundaria dentro de modales kiosk -- */
+.kiosk-session .modal button.ghost,
+.kiosk-session .checkout-secondary-action {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.80) !important;
+}
+
+.kiosk-session .modal button.ghost:hover,
+.kiosk-session .checkout-secondary-action:hover {
+  background: rgba(255, 255, 255, 0.13) !important;
+  color: #ffffff !important;
+}
+
+/* Botones de peligro (anular, salir) */
+.kiosk-session .modal button.danger,
+.kiosk-session .modal button[class*="remove"],
+.kiosk-session .modal button[class*="void"] {
+  background: rgba(220, 38, 38, 0.18) !important;
+  border: 1px solid rgba(220, 38, 38, 0.35) !important;
+  color: #fca5a5 !important;
+}
+
+.kiosk-session .modal button.danger:hover {
+  background: rgba(220, 38, 38, 0.30) !important;
+  color: #ffffff !important;
+}
