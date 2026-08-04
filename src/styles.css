@@ -11294,17 +11294,16 @@ body:has(.kiosk-session),
 
 /* Render Containment & Off-Screen Optimization for 120FPS Scroll */
 .product-tile {
-  content-visibility: auto;
-  contain-intrinsic-size: 260px;
-  contain: layout style paint;
+  /* content-visibility:auto eliminado – causaba recarga de imágenes al volver al viewport */
+  contain: style;
 }
 
 .catalog-grid {
-  contain: layout style;
+  contain: style;
 }
 
 .product-media img {
-  will-change: opacity;
+  /* will-change eliminado – interfería con el caché del navegador */
   transform: translateZ(0);
 }
 

@@ -840,7 +840,7 @@ function UserSession({
                         <img
                           src={product.imageUrl}
                           alt=""
-                          loading="lazy"
+                          loading="eager"
                           decoding="async"
                           referrerPolicy="no-referrer"
                           onError={() => {
