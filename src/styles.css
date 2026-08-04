@@ -11341,7 +11341,7 @@ html:has(.kiosk-session),
 body:has(.kiosk-session),
 #root:has(.kiosk-session) {
   background-color: #040c09 !important;
-  background: radial-gradient(circle at 50% -10%, #0e2a1e 0%, #081812 50%, #040c09 100%) !important;
+  background: #040c09 !important;
   color: #f1f7f4 !important;
   min-height: 100dvh;
 }
@@ -12432,7 +12432,7 @@ body:has(.kiosk-session),
 #root:has(.kiosk-session) {
   color-scheme: dark !important;
   background-color: #040c09 !important;
-  background: radial-gradient(circle at 50% -10%, #0e2a1e 0%, #081812 50%, #040c09 100%) !important;
+  background: #040c09 !important;
   color: #f1f7f4 !important;
   min-height: 100dvh;
 }
@@ -12445,4 +12445,232 @@ html.kiosk-mode {
 body.kiosk-mode {
   background-color: #040c09 !important;
   color-scheme: dark !important;
+}
+
+
+/* ============================================================
+   HIGH-CONTRAST FIXES: Debajo del total de compra & Pestaña Pagos
+   ============================================================ */
+
+/* ── 1. Resumen debajo del total de compra (cart-sidebar-summary) ── */
+.kiosk-session .cart-sidebar-summary,
+.kiosk-session .checkout-footer {
+  background: rgba(0, 0, 0, 0.45) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .summary-row {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+.kiosk-session .summary-row span {
+  color: rgba(255, 255, 255, 0.70) !important;
+}
+
+.kiosk-session .summary-row strong {
+  color: #ffffff !important;
+}
+
+.kiosk-session .summary-row.balance-projection span {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.kiosk-session .summary-row.balance-projection .positive {
+  color: #34d399 !important;
+  font-weight: 800 !important;
+}
+
+.kiosk-session .summary-row.balance-projection .negative {
+  color: #fca5a5 !important;
+  font-weight: 800 !important;
+}
+
+.kiosk-session .checkout-total span {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .checkout-total strong {
+  color: #ffffff !important;
+}
+
+/* ── 2. Pestaña de Pagos (.payment-card) ── */
+.kiosk-session .payment-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 14px !important;
+  padding: 12px 14px !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .payment-card:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .payment-icon {
+  background: rgba(16, 185, 129, 0.20) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .payment-card-copy strong {
+  color: #ffffff !important;
+  font-size: 0.95rem !important;
+}
+
+.kiosk-session .payment-card-copy span {
+  color: rgba(255, 255, 255, 0.70) !important;
+}
+
+.kiosk-session .payment-card-copy small {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.kiosk-session .payment-amount {
+  color: #34d399 !important;
+  font-size: 1.10rem !important;
+  font-weight: 800 !important;
+}
+
+
+/* ============================================================
+   SINGLE-LINE HISTORY HEADER (ICONS ONLY) & MODAL HEADER SPACING
+   ============================================================ */
+
+/* ── 1. Mejor Spacing para la cabecera del modal de saldo ── */
+.kiosk-session .account-modal {
+  padding: 26px 24px 22px !important;
+  border-radius: 24px !important;
+}
+
+.kiosk-session .account-modal-hero {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  margin: 0 0 22px 0 !important;
+  padding: 4px 4px 0 4px !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+.kiosk-session .account-modal-title {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.kiosk-session .account-modal-title span {
+  display: block !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 0.74rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 3px !important;
+}
+
+.kiosk-session .account-modal-title h2 {
+  color: #ffffff !important;
+  font-size: 1.50rem !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+  margin: 0 0 5px 0 !important;
+}
+
+.kiosk-session .account-modal-title p {
+  color: rgba(255, 255, 255, 0.70) !important;
+  font-size: 0.88rem !important;
+  margin: 0 !important;
+}
+
+.kiosk-session .account-close-button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  border-radius: 12px !important;
+  display: grid !important;
+  place-items: center !important;
+  margin-top: 2px !important;
+  margin-right: 2px !important;
+  flex: 0 0 auto !important;
+}
+
+.kiosk-session .account-close-button:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+/* ── 2. Cabecera de compra en una sola línea con iconos circulares de Nube (Sync) y Dinero (Pago) ── */
+.kiosk-session .history-card-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  padding: 10px 14px !important;
+}
+
+.kiosk-session .history-person {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.kiosk-session .history-statuses-compact {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.kiosk-session .history-icon-badge {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 50% !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+}
+
+.kiosk-session .history-icon-badge.sync-synced,
+.kiosk-session .history-icon-badge.payment-paid {
+  background: rgba(16, 185, 129, 0.18) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.40) !important;
+}
+
+.kiosk-session .history-icon-badge.payment-partial,
+.kiosk-session .history-icon-badge.sync-pending {
+  background: rgba(245, 158, 11, 0.18) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.40) !important;
+}
+
+.kiosk-session .history-icon-badge.payment-unpaid {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(239, 68, 68, 0.40) !important;
+}
+
+.kiosk-session .history-icon-badge.sync-sending {
+  background: rgba(59, 130, 246, 0.18) !important;
+  color: #93c5fd !important;
+  border: 1px solid rgba(59, 130, 246, 0.40) !important;
+}
+
+.kiosk-session .history-icon-badge.record-voided {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(239, 68, 68, 0.40) !important;
 }

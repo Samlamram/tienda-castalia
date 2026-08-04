@@ -1,7 +1,9 @@
 import type { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
+  Banknote,
   CheckCircle2,
   CircleX,
+  CloudCheck,
   CloudUpload,
   CreditCard,
   KeyRound,
@@ -1251,10 +1253,16 @@ function UserSession({
                                   <span>{formatMovementTime(entry.createdAt)}</span>
                                 </div>
                               </div>
-                              <div className="history-statuses" aria-label={`Estado: ${status.label}`}>
-                                <span className={`history-status ${status.className}`}>
-                                  <PendingStatusIcon status={entry.status} />
-                                  {status.label}
+                              <div className="history-statuses-compact" aria-label={`Estado: ${status.label}`}>
+                                <span className={`history-icon-badge ${status.className}`} title={`Sincronización: ${status.label}`}>
+                                  {entry.status === 'sending' ? (
+                                    <Loader2 size={15} className="is-spinning" />
+                                  ) : (
+                                    <CloudUpload size={15} />
+                                  )}
+                                </span>
+                                <span className="history-icon-badge payment-unpaid" title="Pago: Sin pagar">
+                                  <Banknote size={15} />
                                 </span>
                               </div>
                             </div>
@@ -1328,20 +1336,17 @@ function UserSession({
                                   <span>{formatMovementTime(entry.createdAt)}</span>
                                 </div>
                               </div>
-                              <div className="history-statuses" aria-label="Estados de la compra">
-                                <span className="history-status sync-synced">
-                                  <CheckCircle2 size={13} aria-hidden="true" />
-                                  Sincronizada
+                              <div className="history-statuses-compact" aria-label="Estados de la compra">
+                                <span className="history-icon-badge sync-synced" title="Sincronización: Sincronizada">
+                                  <CloudCheck size={15} />
                                 </span>
                                 {entry.status === 'voided' ? (
-                                  <span className="history-status record-voided">
-                                    <CircleX size={13} aria-hidden="true" />
-                                    Anulada
+                                  <span className="history-icon-badge record-voided" title="Compra anulada">
+                                    <CircleX size={15} />
                                   </span>
                                 ) : paymentStatus ? (
-                                  <span className={`history-status ${paymentStatus.className}`}>
-                                    {paymentStatus.label === 'Pagada' ? <CheckCircle2 size={13} aria-hidden="true" /> : null}
-                                    {paymentStatus.label}
+                                  <span className={`history-icon-badge ${paymentStatus.className}`} title={`Pago: ${paymentStatus.label}`}>
+                                    <Banknote size={15} />
                                   </span>
                                 ) : null}
                               </div>
