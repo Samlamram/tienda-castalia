@@ -76,6 +76,7 @@ function doPost(e) {
       const snapshotRows = payload.records.map(redact_);
       replaceSnapshot_(spreadsheet, payload.table, snapshotRows);
       appendSnapshotEvent_(events, eventId, payload, snapshotRows.length);
+      refreshReports();
       SpreadsheetApp.flush();
       return jsonResponse_({ ok: true, eventId: eventId, rows: snapshotRows.length });
     }
@@ -84,6 +85,7 @@ function doPost(e) {
     const oldRecord = redact_(payload.old_record);
     mirrorRecord_(spreadsheet, payload, currentRecord, oldRecord);
     appendEvent_(events, eventId, payload, currentRecord, oldRecord);
+    refreshReports();
     SpreadsheetApp.flush();
 
     return jsonResponse_({ ok: true, eventId: eventId });
