@@ -283,9 +283,13 @@ function UserSession({
   useEffect(() => {
     document.documentElement.classList.add('kiosk-mode');
     document.body.classList.add('kiosk-mode');
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    const prevTheme = themeMeta?.getAttribute('content');
+    if (themeMeta) themeMeta.setAttribute('content', '#040c09');
     return () => {
       document.documentElement.classList.remove('kiosk-mode');
       document.body.classList.remove('kiosk-mode');
+      if (themeMeta && prevTheme) themeMeta.setAttribute('content', prevTheme);
     };
   }, []);
 

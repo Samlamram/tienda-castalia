@@ -12150,3 +12150,299 @@ body:has(.kiosk-session),
   background: rgba(180, 83, 9, 0.25) !important;
   border-color: rgba(245, 158, 11, 0.4) !important;
 }
+
+
+/* ============================================================
+   KIOSK SALDO PERSONAL MODAL — Eliminación de "Cuadro sobre Cuadro"
+   Fondo oscuro continuo, filas desglosadas limpias y insignias oscuras
+   ============================================================ */
+
+/* ── 1. Eliminación de bordes nidos en account-balance-stack ── */
+.kiosk-session .account-balance-stack {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 16px !important;
+  padding: 10px !important;
+  gap: 4px !important;
+}
+
+.kiosk-session .account-balance-heading {
+  padding: 4px 6px 8px !important;
+}
+
+.kiosk-session .account-balance-heading span {
+  color: #ffffff !important;
+  font-size: 0.88rem !important;
+  font-weight: 800 !important;
+}
+
+.kiosk-session .account-balance-heading small {
+  color: rgba(255, 255, 255, 0.50) !important;
+}
+
+.kiosk-session .account-balance-row {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 12px !important;
+  padding: 10px 12px !important;
+  color: #ffffff !important;
+  transition: background 150ms var(--ease), border-color 150ms var(--ease) !important;
+}
+
+.kiosk-session .account-balance-row:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.kiosk-session .account-balance-row.active {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border: 1px solid rgba(16, 185, 129, 0.40) !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* ── 2. Desglose de historial (.history-card y .history-cart-row) ── */
+.kiosk-session .history-card {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+.kiosk-session .history-card-header {
+  padding: 12px 14px !important;
+  background: rgba(0, 0, 0, 0.20) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Filas del desglose de items (restaurado como estaba originalmente) */
+.kiosk-session .history-cart {
+  padding: 0 14px 14px !important;
+  gap: 6px !important;
+}
+
+.kiosk-session .history-cart-row {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 10px !important;
+  padding: 8px 10px !important;
+  color: #ffffff !important;
+}
+
+.kiosk-session .history-cart-row:last-child {
+  border-bottom: none !important;
+}
+
+.kiosk-session .history-item-thumbnail {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.kiosk-session .history-item-placeholder {
+  background: transparent !important;
+  color: #34d399 !important;
+}
+
+.kiosk-session .history-item-info strong {
+  color: #ffffff !important;
+  font-size: 0.90rem !important;
+}
+
+.kiosk-session .history-item-info small {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .history-item-qty {
+  background: rgba(255, 255, 255, 0.10) !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+}
+
+.kiosk-session .history-item-qty small {
+  color: rgba(255, 255, 255, 0.60) !important;
+}
+
+.kiosk-session .history-item-qty strong {
+  color: #ffffff !important;
+}
+
+.kiosk-session .history-item-subtotal small {
+  color: rgba(255, 255, 255, 0.50) !important;
+}
+
+.kiosk-session .history-item-subtotal strong {
+  color: #34d399 !important;
+  font-size: 0.92rem !important;
+}
+
+.kiosk-session .history-card-footer {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 10px 14px !important;
+}
+
+.kiosk-session .history-card-footer span {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.kiosk-session .history-card-footer strong {
+  color: #ffffff !important;
+  font-size: 1.08rem !important;
+}
+
+/* ── 3. Insignias de Estado Oscuras y de Alto Contraste (.history-status) ── */
+.kiosk-session .history-status.sync-synced,
+.kiosk-session .history-status.payment-paid {
+  background: rgba(16, 185, 129, 0.16) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.kiosk-session .history-status.payment-partial,
+.kiosk-session .history-status.sync-pending {
+  background: rgba(245, 158, 11, 0.16) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+.kiosk-session .history-status.payment-unpaid {
+  background: rgba(239, 68, 68, 0.16) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+}
+
+.kiosk-session .history-status.sync-sending {
+  background: rgba(59, 130, 246, 0.16) !important;
+  color: #93c5fd !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+}
+
+.kiosk-session .history-status.sync-review {
+  background: rgba(168, 85, 247, 0.16) !important;
+  color: #d8b4fe !important;
+  border: 1px solid rgba(168, 85, 247, 0.35) !important;
+}
+
+.kiosk-session .history-status.sync-failed,
+.kiosk-session .history-status.record-voided {
+  background: rgba(239, 68, 68, 0.16) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+}
+
+/* ── 4. Grupo de compras pendientes (.pending-history-group) ── */
+.kiosk-session .pending-history-group {
+  background: rgba(245, 158, 11, 0.07) !important;
+  border: 1px dashed rgba(245, 158, 11, 0.35) !important;
+  border-radius: 16px !important;
+  padding: 12px !important;
+}
+
+.kiosk-session .history-card.is-local-pending {
+  background: rgba(20, 25, 22, 0.85) !important;
+}
+
+
+/* ============================================================
+   KIOSK MODAL HEADERS CLEANUP: Eliminación de líneas y cajas extra
+   ============================================================ */
+
+/* Header del modal de saldo (Cuenta / Saldo Personal): totalmente limpio */
+.kiosk-session .account-modal-hero {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  margin: 0 0 16px 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-bottom: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  position: relative !important;
+  top: auto !important;
+}
+
+.kiosk-session .account-modal-title {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.kiosk-session .account-modal-title span {
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 0.74rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+}
+
+.kiosk-session .account-modal-title h2 {
+  color: #ffffff !important;
+  font-size: 1.55rem !important;
+  font-weight: 800 !important;
+  margin: 4px 0 6px !important;
+}
+
+.kiosk-session .account-modal-title p {
+  color: rgba(255, 255, 255, 0.70) !important;
+  font-size: 0.88rem !important;
+  margin: 0 !important;
+}
+
+.kiosk-session .account-close-button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  border-radius: 12px !important;
+  flex: 0 0 auto !important;
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  box-shadow: none !important;
+}
+
+.kiosk-session .account-close-button:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+
+/* ============================================================
+   DARK CANVAS OVERRIDE: Color-scheme & Canvas Background
+   Completely eliminates white rubberband overscroll bounce in Chrome, Safari & mobile
+   ============================================================ */
+html.kiosk-mode,
+body.kiosk-mode,
+html.kiosk-mode body,
+.kiosk-mode #root,
+.kiosk-session,
+html:has(.kiosk-session),
+body:has(.kiosk-session),
+#root:has(.kiosk-session) {
+  color-scheme: dark !important;
+  background-color: #040c09 !important;
+  background: radial-gradient(circle at 50% -10%, #0e2a1e 0%, #081812 50%, #040c09 100%) !important;
+  color: #f1f7f4 !important;
+  min-height: 100dvh;
+}
+
+html.kiosk-mode {
+  background-color: #040c09 !important;
+  color-scheme: dark !important;
+}
+
+body.kiosk-mode {
+  background-color: #040c09 !important;
+  color-scheme: dark !important;
+}
